@@ -1,0 +1,2289 @@
+2026-08-03 14:21:21,202 - Pipeline - INFO - ================================================================================
+2026-08-03 14:21:21,217 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline
+2026-08-03 14:21:21,218 - Pipeline - INFO - ================================================================================
+2026-08-03 14:21:21,233 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 14:21:21,245 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 14:21:21,249 - StateProcessor - INFO - Extract phase
+2026-08-03 14:21:21,251 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 14:21:21,289 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 14:21:21,333 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 14:21:21,333 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 14:21:21,336 - utils - INFO -   Rows: 36
+2026-08-03 14:21:21,368 - utils - INFO -   Columns: 8
+2026-08-03 14:21:21,378 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 14:21:21,394 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 14:21:21,405 - StateProcessor - INFO - Transform phase
+2026-08-03 14:21:21,409 - StateProcessor - INFO - Transforming state data
+2026-08-03 14:21:21,481 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 14:21:21,483 - utils - INFO -   Rows: 36
+2026-08-03 14:21:21,493 - utils - INFO -   Columns: 3
+2026-08-03 14:21:21,499 - utils - INFO -   Columns: ['id', 'state_name', 'state_code']
+2026-08-03 14:21:21,518 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 14:21:21,527 - StateProcessor - INFO - Load phase
+2026-08-03 14:21:21,539 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 14:21:21,555 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:21:21,601 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:21:21,606 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:21:21,606 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 14:21:21,608 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 14:21:21,608 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 14:21:21,609 - DistrictProcessor - INFO - Extract phase
+2026-08-03 14:21:21,609 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 14:21:21,609 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 14:21:21,624 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 14:21:21,742 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 14:21:21,743 - utils - INFO -   Rows: 763
+2026-08-03 14:21:21,857 - utils - INFO -   Columns: 6
+2026-08-03 14:21:21,861 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 14:21:21,899 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 14:21:21,902 - DistrictProcessor - INFO - Transform phase
+2026-08-03 14:21:21,908 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 14:21:21,910 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 14:21:21,911 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:21:22,211 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:21:22,282 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 14:21:22,323 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 14:21:22,325 - utils - INFO -   Rows: 763
+2026-08-03 14:21:22,326 - utils - INFO -   Columns: 3
+2026-08-03 14:21:22,327 - utils - INFO -   Columns: ['id', 'state_id', 'district_name']
+2026-08-03 14:21:22,331 - utils - INFO -   Memory usage: 0.05 MB
+2026-08-03 14:21:22,336 - DistrictProcessor - INFO - Load phase
+2026-08-03 14:21:22,344 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 14:21:22,353 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:21:22,375 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:21:22,385 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:21:22,392 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 14:21:22,394 - Pipeline - INFO - Step 3: Processing Localities
+2026-08-03 14:21:22,419 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 14:21:22,420 - LocalityProcessor - INFO - Extract phase
+2026-08-03 14:21:22,426 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 14:21:22,427 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:21:22,914 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:21:22,916 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 14:21:22,921 - utils - INFO -   Rows: 165627
+2026-08-03 14:21:22,930 - utils - INFO -   Columns: 11
+2026-08-03 14:21:22,991 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 14:21:23,382 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 14:21:23,418 - LocalityProcessor - INFO - Transform phase
+2026-08-03 14:21:23,424 - LocalityProcessor - INFO - Transforming pincode data to extract localities
+2026-08-03 14:21:23,426 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 14:21:23,447 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:21:23,460 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:21:23,473 - LocalityProcessor - INFO - Loaded mapping for 758 districts
+2026-08-03 14:21:24,032 - LocalityProcessor - WARNING - Found 1641 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'vijaynagar', 'hoshangabad', 'firozepur', 'lakshadweep']
+Length: 6, dtype: str
+2026-08-03 14:21:24,340 - LocalityProcessor - INFO - Removed 2167 duplicate localities
+2026-08-03 14:21:24,342 - LocalityProcessor - ERROR - Error in LocalityProcessor processor: "['id'] not in index"
+2026-08-03 14:21:24,342 - Pipeline - ERROR - ================================================================================
+2026-08-03 14:21:24,343 - Pipeline - ERROR - Pipeline failed: "['id'] not in index"
+2026-08-03 14:21:24,344 - Pipeline - ERROR - ================================================================================
+2026-08-03 14:21:24,344 - Pipeline - INFO - Generating build report
+2026-08-03 14:21:24,355 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 14:21:24,358 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline - Build Report
+================================================================================
+Generated: 2026-08-03 14:21:24
+Status: FAILED
+
+Total Duration: 0:00:03.139881
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed: 0
+
+ERROR DETAILS
+--------------------------------------------------------------------------------
+Error: "['id'] not in index"
+================================================================================
+2026-08-03 14:31:05,797 - Pipeline - INFO - ================================================================================
+2026-08-03 14:31:05,809 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline
+2026-08-03 14:31:05,832 - Pipeline - INFO - ================================================================================
+2026-08-03 14:31:05,835 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 14:31:05,837 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 14:31:05,839 - StateProcessor - INFO - Extract phase
+2026-08-03 14:31:05,887 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 14:31:05,890 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 14:31:05,893 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 14:31:05,917 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 14:31:05,923 - utils - INFO -   Rows: 36
+2026-08-03 14:31:05,927 - utils - INFO -   Columns: 8
+2026-08-03 14:31:05,929 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 14:31:05,983 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 14:31:05,984 - StateProcessor - INFO - Transform phase
+2026-08-03 14:31:05,987 - StateProcessor - INFO - Transforming state data
+2026-08-03 14:31:06,025 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 14:31:06,026 - utils - INFO -   Rows: 36
+2026-08-03 14:31:06,029 - utils - INFO -   Columns: 3
+2026-08-03 14:31:06,029 - utils - INFO -   Columns: ['id', 'state_name', 'state_code']
+2026-08-03 14:31:06,032 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 14:31:06,051 - StateProcessor - INFO - Load phase
+2026-08-03 14:31:06,052 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 14:31:06,053 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:31:06,060 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:31:06,083 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:31:06,084 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 14:31:06,084 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 14:31:06,085 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 14:31:06,087 - DistrictProcessor - INFO - Extract phase
+2026-08-03 14:31:06,087 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 14:31:06,088 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 14:31:06,093 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 14:31:06,095 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 14:31:06,096 - utils - INFO -   Rows: 763
+2026-08-03 14:31:06,102 - utils - INFO -   Columns: 6
+2026-08-03 14:31:06,112 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 14:31:06,119 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 14:31:06,129 - DistrictProcessor - INFO - Transform phase
+2026-08-03 14:31:06,135 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 14:31:06,138 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 14:31:06,154 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:31:06,160 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 14:31:06,170 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 14:31:06,201 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 14:31:06,203 - utils - INFO -   Rows: 763
+2026-08-03 14:31:06,203 - utils - INFO -   Columns: 3
+2026-08-03 14:31:06,204 - utils - INFO -   Columns: ['id', 'state_id', 'district_name']
+2026-08-03 14:31:06,207 - utils - INFO -   Memory usage: 0.05 MB
+2026-08-03 14:31:06,210 - DistrictProcessor - INFO - Load phase
+2026-08-03 14:31:06,211 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 14:31:06,212 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:06,272 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:06,275 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:06,275 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 14:31:06,276 - Pipeline - INFO - Step 3: Processing Localities
+2026-08-03 14:31:06,276 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 14:31:06,277 - LocalityProcessor - INFO - Extract phase
+2026-08-03 14:31:06,278 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 14:31:06,293 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:31:06,673 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:31:06,674 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 14:31:06,677 - utils - INFO -   Rows: 165627
+2026-08-03 14:31:06,677 - utils - INFO -   Columns: 11
+2026-08-03 14:31:06,678 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 14:31:07,046 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 14:31:07,048 - LocalityProcessor - INFO - Transform phase
+2026-08-03 14:31:07,051 - LocalityProcessor - INFO - Transforming pincode data to extract localities
+2026-08-03 14:31:07,062 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 14:31:07,064 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:07,067 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:07,077 - LocalityProcessor - INFO - Loaded mapping for 758 districts
+2026-08-03 14:31:07,447 - LocalityProcessor - WARNING - Found 1641 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'vijaynagar', 'hoshangabad', 'firozepur', 'lakshadweep']
+Length: 6, dtype: str
+2026-08-03 14:31:07,670 - LocalityProcessor - INFO - Removed 2167 duplicate localities
+2026-08-03 14:31:07,716 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 14:31:07,716 - utils - INFO -   Rows: 161819
+2026-08-03 14:31:07,716 - utils - INFO -   Columns: 3
+2026-08-03 14:31:07,717 - utils - INFO -   Columns: ['id', 'district_id', 'locality_name']
+2026-08-03 14:31:07,752 - utils - INFO -   Memory usage: 13.23 MB
+2026-08-03 14:31:07,753 - LocalityProcessor - INFO - Load phase
+2026-08-03 14:31:07,753 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 14:31:07,753 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 14:31:07,977 - utils - INFO - Successfully saved 161819 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 14:31:07,978 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 14:31:07,978 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 14:31:07,990 - Pipeline - INFO - Step 4: Processing Pincodes
+2026-08-03 14:31:08,001 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 14:31:08,002 - PincodeProcessor - INFO - Extract phase
+2026-08-03 14:31:08,002 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 14:31:08,002 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:31:08,368 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 14:31:08,369 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 14:31:08,369 - utils - INFO -   Rows: 165627
+2026-08-03 14:31:08,369 - utils - INFO -   Columns: 11
+2026-08-03 14:31:08,370 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 14:31:08,730 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 14:31:08,731 - PincodeProcessor - INFO - Transform phase
+2026-08-03 14:31:08,731 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes
+2026-08-03 14:31:08,731 - PincodeProcessor - INFO - Loading locality mapping from processed localities file
+2026-08-03 14:31:08,732 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 14:31:08,855 - utils - INFO - Successfully loaded 161819 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 14:31:14,886 - PincodeProcessor - INFO - Loaded mapping for 161819 localities
+2026-08-03 14:31:14,891 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:14,892 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 14:31:17,080 - PincodeProcessor - INFO - Removed 10 duplicate pincodes
+2026-08-03 14:31:17,111 - utils - INFO - DataFrame PincodeProcessor_transformed info:
+2026-08-03 14:31:17,111 - utils - INFO -   Rows: 163976
+2026-08-03 14:31:17,111 - utils - INFO -   Columns: 3
+2026-08-03 14:31:17,112 - utils - INFO -   Columns: ['id', 'locality_id', 'pincode']
+2026-08-03 14:31:17,112 - utils - INFO -   Memory usage: 5.00 MB
+2026-08-03 14:31:17,112 - PincodeProcessor - INFO - Load phase
+2026-08-03 14:31:17,114 - PincodeProcessor - INFO - Loading pincode data to CSV
+2026-08-03 14:31:17,115 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 14:31:17,273 - utils - INFO - Successfully saved 163976 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 14:31:17,274 - PincodeProcessor - INFO - Pincode data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 14:31:17,274 - PincodeProcessor - INFO - Completed PincodeProcessor processor successfully
+2026-08-03 14:31:17,284 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 14:31:17,291 - Pipeline - INFO - Generating build report
+2026-08-03 14:31:17,292 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 14:31:17,293 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline - Build Report
+================================================================================
+Generated: 2026-08-03 14:31:17
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 161819
+  Unique Localities: 143187
+  Duplicate Localities Removed: 2167
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 163976
+  Unique Pincodes: 19385
+  Duplicate Pincodes Removed: 10
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed: 2177
+================================================================================
+2026-08-03 14:31:17,293 - Pipeline - INFO - ================================================================================
+2026-08-03 14:31:17,294 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 14:31:17,294 - Pipeline - INFO - Total duration: 0:00:11.496080
+2026-08-03 14:31:17,294 - Pipeline - INFO - ================================================================================
+2026-08-03 15:12:31,324 - Pipeline - INFO - ================================================================================
+2026-08-03 15:12:31,327 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:12:31,332 - Pipeline - INFO - ================================================================================
+2026-08-03 15:12:31,358 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:12:31,359 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:12:31,359 - StateProcessor - INFO - Extract phase
+2026-08-03 15:12:31,367 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:12:31,389 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:12:31,436 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:12:31,437 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:12:31,439 - utils - INFO -   Rows: 36
+2026-08-03 15:12:31,439 - utils - INFO -   Columns: 8
+2026-08-03 15:12:31,474 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:12:31,481 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:12:31,502 - StateProcessor - INFO - Transform phase
+2026-08-03 15:12:31,503 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:12:31,512 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:12:31,552 - utils - INFO -   Rows: 36
+2026-08-03 15:12:31,556 - utils - INFO -   Columns: 3
+2026-08-03 15:12:31,557 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:12:31,577 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:12:31,577 - StateProcessor - INFO - Load phase
+2026-08-03 15:12:31,578 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:12:31,579 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:12:31,585 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:12:31,614 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:12:31,619 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:12:31,621 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:12:31,621 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:12:31,622 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:12:31,622 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:12:31,663 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:12:31,667 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:12:31,669 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:12:31,671 - utils - INFO -   Rows: 763
+2026-08-03 15:12:31,671 - utils - INFO -   Columns: 6
+2026-08-03 15:12:31,672 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:12:31,673 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:12:31,679 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:12:31,679 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:12:31,680 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:12:31,680 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:12:31,714 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:12:31,730 - DistrictProcessor - ERROR - Error in DistrictProcessor processor: 'state_name'
+2026-08-03 15:12:31,787 - Pipeline - ERROR - ================================================================================
+2026-08-03 15:12:31,788 - Pipeline - ERROR - Pipeline failed: 'state_name'
+2026-08-03 15:12:31,788 - Pipeline - ERROR - ================================================================================
+2026-08-03 15:12:31,788 - Pipeline - INFO - Generating build report
+2026-08-03 15:12:31,791 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:12:31,793 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:12:31
+Status: FAILED
+
+Total Duration: 0:00:00.462821
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 0
+
+ERROR DETAILS
+--------------------------------------------------------------------------------
+Error: 'state_name'
+================================================================================
+2026-08-03 15:18:34,888 - Pipeline - INFO - ================================================================================
+2026-08-03 15:18:34,888 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:18:34,888 - Pipeline - INFO - ================================================================================
+2026-08-03 15:18:34,895 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:18:34,895 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:18:34,895 - StateProcessor - INFO - Extract phase
+2026-08-03 15:18:34,895 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:18:34,896 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:18:34,904 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:18:34,904 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:18:34,904 - utils - INFO -   Rows: 36
+2026-08-03 15:18:34,905 - utils - INFO -   Columns: 8
+2026-08-03 15:18:34,905 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:18:34,913 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:18:34,913 - StateProcessor - INFO - Transform phase
+2026-08-03 15:18:34,913 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:18:34,954 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:18:34,954 - utils - INFO -   Rows: 36
+2026-08-03 15:18:34,954 - utils - INFO -   Columns: 3
+2026-08-03 15:18:34,954 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:18:34,962 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:18:34,962 - StateProcessor - INFO - Load phase
+2026-08-03 15:18:34,962 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:18:34,962 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:34,987 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:34,987 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:34,987 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:18:34,987 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:18:34,987 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:18:34,987 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:18:34,987 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:18:34,988 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:18:34,997 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:18:34,997 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:18:35,003 - utils - INFO -   Rows: 763
+2026-08-03 15:18:35,003 - utils - INFO -   Columns: 6
+2026-08-03 15:18:35,004 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:18:35,004 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:18:35,005 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:18:35,005 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:18:35,005 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:18:35,005 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:35,322 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:35,324 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 15:18:35,333 - DistrictProcessor - WARNING - Found 763 districts with unmapped state codes: <StringArray>
+['35', '28', '12', '18', '10',  '4', '22',  '7', '30', '24',  '6',  '2',  '1',
+ '20', '29', '32', '37', '31', '23', '27', '14', '17', '15', '13', '21', '34',
+  '3',  '8', '11', '33', '36', '38', '16',  '5',  '9', '19']
+Length: 36, dtype: str
+2026-08-03 15:18:35,335 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 15:18:35,335 - utils - INFO -   Rows: 0
+2026-08-03 15:18:35,335 - utils - INFO -   Columns: 3
+2026-08-03 15:18:35,335 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 15:18:35,336 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:18:35,336 - DistrictProcessor - INFO - Load phase
+2026-08-03 15:18:35,336 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 15:18:35,336 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:18:36,016 - utils - INFO - Successfully saved 0 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:18:36,017 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:18:36,017 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 15:18:36,017 - Pipeline - INFO - Step 3: Processing Localities (with merged pincodes)
+2026-08-03 15:18:36,017 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 15:18:36,017 - LocalityProcessor - INFO - Extract phase
+2026-08-03 15:18:36,017 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 15:18:36,017 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:18:42,696 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:18:42,698 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 15:18:42,698 - utils - INFO -   Rows: 165627
+2026-08-03 15:18:42,698 - utils - INFO -   Columns: 11
+2026-08-03 15:18:42,698 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 15:18:46,471 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 15:18:46,517 - LocalityProcessor - INFO - Transform phase
+2026-08-03 15:18:46,518 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 15:18:46,518 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 15:18:46,518 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:18:46,519 - utils - INFO - Successfully loaded 0 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:18:46,519 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:46,520 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:18:46,521 - LocalityProcessor - INFO - Loaded mapping for 0 (state, district) combinations
+2026-08-03 15:18:46,521 - LocalityProcessor - INFO - Loaded fallback mapping for 0 district names
+2026-08-03 15:19:14,201 - LocalityProcessor - INFO - Using fallback mapping for 165627 unmapped districts
+2026-08-03 15:19:14,244 - LocalityProcessor - WARNING - Found 165627 localities with unmapped districts: <StringArray>
+[  'kumuram bheem asifabad',               'mancherial',
+              'hanumakonda',                 'jagitial',
+         'rajanna sircilla',                  'jangoan',
+                 'siddipet',                 'warangal',
+ 'jayashankar bhupalapally',               'karimnagar']
+Length: 10, dtype: str
+2026-08-03 15:19:14,359 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 15:19:14,359 - utils - INFO -   Rows: 0
+2026-08-03 15:19:14,360 - utils - INFO -   Columns: 4
+2026-08-03 15:19:14,360 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 15:19:14,360 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:19:14,360 - LocalityProcessor - INFO - Load phase
+2026-08-03 15:19:14,360 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 15:19:14,690 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:14,978 - utils - INFO - Successfully saved 0 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,083 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,282 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 15:19:15,290 - Pipeline - INFO - Step 4: Validating Data
+2026-08-03 15:19:15,290 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 15:19:15,290 - Validator - INFO - Validating states data
+2026-08-03 15:19:15,291 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:19:15,292 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:19:15,294 - Validator - INFO - Validating districts data
+2026-08-03 15:19:15,295 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:19:15,295 - utils - INFO - Successfully loaded 0 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:19:15,297 - Validator - INFO - Validating localities data
+2026-08-03 15:19:15,297 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,307 - utils - INFO - Successfully loaded 0 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,308 - Validator - INFO - Validating foreign key relationships
+2026-08-03 15:19:15,308 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:19:15,309 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:19:15,309 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:19:15,310 - utils - INFO - Successfully loaded 0 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:19:15,310 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,311 - utils - INFO - Successfully loaded 0 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:19:15,311 - Validator - INFO - All validation checks passed
+2026-08-03 15:19:15,311 - Pipeline - INFO - All validation checks passed
+2026-08-03 15:19:15,311 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 15:19:15,311 - Pipeline - INFO - Generating build report
+2026-08-03 15:19:15,807 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:19:15,807 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:19:15
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 0
+  Unique Districts: 0
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 0
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 0
+  Total Localities: 0
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 0
+================================================================================
+2026-08-03 15:19:15,807 - Pipeline - INFO - ================================================================================
+2026-08-03 15:19:15,807 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 15:19:15,807 - Pipeline - INFO - Total duration: 0:00:40.919442
+2026-08-03 15:19:15,808 - Pipeline - INFO - ================================================================================
+2026-08-03 15:20:29,718 - Pipeline - INFO - ================================================================================
+2026-08-03 15:20:29,727 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:20:29,727 - Pipeline - INFO - ================================================================================
+2026-08-03 15:20:29,727 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:20:29,733 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:20:29,733 - StateProcessor - INFO - Extract phase
+2026-08-03 15:20:29,733 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:20:29,734 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:20:29,759 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:20:29,759 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:20:29,759 - utils - INFO -   Rows: 36
+2026-08-03 15:20:29,759 - utils - INFO -   Columns: 8
+2026-08-03 15:20:29,760 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:20:29,768 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:20:29,768 - StateProcessor - INFO - Transform phase
+2026-08-03 15:20:29,768 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:20:29,793 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:20:29,793 - utils - INFO -   Rows: 36
+2026-08-03 15:20:29,793 - utils - INFO -   Columns: 3
+2026-08-03 15:20:29,793 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:20:29,794 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:20:29,794 - StateProcessor - INFO - Load phase
+2026-08-03 15:20:29,794 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:20:29,801 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:29,834 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:29,834 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:29,834 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:20:29,834 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:20:29,834 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:20:29,834 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:20:29,834 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:20:29,834 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:20:29,860 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:20:29,860 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:20:29,860 - utils - INFO -   Rows: 763
+2026-08-03 15:20:29,860 - utils - INFO -   Columns: 6
+2026-08-03 15:20:29,860 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:20:29,867 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:20:29,867 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:20:29,868 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:20:29,868 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:20:29,868 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:29,877 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:29,885 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 15:20:29,910 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 15:20:29,910 - utils - INFO -   Rows: 763
+2026-08-03 15:20:29,910 - utils - INFO -   Columns: 3
+2026-08-03 15:20:29,910 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 15:20:29,918 - utils - INFO -   Memory usage: 0.05 MB
+2026-08-03 15:20:29,918 - DistrictProcessor - INFO - Load phase
+2026-08-03 15:20:29,918 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 15:20:29,919 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:29,934 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:29,934 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:29,934 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 15:20:29,934 - Pipeline - INFO - Step 3: Processing Localities (with merged pincodes)
+2026-08-03 15:20:29,935 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 15:20:29,935 - LocalityProcessor - INFO - Extract phase
+2026-08-03 15:20:29,935 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 15:20:29,935 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:20:33,743 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:20:33,743 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 15:20:33,743 - utils - INFO -   Rows: 165627
+2026-08-03 15:20:33,743 - utils - INFO -   Columns: 11
+2026-08-03 15:20:33,743 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 15:20:36,127 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 15:20:36,134 - LocalityProcessor - INFO - Transform phase
+2026-08-03 15:20:36,134 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 15:20:36,134 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 15:20:36,135 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:36,143 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:36,143 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:36,151 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:36,334 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 15:20:36,334 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 15:20:44,034 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 15:20:44,051 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 15:20:46,374 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 15:20:46,659 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 15:20:46,660 - utils - INFO -   Rows: 162277
+2026-08-03 15:20:46,660 - utils - INFO -   Columns: 4
+2026-08-03 15:20:46,660 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 15:20:46,868 - utils - INFO -   Memory usage: 14.51 MB
+2026-08-03 15:20:46,875 - LocalityProcessor - INFO - Load phase
+2026-08-03 15:20:46,875 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 15:20:46,876 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:48,401 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:48,401 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:48,401 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 15:20:48,451 - Pipeline - INFO - Step 4: Validating Data
+2026-08-03 15:20:48,458 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 15:20:48,458 - Validator - INFO - Validating states data
+2026-08-03 15:20:48,459 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:48,460 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:48,468 - Validator - INFO - Validating districts data
+2026-08-03 15:20:48,468 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:48,476 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:48,535 - Validator - INFO - Validating localities data
+2026-08-03 15:20:48,535 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:49,366 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:50,355 - Validator - INFO - Validating foreign key relationships
+2026-08-03 15:20:50,356 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:50,357 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:20:50,358 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:50,359 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:20:50,359 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:51,084 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:20:51,159 - Validator - INFO - All validation checks passed
+2026-08-03 15:20:51,160 - Pipeline - INFO - All validation checks passed
+2026-08-03 15:20:51,160 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 15:20:51,167 - Pipeline - INFO - Generating build report
+2026-08-03 15:20:51,657 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:20:51,657 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:20:51
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2171
+================================================================================
+2026-08-03 15:20:51,657 - Pipeline - INFO - ================================================================================
+2026-08-03 15:20:51,657 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 15:20:51,657 - Pipeline - INFO - Total duration: 0:00:21.939341
+2026-08-03 15:20:51,657 - Pipeline - INFO - ================================================================================
+2026-08-03 15:21:22,389 - Pipeline - INFO - ================================================================================
+2026-08-03 15:21:22,391 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:21:22,392 - Pipeline - INFO - ================================================================================
+2026-08-03 15:21:22,392 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:21:22,392 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:21:22,392 - StateProcessor - INFO - Extract phase
+2026-08-03 15:21:22,396 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:21:22,397 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:21:22,398 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:21:22,399 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:21:22,399 - utils - INFO -   Rows: 36
+2026-08-03 15:21:22,399 - utils - INFO -   Columns: 8
+2026-08-03 15:21:22,399 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:21:22,431 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:21:22,431 - StateProcessor - INFO - Transform phase
+2026-08-03 15:21:22,431 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:21:22,440 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:21:22,441 - utils - INFO -   Rows: 36
+2026-08-03 15:21:22,441 - utils - INFO -   Columns: 3
+2026-08-03 15:21:22,441 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:21:22,442 - utils - INFO -   Memory usage: 0.00 MB
+2026-08-03 15:21:22,449 - StateProcessor - INFO - Load phase
+2026-08-03 15:21:22,450 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:21:22,463 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:22,474 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:22,491 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:22,491 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:21:22,491 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:21:22,492 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:21:22,492 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:21:22,492 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:21:22,495 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:21:22,497 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:21:22,506 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:21:22,507 - utils - INFO -   Rows: 763
+2026-08-03 15:21:22,507 - utils - INFO -   Columns: 6
+2026-08-03 15:21:22,507 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:21:22,509 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:21:22,509 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:21:22,514 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:21:22,514 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:21:22,515 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:22,532 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:22,533 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 15:21:22,557 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 15:21:22,569 - utils - INFO -   Rows: 763
+2026-08-03 15:21:22,571 - utils - INFO -   Columns: 3
+2026-08-03 15:21:22,571 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 15:21:22,572 - utils - INFO -   Memory usage: 0.05 MB
+2026-08-03 15:21:22,573 - DistrictProcessor - INFO - Load phase
+2026-08-03 15:21:22,573 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 15:21:22,574 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:22,590 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:22,591 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:22,591 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 15:21:22,592 - Pipeline - INFO - Step 3: Processing Localities (with merged pincodes)
+2026-08-03 15:21:22,592 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 15:21:22,592 - LocalityProcessor - INFO - Extract phase
+2026-08-03 15:21:22,599 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 15:21:22,600 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:21:23,090 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:21:23,091 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 15:21:23,092 - utils - INFO -   Rows: 165627
+2026-08-03 15:21:23,094 - utils - INFO -   Columns: 11
+2026-08-03 15:21:23,095 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 15:21:23,631 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 15:21:23,631 - LocalityProcessor - INFO - Transform phase
+2026-08-03 15:21:23,631 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 15:21:23,632 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 15:21:23,632 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:23,636 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:23,638 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:23,639 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:23,714 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 15:21:23,714 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 15:21:25,395 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 15:21:25,399 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 15:21:25,946 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 15:21:26,006 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 15:21:26,006 - utils - INFO -   Rows: 162277
+2026-08-03 15:21:26,007 - utils - INFO -   Columns: 4
+2026-08-03 15:21:26,007 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 15:21:26,055 - utils - INFO -   Memory usage: 14.51 MB
+2026-08-03 15:21:26,056 - LocalityProcessor - INFO - Load phase
+2026-08-03 15:21:26,056 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 15:21:26,057 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,379 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,380 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,380 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 15:21:26,403 - Pipeline - INFO - Step 4: Validating Data
+2026-08-03 15:21:26,404 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 15:21:26,404 - Validator - INFO - Validating states data
+2026-08-03 15:21:26,405 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:26,406 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:26,407 - Validator - INFO - Validating districts data
+2026-08-03 15:21:26,408 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:26,409 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:26,413 - Validator - INFO - Validating localities data
+2026-08-03 15:21:26,413 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,586 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,806 - Validator - INFO - Validating foreign key relationships
+2026-08-03 15:21:26,806 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:26,807 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:21:26,808 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:26,810 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:21:26,810 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,938 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:21:26,966 - Validator - INFO - All validation checks passed
+2026-08-03 15:21:26,966 - Pipeline - INFO - All validation checks passed
+2026-08-03 15:21:26,967 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 15:21:26,967 - Pipeline - INFO - Generating build report
+2026-08-03 15:21:26,970 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:21:26,987 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:21:26
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2171
+================================================================================
+2026-08-03 15:21:26,987 - Pipeline - INFO - ================================================================================
+2026-08-03 15:21:26,988 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 15:21:26,988 - Pipeline - INFO - Total duration: 0:00:04.598823
+2026-08-03 15:21:26,988 - Pipeline - INFO - ================================================================================
+2026-08-03 15:31:23,826 - Pipeline - INFO - ================================================================================
+2026-08-03 15:31:23,826 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:31:23,826 - Pipeline - INFO - ================================================================================
+2026-08-03 15:31:23,826 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:31:23,826 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:31:23,826 - StateProcessor - INFO - Extract phase
+2026-08-03 15:31:23,826 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:31:23,833 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:31:23,841 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:31:23,841 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:31:23,842 - utils - INFO -   Rows: 36
+2026-08-03 15:31:23,842 - utils - INFO -   Columns: 8
+2026-08-03 15:31:23,842 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:31:23,843 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:31:23,843 - StateProcessor - INFO - Transform phase
+2026-08-03 15:31:23,843 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:31:23,884 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:31:23,884 - utils - INFO -   Rows: 36
+2026-08-03 15:31:23,884 - utils - INFO -   Columns: 3
+2026-08-03 15:31:23,884 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:31:23,885 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:31:23,885 - StateProcessor - INFO - Load phase
+2026-08-03 15:31:23,885 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:31:23,886 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:23,925 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:23,925 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:23,926 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:31:23,926 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:31:23,926 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:31:23,926 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:31:23,926 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:31:23,926 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:31:23,935 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:31:23,935 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:31:23,935 - utils - INFO -   Rows: 763
+2026-08-03 15:31:23,935 - utils - INFO -   Columns: 6
+2026-08-03 15:31:23,935 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:31:23,942 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:31:23,942 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:31:23,942 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:31:23,942 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:31:23,943 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:24,042 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:24,051 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 15:31:24,342 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 15:31:24,342 - utils - INFO -   Rows: 763
+2026-08-03 15:31:24,342 - utils - INFO -   Columns: 3
+2026-08-03 15:31:24,342 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 15:31:24,343 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 15:31:24,343 - DistrictProcessor - INFO - Load phase
+2026-08-03 15:31:24,343 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 15:31:24,375 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:31:25,172 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:31:25,172 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:31:25,172 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 15:31:25,172 - Pipeline - INFO - Step 3: Processing Localities (with merged pincodes)
+2026-08-03 15:31:25,173 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 15:31:25,173 - LocalityProcessor - INFO - Extract phase
+2026-08-03 15:31:25,173 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 15:31:25,173 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:31:29,393 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:31:29,393 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 15:31:29,393 - utils - INFO -   Rows: 165627
+2026-08-03 15:31:29,393 - utils - INFO -   Columns: 11
+2026-08-03 15:31:29,393 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 15:31:31,509 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 15:31:31,509 - LocalityProcessor - INFO - Transform phase
+2026-08-03 15:31:31,509 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 15:31:31,509 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 15:31:31,509 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:31:31,804 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:31:31,804 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:31,805 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:31:32,059 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 15:31:32,059 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 15:31:43,298 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 15:31:43,359 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 15:31:50,001 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 15:31:57,691 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 15:31:57,691 - utils - INFO -   Rows: 162277
+2026-08-03 15:31:57,691 - utils - INFO -   Columns: 4
+2026-08-03 15:31:57,691 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 15:31:58,150 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 15:31:58,150 - LocalityProcessor - INFO - Load phase
+2026-08-03 15:31:58,150 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 15:31:58,150 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:00,709 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:00,709 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:00,716 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 15:32:00,936 - Pipeline - INFO - Step 4: Validating Data
+2026-08-03 15:32:00,936 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 15:32:00,937 - Validator - INFO - Validating states data
+2026-08-03 15:32:00,937 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:32:00,938 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:32:00,939 - Validator - INFO - Validating districts data
+2026-08-03 15:32:00,940 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:32:00,942 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:32:00,944 - Validator - INFO - Validating localities data
+2026-08-03 15:32:00,944 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:03,425 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:05,391 - Validator - INFO - Validating foreign key relationships
+2026-08-03 15:32:05,391 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:32:05,400 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:32:05,400 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:32:05,553 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:32:05,554 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:10,125 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:32:10,440 - Validator - INFO - All validation checks passed
+2026-08-03 15:32:10,440 - Pipeline - INFO - All validation checks passed
+2026-08-03 15:32:10,440 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 15:32:10,440 - Pipeline - INFO - Generating build report
+2026-08-03 15:32:10,508 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:32:10,508 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:32:10
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2171
+================================================================================
+2026-08-03 15:32:10,508 - Pipeline - INFO - ================================================================================
+2026-08-03 15:32:10,508 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 15:32:10,508 - Pipeline - INFO - Total duration: 0:00:46.682043
+2026-08-03 15:32:10,508 - Pipeline - INFO - ================================================================================
+2026-08-03 15:33:32,203 - Pipeline - INFO - ================================================================================
+2026-08-03 15:33:32,203 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 15:33:32,203 - Pipeline - INFO - ================================================================================
+2026-08-03 15:33:32,204 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 15:33:32,204 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 15:33:32,204 - StateProcessor - INFO - Extract phase
+2026-08-03 15:33:32,204 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 15:33:32,205 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:33:32,207 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 15:33:32,212 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 15:33:32,213 - utils - INFO -   Rows: 36
+2026-08-03 15:33:32,213 - utils - INFO -   Columns: 8
+2026-08-03 15:33:32,213 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 15:33:32,221 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:33:32,222 - StateProcessor - INFO - Transform phase
+2026-08-03 15:33:32,222 - StateProcessor - INFO - Transforming state data
+2026-08-03 15:33:32,245 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 15:33:32,246 - utils - INFO -   Rows: 36
+2026-08-03 15:33:32,246 - utils - INFO -   Columns: 3
+2026-08-03 15:33:32,246 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 15:33:32,247 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 15:33:32,247 - StateProcessor - INFO - Load phase
+2026-08-03 15:33:32,248 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 15:33:32,248 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:32,272 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:32,281 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:32,287 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 15:33:32,287 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 15:33:32,288 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 15:33:32,288 - DistrictProcessor - INFO - Extract phase
+2026-08-03 15:33:32,289 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 15:33:32,289 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:33:32,296 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 15:33:32,297 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 15:33:32,297 - utils - INFO -   Rows: 763
+2026-08-03 15:33:32,297 - utils - INFO -   Columns: 6
+2026-08-03 15:33:32,297 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 15:33:32,304 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 15:33:32,305 - DistrictProcessor - INFO - Transform phase
+2026-08-03 15:33:32,305 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 15:33:32,305 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 15:33:32,306 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:32,329 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:32,331 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 15:33:32,385 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 15:33:32,386 - utils - INFO -   Rows: 763
+2026-08-03 15:33:32,387 - utils - INFO -   Columns: 3
+2026-08-03 15:33:32,387 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 15:33:32,388 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 15:33:32,388 - DistrictProcessor - INFO - Load phase
+2026-08-03 15:33:32,389 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 15:33:32,389 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:32,397 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:32,398 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:32,398 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 15:33:32,402 - Pipeline - INFO - Step 3: Processing Localities (with merged pincodes)
+2026-08-03 15:33:32,402 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 15:33:32,413 - LocalityProcessor - INFO - Extract phase
+2026-08-03 15:33:32,413 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 15:33:32,414 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:33:32,968 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 15:33:32,970 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 15:33:32,971 - utils - INFO -   Rows: 165627
+2026-08-03 15:33:32,972 - utils - INFO -   Columns: 11
+2026-08-03 15:33:32,973 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 15:33:33,752 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 15:33:33,754 - LocalityProcessor - INFO - Transform phase
+2026-08-03 15:33:33,754 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 15:33:33,754 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 15:33:33,755 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:33,761 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:33,763 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:33,764 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:33,900 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 15:33:33,914 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 15:33:50,196 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 15:33:50,319 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 15:33:52,928 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 15:33:54,424 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 15:33:54,450 - utils - INFO -   Rows: 162277
+2026-08-03 15:33:54,458 - utils - INFO -   Columns: 4
+2026-08-03 15:33:54,490 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 15:33:54,616 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 15:33:54,631 - LocalityProcessor - INFO - Load phase
+2026-08-03 15:33:54,645 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 15:33:54,662 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:55,235 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:55,236 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:55,237 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 15:33:55,262 - Pipeline - INFO - Step 4: Validating Data
+2026-08-03 15:33:55,263 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 15:33:55,263 - Validator - INFO - Validating states data
+2026-08-03 15:33:55,264 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:55,267 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:55,278 - Validator - INFO - Validating districts data
+2026-08-03 15:33:55,279 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:55,283 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:55,289 - Validator - INFO - Validating localities data
+2026-08-03 15:33:55,294 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:55,600 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:55,860 - Validator - INFO - Validating foreign key relationships
+2026-08-03 15:33:55,861 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:55,862 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 15:33:55,862 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:55,865 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 15:33:55,866 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:56,146 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 15:33:56,175 - Validator - INFO - All validation checks passed
+2026-08-03 15:33:56,179 - Pipeline - INFO - All validation checks passed
+2026-08-03 15:33:56,179 - Pipeline - INFO - Step 5: Generating Build Report
+2026-08-03 15:33:56,179 - Pipeline - INFO - Generating build report
+2026-08-03 15:33:56,182 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 15:33:56,189 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 15:33:56
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2171
+================================================================================
+2026-08-03 15:33:56,189 - Pipeline - INFO - ================================================================================
+2026-08-03 15:33:56,189 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 15:33:56,197 - Pipeline - INFO - Total duration: 0:00:23.986436
+2026-08-03 15:33:56,197 - Pipeline - INFO - ================================================================================
+2026-08-03 16:05:29,492 - Pipeline - INFO - ================================================================================
+2026-08-03 16:05:29,492 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:05:29,492 - Pipeline - INFO - ================================================================================
+2026-08-03 16:05:29,492 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:05:29,493 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:05:29,493 - StateProcessor - INFO - Extract phase
+2026-08-03 16:05:29,493 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:05:29,493 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:05:29,494 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:05:29,494 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:05:29,494 - utils - INFO -   Rows: 36
+2026-08-03 16:05:29,494 - utils - INFO -   Columns: 8
+2026-08-03 16:05:29,495 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:05:29,496 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:05:29,496 - StateProcessor - INFO - Transform phase
+2026-08-03 16:05:29,496 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:05:29,500 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:05:29,501 - utils - INFO -   Rows: 36
+2026-08-03 16:05:29,501 - utils - INFO -   Columns: 3
+2026-08-03 16:05:29,501 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:05:29,501 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:05:29,501 - StateProcessor - INFO - Load phase
+2026-08-03 16:05:29,501 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:05:29,501 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:29,504 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:29,504 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:29,504 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:05:29,504 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:05:29,504 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:05:29,504 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:05:29,504 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:05:29,504 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:05:29,506 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:05:29,506 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:05:29,506 - utils - INFO -   Rows: 763
+2026-08-03 16:05:29,506 - utils - INFO -   Columns: 6
+2026-08-03 16:05:29,506 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:05:29,507 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:05:29,508 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:05:29,508 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:05:29,508 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:05:29,508 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:29,518 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:29,564 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:05:29,672 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:05:29,672 - utils - INFO -   Rows: 763
+2026-08-03 16:05:29,672 - utils - INFO -   Columns: 3
+2026-08-03 16:05:29,672 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:05:29,673 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:05:29,673 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:05:29,673 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:05:29,679 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:05:29,722 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:05:29,722 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:05:29,722 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:05:29,722 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:05:29,722 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:05:29,722 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:05:29,722 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:05:29,722 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:05:32,372 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:05:32,373 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:05:32,380 - utils - INFO -   Rows: 165627
+2026-08-03 16:05:32,380 - utils - INFO -   Columns: 11
+2026-08-03 16:05:32,380 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:05:33,464 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:05:33,464 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:05:33,465 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:05:33,465 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:05:33,471 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:05:33,512 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:05:33,513 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:33,514 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:05:33,689 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:05:33,689 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:05:39,030 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:05:39,054 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:05:40,613 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:05:43,705 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:05:43,705 - utils - INFO -   Rows: 162277
+2026-08-03 16:05:43,705 - utils - INFO -   Columns: 4
+2026-08-03 16:05:43,705 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:05:44,404 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:05:44,404 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:05:44,404 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:05:44,405 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:05:46,230 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:05:46,230 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:05:46,230 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 16:05:46,372 - Pipeline - INFO - Step 4: Processing Pincodes (separate table with UUIDs)
+2026-08-03 16:05:46,372 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 16:05:46,372 - PincodeProcessor - INFO - Extract phase
+2026-08-03 16:05:46,372 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:05:46,372 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:05:48,688 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:05:48,689 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 16:05:48,689 - utils - INFO -   Rows: 165627
+2026-08-03 16:05:48,689 - utils - INFO -   Columns: 11
+2026-08-03 16:05:48,689 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:05:50,121 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:05:50,122 - PincodeProcessor - INFO - Transform phase
+2026-08-03 16:05:50,122 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes with UUID support
+2026-08-03 16:05:50,122 - PincodeProcessor - INFO - Loading locality mapping from processed localities file
+2026-08-03 16:05:50,122 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:05:51,721 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:06:42,312 - PincodeProcessor - INFO - Loaded mapping for 162277 localities
+2026-08-03 16:06:42,354 - PincodeProcessor - INFO - Loading district mapping for pincode processing
+2026-08-03 16:06:42,362 - PincodeProcessor - ERROR - Error in PincodeProcessor processor: name 'STATES_OUTPUT' is not defined
+2026-08-03 16:06:42,362 - Pipeline - ERROR - ================================================================================
+2026-08-03 16:06:42,362 - Pipeline - ERROR - Pipeline failed: name 'STATES_OUTPUT' is not defined
+2026-08-03 16:06:42,362 - Pipeline - ERROR - ================================================================================
+2026-08-03 16:06:42,363 - Pipeline - INFO - Generating build report
+2026-08-03 16:06:42,420 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:06:42,420 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:06:42
+Status: FAILED
+
+Total Duration: 0:01:12.870228
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2171
+
+ERROR DETAILS
+--------------------------------------------------------------------------------
+Error: name 'STATES_OUTPUT' is not defined
+================================================================================
+2026-08-03 16:07:21,044 - Pipeline - INFO - ================================================================================
+2026-08-03 16:07:21,045 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:07:21,045 - Pipeline - INFO - ================================================================================
+2026-08-03 16:07:21,045 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:07:21,045 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:07:21,045 - StateProcessor - INFO - Extract phase
+2026-08-03 16:07:21,045 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:07:21,045 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:07:21,085 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:07:21,085 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:07:21,085 - utils - INFO -   Rows: 36
+2026-08-03 16:07:21,086 - utils - INFO -   Columns: 8
+2026-08-03 16:07:21,086 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:07:21,102 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:07:21,103 - StateProcessor - INFO - Transform phase
+2026-08-03 16:07:21,103 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:07:21,128 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:07:21,128 - utils - INFO -   Rows: 36
+2026-08-03 16:07:21,128 - utils - INFO -   Columns: 3
+2026-08-03 16:07:21,128 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:07:21,135 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:07:21,136 - StateProcessor - INFO - Load phase
+2026-08-03 16:07:21,136 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:07:21,136 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:21,220 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:21,227 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:21,227 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:07:21,228 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:07:21,228 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:07:21,228 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:07:21,228 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:07:21,228 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:07:21,237 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:07:21,244 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:07:21,244 - utils - INFO -   Rows: 763
+2026-08-03 16:07:21,244 - utils - INFO -   Columns: 6
+2026-08-03 16:07:21,244 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:07:21,252 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:07:21,253 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:07:21,253 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:07:21,253 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:07:21,253 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:21,361 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:21,370 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:07:21,711 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:07:21,711 - utils - INFO -   Rows: 763
+2026-08-03 16:07:21,711 - utils - INFO -   Columns: 3
+2026-08-03 16:07:21,711 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:07:21,719 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:07:21,719 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:07:21,719 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:07:21,719 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:07:21,753 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:07:21,753 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:07:21,753 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:07:21,753 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:07:21,753 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:07:21,753 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:07:21,753 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:07:21,753 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:07:25,186 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:07:25,186 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:07:25,186 - utils - INFO -   Rows: 165627
+2026-08-03 16:07:25,186 - utils - INFO -   Columns: 11
+2026-08-03 16:07:25,186 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:07:28,352 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:07:28,352 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:07:28,352 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:07:28,352 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:07:28,353 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:07:28,436 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:07:28,437 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:28,445 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:07:28,686 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:07:28,687 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:07:34,901 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:07:34,928 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:07:36,768 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:07:41,910 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:07:41,910 - utils - INFO -   Rows: 162277
+2026-08-03 16:07:41,910 - utils - INFO -   Columns: 4
+2026-08-03 16:07:41,910 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:07:42,210 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:07:42,210 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:07:42,210 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:07:42,210 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:07:44,686 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:07:44,686 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:07:44,686 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 16:07:44,827 - Pipeline - INFO - Step 4: Processing Pincodes (separate table with UUIDs)
+2026-08-03 16:07:44,828 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 16:07:44,828 - PincodeProcessor - INFO - Extract phase
+2026-08-03 16:07:44,828 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:07:44,828 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:07:47,069 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:07:47,069 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 16:07:47,069 - utils - INFO -   Rows: 165627
+2026-08-03 16:07:47,069 - utils - INFO -   Columns: 11
+2026-08-03 16:07:47,069 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:07:48,368 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:07:48,368 - PincodeProcessor - INFO - Transform phase
+2026-08-03 16:07:48,368 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes with UUID support
+2026-08-03 16:07:48,368 - PincodeProcessor - INFO - Loading locality mapping from processed localities file
+2026-08-03 16:07:48,368 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:07:50,318 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:08:29,751 - PincodeProcessor - INFO - Loaded mapping for 162277 localities
+2026-08-03 16:08:29,777 - PincodeProcessor - INFO - Loading district mapping for pincode processing
+2026-08-03 16:08:29,784 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:08:29,901 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:08:29,902 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:08:29,910 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:08:30,484 - PincodeProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:08:40,767 - PincodeProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:08:53,126 - PincodeProcessor - INFO - Removed 10 duplicate pincodes
+2026-08-03 16:09:37,541 - utils - INFO - DataFrame PincodeProcessor_transformed info:
+2026-08-03 16:09:37,542 - utils - INFO -   Rows: 164438
+2026-08-03 16:09:37,542 - utils - INFO -   Columns: 3
+2026-08-03 16:09:37,549 - utils - INFO -   Columns: ['id', 'locality_id', 'pincode']
+2026-08-03 16:09:37,864 - utils - INFO -   Memory usage: 36.54 MB
+2026-08-03 16:09:37,864 - PincodeProcessor - INFO - Load phase
+2026-08-03 16:09:37,864 - PincodeProcessor - INFO - Loading pincode data to CSV
+2026-08-03 16:09:37,864 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:41,441 - utils - INFO - Successfully saved 164438 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:41,449 - PincodeProcessor - INFO - Pincode data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:41,449 - PincodeProcessor - INFO - Completed PincodeProcessor processor successfully
+2026-08-03 16:09:41,724 - Pipeline - INFO - Step 5: Validating Data
+2026-08-03 16:09:41,724 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 16:09:41,724 - Validator - INFO - Validating states data
+2026-08-03 16:09:41,724 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:09:41,732 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:09:41,749 - Validator - INFO - Validating districts data
+2026-08-03 16:09:41,758 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:09:41,791 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:09:41,816 - Validator - INFO - Validating localities data
+2026-08-03 16:09:41,824 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:09:44,266 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:09:46,315 - Validator - INFO - Validating pincodes data
+2026-08-03 16:09:46,316 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:47,899 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:50,732 - Validator - INFO - Validating foreign key relationships
+2026-08-03 16:09:50,732 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:09:50,741 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:09:50,741 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:09:50,757 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:09:50,757 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:09:53,266 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:09:53,266 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:55,107 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:09:55,799 - Validator - INFO - All validation checks passed
+2026-08-03 16:09:55,799 - Pipeline - INFO - All validation checks passed
+2026-08-03 16:09:55,799 - Pipeline - INFO - Step 6: Generating Build Report
+2026-08-03 16:09:55,799 - Pipeline - INFO - Generating build report
+2026-08-03 16:09:55,883 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:09:55,883 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:09:55
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 164438
+  Unique Pincodes: 19426
+  Duplicate Pincodes Removed: 10
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+  Total Pincodes: 164438
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2181
+================================================================================
+2026-08-03 16:09:56,095 - Pipeline - INFO - ================================================================================
+2026-08-03 16:09:56,095 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 16:09:56,095 - Pipeline - INFO - Total duration: 0:02:35.050204
+2026-08-03 16:09:56,095 - Pipeline - INFO - ================================================================================
+2026-08-03 16:11:22,085 - Pipeline - INFO - ================================================================================
+2026-08-03 16:11:22,385 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:11:22,545 - Pipeline - INFO - ================================================================================
+2026-08-03 16:11:22,568 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:11:22,640 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:11:22,650 - StateProcessor - INFO - Extract phase
+2026-08-03 16:11:22,678 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:11:22,701 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:11:22,709 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:11:22,722 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:11:22,727 - utils - INFO -   Rows: 36
+2026-08-03 16:11:22,742 - utils - INFO -   Columns: 8
+2026-08-03 16:11:22,744 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:11:22,746 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:11:22,747 - StateProcessor - INFO - Transform phase
+2026-08-03 16:11:22,751 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:11:22,764 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:11:22,778 - utils - INFO -   Rows: 36
+2026-08-03 16:11:22,779 - utils - INFO -   Columns: 3
+2026-08-03 16:11:22,803 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:11:22,833 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:11:22,836 - StateProcessor - INFO - Load phase
+2026-08-03 16:11:22,838 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:11:22,846 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:22,862 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:22,870 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:22,871 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:11:22,896 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:11:22,901 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:11:22,902 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:11:22,904 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:11:22,904 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:11:22,914 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:11:22,920 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:11:22,928 - utils - INFO -   Rows: 763
+2026-08-03 16:11:22,929 - utils - INFO -   Columns: 6
+2026-08-03 16:11:22,929 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:11:22,960 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:11:22,963 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:11:22,965 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:11:22,966 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:11:22,968 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:22,995 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:23,002 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:11:23,051 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:11:23,051 - utils - INFO -   Rows: 763
+2026-08-03 16:11:23,051 - utils - INFO -   Columns: 3
+2026-08-03 16:11:23,051 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:11:23,052 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:11:23,053 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:11:23,053 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:11:23,054 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:23,057 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:23,063 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:23,064 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:11:23,064 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:11:23,070 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:11:23,070 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:11:23,070 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:11:23,071 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:11:23,399 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:11:23,400 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:11:23,400 - utils - INFO -   Rows: 165627
+2026-08-03 16:11:23,400 - utils - INFO -   Columns: 11
+2026-08-03 16:11:23,400 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:11:23,627 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:11:23,627 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:11:23,628 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:11:23,628 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:11:23,628 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:23,650 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:23,651 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:23,653 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:23,705 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:11:23,706 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:11:25,143 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:11:25,157 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:11:25,619 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:11:26,405 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:11:26,409 - utils - INFO -   Rows: 162277
+2026-08-03 16:11:26,410 - utils - INFO -   Columns: 4
+2026-08-03 16:11:26,410 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:11:26,528 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:11:26,528 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:11:26,529 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:11:26,529 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:26,834 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:26,835 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:26,835 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 16:11:26,848 - Pipeline - INFO - Step 4: Processing Pincodes (separate table with UUIDs)
+2026-08-03 16:11:26,853 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 16:11:26,854 - PincodeProcessor - INFO - Extract phase
+2026-08-03 16:11:26,854 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:11:26,854 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:11:27,211 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:11:27,211 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 16:11:27,211 - utils - INFO -   Rows: 165627
+2026-08-03 16:11:27,211 - utils - INFO -   Columns: 11
+2026-08-03 16:11:27,212 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:11:27,437 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:11:27,438 - PincodeProcessor - INFO - Transform phase
+2026-08-03 16:11:27,438 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes with UUID support
+2026-08-03 16:11:27,438 - PincodeProcessor - INFO - Loading locality mapping from processed localities file
+2026-08-03 16:11:27,438 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:27,660 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:38,526 - PincodeProcessor - INFO - Loaded mapping for 162277 localities
+2026-08-03 16:11:38,531 - PincodeProcessor - INFO - Loading district mapping for pincode processing
+2026-08-03 16:11:38,536 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:38,543 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:38,545 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:38,546 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:38,601 - PincodeProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:11:39,850 - PincodeProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:11:41,360 - PincodeProcessor - INFO - Removed 10 duplicate pincodes
+2026-08-03 16:11:45,420 - utils - INFO - DataFrame PincodeProcessor_transformed info:
+2026-08-03 16:11:45,421 - utils - INFO -   Rows: 164438
+2026-08-03 16:11:45,421 - utils - INFO -   Columns: 3
+2026-08-03 16:11:45,421 - utils - INFO -   Columns: ['id', 'locality_id', 'pincode']
+2026-08-03 16:11:45,497 - utils - INFO -   Memory usage: 36.54 MB
+2026-08-03 16:11:45,498 - PincodeProcessor - INFO - Load phase
+2026-08-03 16:11:45,498 - PincodeProcessor - INFO - Loading pincode data to CSV
+2026-08-03 16:11:45,498 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:45,765 - utils - INFO - Successfully saved 164438 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:45,765 - PincodeProcessor - INFO - Pincode data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:45,766 - PincodeProcessor - INFO - Completed PincodeProcessor processor successfully
+2026-08-03 16:11:45,783 - Pipeline - INFO - Step 5: Validating Data
+2026-08-03 16:11:45,792 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 16:11:45,792 - Validator - INFO - Validating states data
+2026-08-03 16:11:45,793 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:45,794 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:45,795 - Validator - INFO - Validating districts data
+2026-08-03 16:11:45,796 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:45,811 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:45,813 - Validator - INFO - Validating localities data
+2026-08-03 16:11:45,815 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:46,039 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:46,270 - Validator - INFO - Validating pincodes data
+2026-08-03 16:11:46,271 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:46,484 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:46,912 - Validator - INFO - Validating foreign key relationships
+2026-08-03 16:11:46,913 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:46,915 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:11:46,915 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:46,917 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:11:46,917 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:47,144 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:11:47,145 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:47,356 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:11:47,448 - Validator - INFO - All validation checks passed
+2026-08-03 16:11:47,449 - Pipeline - INFO - All validation checks passed
+2026-08-03 16:11:47,449 - Pipeline - INFO - Step 6: Generating Build Report
+2026-08-03 16:11:47,449 - Pipeline - INFO - Generating build report
+2026-08-03 16:11:47,451 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:11:47,454 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:11:47
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 164438
+  Unique Pincodes: 19426
+  Duplicate Pincodes Removed: 10
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+  Total Pincodes: 164438
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2181
+================================================================================
+2026-08-03 16:11:47,478 - Pipeline - INFO - ================================================================================
+2026-08-03 16:11:47,479 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 16:11:47,479 - Pipeline - INFO - Total duration: 0:00:25.393120
+2026-08-03 16:11:47,479 - Pipeline - INFO - ================================================================================
+2026-08-03 16:21:09,892 - Pipeline - INFO - ================================================================================
+2026-08-03 16:21:10,267 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:21:10,267 - Pipeline - INFO - ================================================================================
+2026-08-03 16:21:10,267 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:21:10,267 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:21:10,267 - StateProcessor - INFO - Extract phase
+2026-08-03 16:21:10,267 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:21:10,268 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:21:10,287 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:21:10,287 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:21:10,287 - utils - INFO -   Rows: 36
+2026-08-03 16:21:10,287 - utils - INFO -   Columns: 8
+2026-08-03 16:21:10,287 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:21:10,288 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:21:10,289 - StateProcessor - INFO - Transform phase
+2026-08-03 16:21:10,289 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:21:10,293 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:21:10,293 - utils - INFO -   Rows: 36
+2026-08-03 16:21:10,293 - utils - INFO -   Columns: 3
+2026-08-03 16:21:10,293 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:21:10,294 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:21:10,294 - StateProcessor - INFO - Load phase
+2026-08-03 16:21:10,294 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:21:10,294 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:11,821 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:11,821 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:11,821 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:21:11,821 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:21:11,821 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:21:11,821 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:21:11,821 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:21:11,821 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:21:12,025 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:21:12,025 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:21:12,025 - utils - INFO -   Rows: 763
+2026-08-03 16:21:12,025 - utils - INFO -   Columns: 6
+2026-08-03 16:21:12,025 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:21:12,026 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:21:12,026 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:21:12,026 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:21:12,026 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:21:12,026 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:12,043 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:12,044 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:21:13,144 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:21:13,144 - utils - INFO -   Rows: 763
+2026-08-03 16:21:13,144 - utils - INFO -   Columns: 3
+2026-08-03 16:21:13,144 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:21:13,144 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:21:13,145 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:21:13,145 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:21:13,145 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:21:13,704 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:21:13,704 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:21:13,704 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:21:13,704 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:21:13,704 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:21:13,705 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:21:13,705 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:21:13,705 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:21:23,179 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:21:23,181 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:21:23,181 - utils - INFO -   Rows: 165627
+2026-08-03 16:21:23,181 - utils - INFO -   Columns: 11
+2026-08-03 16:21:23,181 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:21:27,893 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:21:27,893 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:21:27,894 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:21:27,894 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:21:27,894 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:21:27,906 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:21:27,906 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:27,908 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:21:28,612 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:21:28,612 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:21:51,908 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:21:51,915 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:21:58,904 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:22:11,300 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:22:11,301 - utils - INFO -   Rows: 162277
+2026-08-03 16:22:11,301 - utils - INFO -   Columns: 4
+2026-08-03 16:22:11,301 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:22:11,916 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:22:11,917 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:22:11,917 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:22:11,918 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:22:16,665 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:22:16,665 - LocalityProcessor - INFO - Saving locality UUID mapping for PincodeProcessor
+2026-08-03 16:23:45,474 - LocalityProcessor - ERROR - Error in LocalityProcessor processor: keys must be str, int, float, bool or None, not tuple
+2026-08-03 16:23:45,475 - Pipeline - ERROR - ================================================================================
+2026-08-03 16:23:45,475 - Pipeline - ERROR - Pipeline failed: keys must be str, int, float, bool or None, not tuple
+2026-08-03 16:23:45,475 - Pipeline - ERROR - ================================================================================
+2026-08-03 16:23:45,475 - Pipeline - INFO - Generating build report
+2026-08-03 16:23:45,477 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:23:45,477 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:23:45
+Status: FAILED
+
+Total Duration: 0:02:35.582179
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 0
+
+ERROR DETAILS
+--------------------------------------------------------------------------------
+Error: keys must be str, int, float, bool or None, not tuple
+================================================================================
+2026-08-03 16:25:17,608 - Pipeline - INFO - ================================================================================
+2026-08-03 16:25:17,633 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:25:17,633 - Pipeline - INFO - ================================================================================
+2026-08-03 16:25:17,633 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:25:17,633 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:25:17,633 - StateProcessor - INFO - Extract phase
+2026-08-03 16:25:17,633 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:25:17,633 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:25:17,699 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:25:17,699 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:25:17,699 - utils - INFO -   Rows: 36
+2026-08-03 16:25:17,700 - utils - INFO -   Columns: 8
+2026-08-03 16:25:17,700 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:25:17,733 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:25:17,733 - StateProcessor - INFO - Transform phase
+2026-08-03 16:25:17,733 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:25:17,983 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:25:17,983 - utils - INFO -   Rows: 36
+2026-08-03 16:25:17,983 - utils - INFO -   Columns: 3
+2026-08-03 16:25:17,983 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:25:18,045 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:25:18,045 - StateProcessor - INFO - Load phase
+2026-08-03 16:25:18,046 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:25:18,046 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:18,411 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:18,411 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:18,411 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:25:18,411 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:25:18,411 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:25:18,411 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:25:18,411 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:25:18,411 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:25:18,413 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:25:18,413 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:25:18,413 - utils - INFO -   Rows: 763
+2026-08-03 16:25:18,413 - utils - INFO -   Columns: 6
+2026-08-03 16:25:18,413 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:25:18,414 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:25:18,414 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:25:18,414 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:25:18,414 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:25:18,414 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:21,268 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:21,270 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:25:21,290 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:25:21,290 - utils - INFO -   Rows: 763
+2026-08-03 16:25:21,290 - utils - INFO -   Columns: 3
+2026-08-03 16:25:21,290 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:25:21,291 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:25:21,291 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:25:21,291 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:25:21,292 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:25:22,533 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:25:22,533 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:25:22,533 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:25:22,533 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:25:22,533 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:25:22,533 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:25:22,533 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:25:22,534 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:25:29,549 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:25:29,549 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:25:29,549 - utils - INFO -   Rows: 165627
+2026-08-03 16:25:29,549 - utils - INFO -   Columns: 11
+2026-08-03 16:25:29,549 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:25:32,422 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:25:32,422 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:25:32,422 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:25:32,422 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:25:32,423 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:25:32,434 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:25:32,435 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:32,435 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:25:33,922 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:25:33,922 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:25:59,441 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:25:59,649 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:26:05,894 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:26:17,289 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:26:17,290 - utils - INFO -   Rows: 162277
+2026-08-03 16:26:17,290 - utils - INFO -   Columns: 4
+2026-08-03 16:26:17,290 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:26:18,021 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:26:18,021 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:26:18,021 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:26:18,022 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:26:29,016 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:26:29,017 - LocalityProcessor - INFO - Saving locality UUID mapping for PincodeProcessor
+2026-08-03 16:27:43,179 - LocalityProcessor - INFO - Locality UUID mapping saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\locality_uuid_mapping.json
+2026-08-03 16:27:43,179 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:27:43,204 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 16:27:43,380 - Pipeline - INFO - Step 4: Processing Pincodes (separate table with UUIDs)
+2026-08-03 16:27:43,387 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 16:27:43,388 - PincodeProcessor - INFO - Extract phase
+2026-08-03 16:27:43,388 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:27:43,388 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:27:46,036 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:27:46,037 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 16:27:46,037 - utils - INFO -   Rows: 165627
+2026-08-03 16:27:46,037 - utils - INFO -   Columns: 11
+2026-08-03 16:27:46,037 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:27:47,312 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:27:47,312 - PincodeProcessor - INFO - Transform phase
+2026-08-03 16:27:47,313 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes with UUID support
+2026-08-03 16:27:47,313 - PincodeProcessor - INFO - Loading locality UUID mapping from JSON file
+2026-08-03 16:27:48,004 - PincodeProcessor - INFO - Loaded mapping for 162277 localities from JSON file
+2026-08-03 16:27:48,013 - PincodeProcessor - INFO - Loading district mapping for pincode processing
+2026-08-03 16:27:48,024 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:27:48,027 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:27:48,027 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:27:48,028 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:27:48,288 - PincodeProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:27:55,729 - PincodeProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:28:03,568 - PincodeProcessor - INFO - Validating that all locality_ids exist in localities.csv
+2026-08-03 16:28:03,569 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:05,312 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:05,803 - PincodeProcessor - INFO - All locality_id values validated successfully against localities.csv
+2026-08-03 16:28:07,579 - PincodeProcessor - INFO - Removed 10 duplicate pincodes
+2026-08-03 16:28:41,328 - utils - INFO - DataFrame PincodeProcessor_transformed info:
+2026-08-03 16:28:41,328 - utils - INFO -   Rows: 164438
+2026-08-03 16:28:41,328 - utils - INFO -   Columns: 3
+2026-08-03 16:28:41,335 - utils - INFO -   Columns: ['id', 'locality_id', 'pincode']
+2026-08-03 16:28:41,644 - utils - INFO -   Memory usage: 36.54 MB
+2026-08-03 16:28:41,644 - PincodeProcessor - INFO - Load phase
+2026-08-03 16:28:41,645 - PincodeProcessor - INFO - Loading pincode data to CSV
+2026-08-03 16:28:41,645 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:44,376 - utils - INFO - Successfully saved 164438 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:44,376 - PincodeProcessor - INFO - Pincode data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:44,376 - PincodeProcessor - INFO - Completed PincodeProcessor processor successfully
+2026-08-03 16:28:44,461 - Pipeline - INFO - Step 5: Validating Data
+2026-08-03 16:28:44,462 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 16:28:44,470 - Validator - INFO - Validating states data
+2026-08-03 16:28:44,470 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:28:44,478 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:28:44,487 - Validator - INFO - Validating districts data
+2026-08-03 16:28:44,494 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:28:44,503 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:28:44,519 - Validator - INFO - Validating localities data
+2026-08-03 16:28:44,519 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:46,145 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:47,477 - Validator - INFO - Validating pincodes data
+2026-08-03 16:28:47,477 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:49,145 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:52,444 - Validator - INFO - Checking for missing locality references in pincodes
+2026-08-03 16:28:52,444 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:54,468 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:54,961 - Validator - INFO - All locality_id references in pincodes exist in localities.csv
+2026-08-03 16:28:55,102 - Validator - INFO - Validating foreign key relationships
+2026-08-03 16:28:55,102 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:28:55,110 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:28:55,110 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:28:55,127 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:28:55,127 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:57,135 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:28:57,135 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:59,194 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:28:59,827 - Validator - INFO - All validation checks passed
+2026-08-03 16:28:59,828 - Pipeline - INFO - All validation checks passed
+2026-08-03 16:28:59,828 - Pipeline - INFO - Step 6: Generating Build Report
+2026-08-03 16:28:59,828 - Pipeline - INFO - Generating build report
+2026-08-03 16:29:00,085 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:29:00,085 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:28:59
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 164438
+  Unique Pincodes: 19426
+  Duplicate Pincodes Removed: 10
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+  Total Pincodes: 164438
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+  Missing Locality References in Pincodes: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2181
+================================================================================
+2026-08-03 16:29:00,085 - Pipeline - INFO - ================================================================================
+2026-08-03 16:29:00,085 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 16:29:00,085 - Pipeline - INFO - Total duration: 0:03:42.476755
+2026-08-03 16:29:00,085 - Pipeline - INFO - ================================================================================
+2026-08-03 16:29:22,135 - Pipeline - INFO - ================================================================================
+2026-08-03 16:29:22,625 - Pipeline - INFO - Starting ColdSense AI Geography ETL Pipeline v2
+2026-08-03 16:29:23,318 - Pipeline - INFO - ================================================================================
+2026-08-03 16:29:23,472 - Pipeline - INFO - Step 1: Processing States
+2026-08-03 16:29:23,520 - StateProcessor - INFO - Starting StateProcessor processor
+2026-08-03 16:29:23,616 - StateProcessor - INFO - Extract phase
+2026-08-03 16:29:23,663 - StateProcessor - INFO - Extracting state data from LGD file
+2026-08-03 16:29:23,769 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:29:23,771 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\1-state.csv
+2026-08-03 16:29:23,771 - utils - INFO - DataFrame StateProcessor_extracted info:
+2026-08-03 16:29:23,771 - utils - INFO -   Rows: 36
+2026-08-03 16:29:23,771 - utils - INFO -   Columns: 8
+2026-08-03 16:29:23,771 - utils - INFO -   Columns: ['S.No.', 'State Code', 'State Version', 'State Name', 'State Name.1', 'Census 2001 Code', 'Census 2011 Code', 'State or UT']
+2026-08-03 16:29:23,773 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:29:23,773 - StateProcessor - INFO - Transform phase
+2026-08-03 16:29:23,773 - StateProcessor - INFO - Transforming state data
+2026-08-03 16:29:23,778 - utils - INFO - DataFrame StateProcessor_transformed info:
+2026-08-03 16:29:23,778 - utils - INFO -   Rows: 36
+2026-08-03 16:29:23,778 - utils - INFO -   Columns: 3
+2026-08-03 16:29:23,778 - utils - INFO -   Columns: ['id', 'name', 'code']
+2026-08-03 16:29:23,779 - utils - INFO -   Memory usage: 0.01 MB
+2026-08-03 16:29:23,779 - StateProcessor - INFO - Load phase
+2026-08-03 16:29:23,779 - StateProcessor - INFO - Loading state data to CSV
+2026-08-03 16:29:23,779 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:23,889 - utils - INFO - Successfully saved 36 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:23,927 - StateProcessor - INFO - State data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:24,073 - StateProcessor - INFO - Completed StateProcessor processor successfully
+2026-08-03 16:29:24,116 - Pipeline - INFO - Step 2: Processing Districts
+2026-08-03 16:29:24,310 - DistrictProcessor - INFO - Starting DistrictProcessor processor
+2026-08-03 16:29:24,319 - DistrictProcessor - INFO - Extract phase
+2026-08-03 16:29:24,342 - DistrictProcessor - INFO - Extracting district data from LGD file
+2026-08-03 16:29:25,245 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:29:25,248 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\india-local-government-directory-main\administrative\2-district.csv
+2026-08-03 16:29:25,248 - utils - INFO - DataFrame DistrictProcessor_extracted info:
+2026-08-03 16:29:25,248 - utils - INFO -   Rows: 763
+2026-08-03 16:29:25,248 - utils - INFO -   Columns: 6
+2026-08-03 16:29:25,248 - utils - INFO -   Columns: ['State Code', 'State Name', 'District Code', 'District Name', 'Census 2001 Code', 'Census 2011 Code']
+2026-08-03 16:29:25,249 - utils - INFO -   Memory usage: 0.11 MB
+2026-08-03 16:29:25,249 - DistrictProcessor - INFO - Transform phase
+2026-08-03 16:29:25,249 - DistrictProcessor - INFO - Transforming district data
+2026-08-03 16:29:25,249 - DistrictProcessor - INFO - Loading state mapping from processed states file
+2026-08-03 16:29:25,249 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:25,268 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:25,270 - DistrictProcessor - INFO - Loaded mapping for 36 states
+2026-08-03 16:29:27,527 - utils - INFO - DataFrame DistrictProcessor_transformed info:
+2026-08-03 16:29:27,527 - utils - INFO -   Rows: 763
+2026-08-03 16:29:27,527 - utils - INFO -   Columns: 3
+2026-08-03 16:29:27,527 - utils - INFO -   Columns: ['id', 'state_id', 'name']
+2026-08-03 16:29:27,529 - utils - INFO -   Memory usage: 0.17 MB
+2026-08-03 16:29:27,529 - DistrictProcessor - INFO - Load phase
+2026-08-03 16:29:27,529 - DistrictProcessor - INFO - Loading district data to CSV
+2026-08-03 16:29:27,529 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:29:30,308 - utils - INFO - Successfully saved 763 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:29:30,427 - DistrictProcessor - INFO - District data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:29:30,490 - DistrictProcessor - INFO - Completed DistrictProcessor processor successfully
+2026-08-03 16:29:30,560 - Pipeline - INFO - Step 3: Processing Localities (with merged postal_code)
+2026-08-03 16:29:30,568 - LocalityProcessor - INFO - Starting LocalityProcessor processor
+2026-08-03 16:29:30,642 - LocalityProcessor - INFO - Extract phase
+2026-08-03 16:29:30,651 - LocalityProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:29:30,719 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:29:31,932 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:29:31,960 - utils - INFO - DataFrame LocalityProcessor_extracted info:
+2026-08-03 16:29:31,966 - utils - INFO -   Rows: 165627
+2026-08-03 16:29:31,991 - utils - INFO -   Columns: 11
+2026-08-03 16:29:31,992 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:29:32,599 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:29:32,600 - LocalityProcessor - INFO - Transform phase
+2026-08-03 16:29:32,601 - LocalityProcessor - INFO - Transforming pincode data to extract localities with merged pincodes
+2026-08-03 16:29:32,609 - LocalityProcessor - INFO - Loading district mapping from processed districts file
+2026-08-03 16:29:32,642 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:29:32,759 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:29:32,785 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:32,831 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:29:33,912 - LocalityProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:29:33,914 - LocalityProcessor - INFO - Loaded fallback mapping for 758 district names
+2026-08-03 16:29:45,966 - LocalityProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:29:46,018 - LocalityProcessor - WARNING - Found 1179 localities with unmapped districts: <StringArray>
+['', 'bagalkot', 'firozpur', 'lakshadweep']
+Length: 4, dtype: str
+2026-08-03 16:29:47,917 - LocalityProcessor - INFO - Removed 2171 duplicate localities
+2026-08-03 16:29:50,308 - utils - INFO - DataFrame LocalityProcessor_transformed info:
+2026-08-03 16:29:50,341 - utils - INFO -   Rows: 162277
+2026-08-03 16:29:50,342 - utils - INFO -   Columns: 4
+2026-08-03 16:29:50,348 - utils - INFO -   Columns: ['id', 'district_id', 'name', 'postal_code']
+2026-08-03 16:29:50,535 - utils - INFO -   Memory usage: 38.34 MB
+2026-08-03 16:29:50,581 - LocalityProcessor - INFO - Load phase
+2026-08-03 16:29:50,607 - LocalityProcessor - INFO - Loading locality data to CSV
+2026-08-03 16:29:51,542 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:29:52,765 - utils - INFO - Successfully saved 162277 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:29:52,807 - LocalityProcessor - INFO - Saving locality UUID mapping for PincodeProcessor
+2026-08-03 16:30:32,066 - LocalityProcessor - INFO - Locality UUID mapping saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\locality_uuid_mapping.json
+2026-08-03 16:30:32,066 - LocalityProcessor - INFO - Locality data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:32,107 - LocalityProcessor - INFO - Completed LocalityProcessor processor successfully
+2026-08-03 16:30:32,154 - Pipeline - INFO - Step 4: Processing Pincodes (separate table with UUIDs)
+2026-08-03 16:30:32,157 - PincodeProcessor - INFO - Starting PincodeProcessor processor
+2026-08-03 16:30:32,157 - PincodeProcessor - INFO - Extract phase
+2026-08-03 16:30:32,157 - PincodeProcessor - INFO - Extracting pincode data from India Post file
+2026-08-03 16:30:32,158 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:30:32,711 - utils - INFO - Successfully loaded 165627 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\raw\5c2f62fe-5afa-4119-a499-fec9d604d5bd.csv
+2026-08-03 16:30:32,737 - utils - INFO - DataFrame PincodeProcessor_extracted info:
+2026-08-03 16:30:32,739 - utils - INFO -   Rows: 165627
+2026-08-03 16:30:32,740 - utils - INFO -   Columns: 11
+2026-08-03 16:30:32,740 - utils - INFO -   Columns: ['circlename', 'regionname', 'divisionname', 'officename', 'pincode', 'officetype', 'delivery', 'district', 'statename', 'latitude', 'longitude']
+2026-08-03 16:30:33,050 - utils - INFO -   Memory usage: 96.13 MB
+2026-08-03 16:30:33,051 - PincodeProcessor - INFO - Transform phase
+2026-08-03 16:30:33,051 - PincodeProcessor - INFO - Transforming pincode data to extract pincodes with UUID support
+2026-08-03 16:30:33,051 - PincodeProcessor - INFO - Loading locality UUID mapping from JSON file
+2026-08-03 16:30:33,353 - PincodeProcessor - INFO - Loaded mapping for 162277 localities from JSON file
+2026-08-03 16:30:33,354 - PincodeProcessor - INFO - Loading district mapping for pincode processing
+2026-08-03 16:30:33,357 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:33,364 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:33,367 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:33,374 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:33,446 - PincodeProcessor - INFO - Loaded mapping for 763 (state, district) combinations
+2026-08-03 16:30:35,327 - PincodeProcessor - INFO - Using fallback mapping for 1356 unmapped districts
+2026-08-03 16:30:37,475 - PincodeProcessor - INFO - Validating that all locality_ids exist in localities.csv
+2026-08-03 16:30:37,480 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:37,950 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:38,064 - PincodeProcessor - INFO - All locality_id values validated successfully against localities.csv
+2026-08-03 16:30:38,436 - PincodeProcessor - INFO - Removed 10 duplicate pincodes
+2026-08-03 16:30:43,078 - utils - INFO - DataFrame PincodeProcessor_transformed info:
+2026-08-03 16:30:43,078 - utils - INFO -   Rows: 164438
+2026-08-03 16:30:43,078 - utils - INFO -   Columns: 3
+2026-08-03 16:30:43,079 - utils - INFO -   Columns: ['id', 'locality_id', 'pincode']
+2026-08-03 16:30:43,185 - utils - INFO -   Memory usage: 36.54 MB
+2026-08-03 16:30:43,189 - PincodeProcessor - INFO - Load phase
+2026-08-03 16:30:43,190 - PincodeProcessor - INFO - Loading pincode data to CSV
+2026-08-03 16:30:43,190 - utils - INFO - Saving CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:43,470 - utils - INFO - Successfully saved 164438 rows to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:43,470 - PincodeProcessor - INFO - Pincode data saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:43,471 - PincodeProcessor - INFO - Completed PincodeProcessor processor successfully
+2026-08-03 16:30:43,486 - Pipeline - INFO - Step 5: Validating Data
+2026-08-03 16:30:43,500 - Validator - INFO - Starting comprehensive data validation
+2026-08-03 16:30:43,500 - Validator - INFO - Validating states data
+2026-08-03 16:30:43,504 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:43,506 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:43,514 - Validator - INFO - Validating districts data
+2026-08-03 16:30:43,514 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:43,517 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:43,524 - Validator - INFO - Validating localities data
+2026-08-03 16:30:43,525 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:43,758 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:43,980 - Validator - INFO - Validating pincodes data
+2026-08-03 16:30:43,987 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:44,210 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:44,575 - Validator - INFO - Checking for missing locality references in pincodes
+2026-08-03 16:30:44,576 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:44,794 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:44,863 - Validator - INFO - All locality_id references in pincodes exist in localities.csv
+2026-08-03 16:30:44,889 - Validator - INFO - Validating foreign key relationships
+2026-08-03 16:30:44,890 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:44,891 - utils - INFO - Successfully loaded 36 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\states.csv
+2026-08-03 16:30:44,891 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:44,895 - utils - INFO - Successfully loaded 763 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\districts.csv
+2026-08-03 16:30:44,900 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:45,149 - utils - INFO - Successfully loaded 162277 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\localities.csv
+2026-08-03 16:30:45,150 - utils - INFO - Loading CSV file: C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:45,361 - utils - INFO - Successfully loaded 164438 rows from C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\processed\pincodes.csv
+2026-08-03 16:30:45,462 - Validator - INFO - All validation checks passed
+2026-08-03 16:30:45,462 - Pipeline - INFO - All validation checks passed
+2026-08-03 16:30:45,463 - Pipeline - INFO - Step 6: Generating Build Report
+2026-08-03 16:30:45,463 - Pipeline - INFO - Generating build report
+2026-08-03 16:30:45,465 - Pipeline - INFO - Build report saved to C:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\datasets\build_report.txt
+2026-08-03 16:30:45,468 - Pipeline - INFO - 
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:30:45
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 164438
+  Unique Pincodes: 19426
+  Duplicate Pincodes Removed: 10
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+  Total Pincodes: 164438
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+  Missing Locality References in Pincodes: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2181
+================================================================================
+2026-08-03 16:30:45,486 - Pipeline - INFO - ================================================================================
+2026-08-03 16:30:45,488 - Pipeline - INFO - Pipeline completed successfully
+2026-08-03 16:30:45,488 - Pipeline - INFO - Total duration: 0:01:23.351755
+2026-08-03 16:30:45,488 - Pipeline - INFO - ================================================================================

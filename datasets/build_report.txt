@@ -1,0 +1,51 @@
+================================================================================
+ColdSense AI Geography ETL Pipeline v2 - Build Report
+================================================================================
+Generated: 2026-08-03 16:30:45
+Status: IN_PROGRESS
+
+PROCESSOR STATISTICS
+--------------------------------------------------------------------------------
+States Imported:
+  Raw Rows: 36
+  Transformed Rows: 36
+  Unique States: 36
+
+Districts Imported:
+  Raw Rows: 763
+  Transformed Rows: 763
+  Unique Districts: 758
+
+Localities Imported:
+  Raw Rows: 165627
+  Transformed Rows: 0
+  Unique Localities: 143572
+  Duplicate Localities Removed: 2171
+
+Pincodes Imported:
+  Raw Rows: 165627
+  Transformed Rows: 164438
+  Unique Pincodes: 19426
+  Duplicate Pincodes Removed: 10
+
+VALIDATION RESULTS
+--------------------------------------------------------------------------------
+Total Records:
+  Total States: 36
+  Total Districts: 763
+  Total Localities: 162277
+  Total Pincodes: 164438
+
+Duplicate Rows Removed:
+  Total Duplicates Removed: 0
+
+  Missing Locality References in Pincodes: 0
+
+Foreign Key Validation: PASS
+
+Build Status: PASS
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Duplicates Removed (Processing): 2181
+================================================================================

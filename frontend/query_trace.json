@@ -1,0 +1,206 @@
+{
+  "\\features\\alerts\\FarmerAlerts.tsx": [
+    "cold_storage_conditions"
+  ],
+  "\\features\\approvals\\OwnerApprovals.tsx": [
+    "facilities",
+    "cold_storage_rooms",
+    "farmer_room_access"
+  ],
+  "\\features\\auth\\AuthCallback.tsx": [
+    "profiles"
+  ],
+  "\\features\\auth\\FarmerProfileSetup.tsx": [
+    "profiles",
+    "states",
+    "districts",
+    "localities"
+  ],
+  "\\features\\auth\\OwnerProfileSetup.tsx": [
+    "profiles",
+    "states",
+    "districts",
+    "localities"
+  ],
+  "\\features\\auth\\OwnerSetup.tsx": [
+    "profiles",
+    "states",
+    "districts",
+    "localities",
+    "facilities",
+    "owner_companies",
+    "cold_storage_rooms",
+    "sensor_devices"
+  ],
+  "\\features\\auth\\ProductSelection.tsx": [
+    "products",
+    "profiles",
+    "farmer_room_access",
+    "farmer_products",
+    "batches"
+  ],
+  "\\features\\auth\\RoomSelection.tsx": [
+    "profiles",
+    "cold_storage_rooms",
+    "farmer_room_access",
+    "farmer_products",
+    "products"
+  ],
+  "\\features\\auth\\StakeholderInvestmentPreferences.tsx": [
+    "profiles",
+    "states",
+    "facilities",
+    "cold_storage_rooms",
+    "districts",
+    "stakeholder_interest"
+  ],
+  "\\features\\auth\\StakeholderProfileSetup.tsx": [
+    "profiles",
+    "states",
+    "districts",
+    "localities"
+  ],
+  "\\features\\auth\\StorageSelection.tsx": [
+    "states",
+    "districts",
+    "localities",
+    "facilities"
+  ],
+  "\\features\\batch-traceability\\BatchTraceability.tsx": [
+    "profiles",
+    "batch_room_allocations"
+  ],
+  "\\features\\batch-traceability\\OwnerBatchTraceability.tsx": [
+    "cold_storage_rooms",
+    "farmer_room_access",
+    "batch_room_allocations"
+  ],
+  "\\features\\dashboard\\Dashboard.tsx": [
+    "profiles",
+    "farmer_room_access"
+  ],
+  "\\features\\dashboard\\FarmerDashboard.tsx": [
+    "profiles",
+    "farmer_room_access",
+    "batch_room_allocations",
+    "cold_storage_conditions",
+    "farmer_inventory"
+  ],
+  "\\features\\dashboard\\OwnerDashboard.tsx": [
+    "cold_storage_rooms",
+    "sensor_devices",
+    "batch_room_allocations"
+  ],
+  "\\features\\energy\\Energy.tsx": [
+    "cold_storage_rooms",
+    "sensor_devices"
+  ],
+  "\\features\\energy\\OwnerEnergy.tsx": [
+    "cold_storage_rooms"
+  ],
+  "\\features\\finance\\FarmerFinance.tsx": [
+    "profiles",
+    "batch_room_allocations",
+    "products"
+  ],
+  "\\features\\inventory\\FarmerInventory.tsx": [
+    "batch_room_allocations",
+    "cold_storage_conditions",
+    "profiles",
+    "farmer_room_access",
+    "farmer_products",
+    "products",
+    "batches"
+  ],
+  "\\features\\inventory\\Inventory.tsx": [
+    "profiles",
+    "farmer_room_access",
+    "cold_storage_rooms",
+    "inventory_batches",
+    "market_prices"
+  ],
+  "\\features\\inventory\\OwnerInventory.tsx": [
+    "cold_storage_rooms",
+    "batch_room_allocations"
+  ],
+  "\\features\\maintenance\\Maintenance.tsx": [
+    "profiles",
+    "farmer_room_access",
+    "cold_storage_rooms",
+    "sensor_devices",
+    "alert_history"
+  ],
+  "\\features\\maintenance\\OwnerMaintenance.tsx": [
+    "cold_storage_rooms",
+    "sensor_devices"
+  ],
+  "\\features\\market-intelligence\\FarmerMarketIntelligence.tsx": [
+    "profiles",
+    "batch_room_allocations"
+  ],
+  "\\features\\monitoring\\Monitoring.tsx": [
+    "cold_storage_rooms",
+    "sensor_devices"
+  ],
+  "\\features\\monitoring\\OwnerMonitoring.tsx": [
+    "cold_storage_rooms",
+    "sensor_devices",
+    "batch_room_allocations"
+  ],
+  "\\features\\orders\\FarmerOrders.tsx": [
+    "batch_room_allocations",
+    "profiles"
+  ],
+  "\\features\\price-calculator\\FarmerPriceCalculator.tsx": [
+    "profiles",
+    "batch_room_allocations",
+    "products"
+  ],
+  "\\features\\profile\\FarmerProfile.tsx": [
+    "states",
+    "districts",
+    "localities",
+    "profiles",
+    "farmer_room_access",
+    "farmer_products",
+    "farmer_inventory"
+  ],
+  "\\features\\settings\\OwnerProfile.tsx": [
+    "profiles"
+  ],
+  "\\features\\settings\\Settings.tsx": [
+    "profiles",
+    "farmer_room_access",
+    "stakeholder_interest"
+  ],
+  "\\features\\settings\\StakeholderProfile.tsx": [
+    "states",
+    "districts",
+    "localities",
+    "profiles",
+    "stakeholder_interest",
+    "cold_storage_rooms"
+  ],
+  "\\hooks\\useOnboarding.ts": [
+    "profiles",
+    "farmer_room_access"
+  ],
+  "\\layouts\\OwnerLayout.tsx": [
+    "facilities"
+  ],
+  "\\lib\\profileUtils.ts": [
+    "profiles",
+    "facilities",
+    "cold_storage_rooms",
+    "sensor_devices"
+  ],
+  "\\lib\\supabase.ts": [
+    "states"
+  ],
+  "\\providers\\AuthProvider.tsx": [
+    "profiles"
+  ],
+  "\\services\\roleService.ts": [
+    "roles"
+  ]
+}

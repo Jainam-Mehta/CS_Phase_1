@@ -1,0 +1,907 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { useOnboarding } from '../../hooks/useOnboarding';
+import { useSiteStore } from '../../stores/useSiteStore';
+import { Button } from '../../components/ui/Button';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
+import SearchableSelect from '../../components/ui/SearchableSelect';
+import { Warehouse, ChevronRight, ChevronLeft, Plus, Check, AlertCircle, Thermometer, Droplets, Gauge, DoorOpen, Activity, Leaf, Flame, Zap, Battery, Fan, Shield, Droplet, AlertTriangle, Waves, Activity as Vibration, Sun, Wind, Cloud, Sprout, FlaskConical, Lightbulb, Move, ThermometerSun, CloudSun } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { getOwnerRoleId } from '../../services/roleService';
+import type { State, District, Locality, OwnerCompany, Site, Facility, ColdStorageRoom, SensorDevice } from '../../lib/supabase';
+import { 
+  SENSOR_REGISTRY, 
+  type SensorDefinition, 
+  generateMQTTTopic, 
+  generateSerialNumber,
+  getDisplayName 
+} from '../../lib/sensorRegistry';
+
+type SetupStep = 'site' | 'rooms' | 'sensors' | 'complete';
+
+interface OwnerSetupData {
+  // Site data
+  state: string;
+  district: string;
+  siteName: string;
+  locality: string;
+  
+  // Owner company data
+  contactEmail: string;
+  phone: string;
+  address: string;
+  city: string;
+  
+  // Room data
+  roomCount: number;
+  roomInventoryCapacity: number; // in kg
+  
+  // Sensor data
+  sensorQuantities: Record<string, number>; // sensor type -> quantity
+}
+
+// Icon mapping for sensor registry
+const ICON_MAP: Record<string, any> = {
+  thermometer: Thermometer,
+  droplets: Droplets,
+  gauge: Gauge,
+  'door-open': DoorOpen,
+  wind: Activity,
+  cloud: Cloud,
+  sprout: Sprout,
+  'flask-conical': FlaskConical,
+  sun: Sun,
+  battery: Battery,
+  zap: Zap,
+  cog: Fan,
+  shield: Shield,
+  lightning: Lightbulb,
+  droplet: Droplet,
+  flame: Flame,
+  waves: Waves,
+  move: Move,
+  activity: Vibration,
+  'thermometer-sun': ThermometerSun,
+  'cloud-sun': CloudSun,
+};
+
+const OwnerSetup: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const { completeStep } = useOnboarding();
+  const { setSelectedFacilityId } = useSiteStore();
+  const [currentStep, setCurrentStep] = useState<SetupStep>('site');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Location data from Supabase
+  const [states, setStates] = useState<State[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [localities, setLocalities] = useState<Locality[]>([]);
+  const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
+  const [selectedDistrictId, setSelectedDistrictId] = useState<string | null>(null);
+  const [selectedLocalityId, setSelectedLocalityId] = useState<string | null>(null);
+  
+  // Setup data
+  const [setupData, setSetupData] = useState<OwnerSetupData>({
+    state: '',
+    district: '',
+    siteName: '',
+    locality: '',
+    contactEmail: '',
+    phone: '',
+    address: '',
+    city: '',
+    roomCount: 1,
+    roomInventoryCapacity: 0, // No default - owner must enter
+    sensorQuantities: {}, // No defaults - owner must select
+  });
+  
+  // Validation error state
+  const [validationError, setValidationError] = useState('');
+  
+  // Created IDs for subsequent steps
+  const [createdFacilityId, setCreatedFacilityId] = useState<string | null>(null);
+  const [createdRoomIds, setCreatedRoomIds] = useState<string[]>([]);
+
+  // Load states on mount
+  useEffect(() => {
+    loadStates();
+    verifyOwnerRole();
+  }, []);
+
+  // Load districts when state is selected
+  useEffect(() => {
+    if (selectedStateId) {
+      loadDistricts(selectedStateId);
+    } else {
+      setDistricts([]);
+      setLocalities([]);
+      setSelectedDistrictId(null);
+      setSelectedLocalityId(null);
+    }
+  }, [selectedStateId]);
+
+  // Load localities when district is selected
+  useEffect(() => {
+    if (selectedDistrictId) {
+      loadLocalities(selectedDistrictId);
+    } else {
+      setLocalities([]);
+      setSelectedLocalityId(null);
+    }
+  }, [selectedDistrictId]);
+
+  const verifyOwnerRole = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError('No authenticated session found');
+        setTimeout(() => navigate('/login'), 3000);
+        return;
+      }
+
+      // Check if user has owner profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*, roles!inner(name)')
+        .eq('auth_user_id', session.user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        console.log('No profile found, redirecting to owner profile setup');
+        setError('No profile found. Please complete profile setup first.');
+        setTimeout(() => navigate('/owner-profile-setup'), 3000);
+        return;
+      }
+
+      if (profile.roles.name !== 'Owner') {
+        setError('Access denied. Owner role required.');
+        setTimeout(() => navigate('/role-selection'), 3000);
+        return;
+      }
+
+      console.log('✓ Owner profile verified:', profile);
+    } catch (err) {
+      console.error('Role verification failed:', err);
+      setError('Failed to verify owner role');
+    }
+  };
+
+  const loadStates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('states')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setStates(data || []);
+    } catch (err) {
+      console.error('Error loading states:', err);
+      setError('Failed to load states');
+    }
+  };
+
+  const loadDistricts = async (stateId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('districts')
+        .select('*')
+        .eq('state_id', stateId)
+        .order('name');
+      
+      if (error) throw error;
+      setDistricts(data || []);
+    } catch (err) {
+      console.error('Error loading districts:', err);
+      setError('Failed to load districts');
+    }
+  };
+
+  const loadLocalities = async (districtId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('localities')
+        .select('*')
+        .eq('district_id', districtId)
+        .order('name');
+      
+      if (error) throw error;
+      setLocalities(data || []);
+    } catch (err) {
+      console.error('Error loading localities:', err);
+      setError('Failed to load localities');
+    }
+  };
+
+  const handleStateSelect = (stateName: string) => {
+    const state = states.find(s => s.name === stateName);
+    if (state) {
+      console.log('State selected:', stateName, 'ID:', state.id, typeof state.id);
+      setSelectedStateId(state.id);
+      setSelectedDistrictId(null);
+      setSelectedLocalityId(null);
+      setSetupData(prev => ({ ...prev, state: stateName, district: '', locality: '' }));
+    }
+  };
+
+  const handleDistrictSelect = (districtName: string) => {
+    const district = districts.find(d => d.name === districtName);
+    if (district) {
+      console.log('District selected:', districtName, 'ID:', district.id, typeof district.id);
+      setSelectedDistrictId(district.id);
+      setSelectedLocalityId(null);
+      setSetupData(prev => ({ ...prev, district: districtName, locality: '' }));
+    }
+  };
+
+  const handleLocalitySelect = (localityName: string) => {
+    const locality = localities.find(l => l.name === localityName);
+    if (locality) {
+      console.log('Locality selected:', localityName, 'ID:', locality.id, typeof locality.id);
+      setSelectedLocalityId(locality.id);
+      setSetupData(prev => ({ ...prev, locality: localityName }));
+    }
+  };
+
+  const handleCreateSite = async () => {
+    if (!setupData.state || !setupData.district || !setupData.siteName) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Get owner profile to get their email
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, auth_user_id, owner_company_id')
+        .eq('auth_user_id', user?.id)
+        .single();
+
+      if (!profile) throw new Error('Owner profile not found');
+
+      // Check for duplicate facilities under this owner profile
+      const facilityName = `${setupData.siteName} Facility`;
+      const { data: existingFacility, error: existingFacilityError } = await supabase
+        .from('facilities')
+        .select('id')
+        .eq('owner_profile_id', profile.id)
+        .eq('facility_name', facilityName)
+        .eq('state_id', selectedStateId)
+        .eq('district_id', selectedDistrictId)
+        .maybeSingle();
+
+      if (existingFacilityError) {
+        console.error('Error checking for existing facility:', existingFacilityError);
+        throw existingFacilityError;
+      }
+
+      if (existingFacility) {
+        setError('A facility with this name already exists in this location.');
+        setLoading(false);
+        return;
+      }
+
+      // Get state and district names for the company record
+      const stateName = states.find(s => s.id === selectedStateId)?.name || '';
+      const districtName = districts.find(d => d.id === selectedDistrictId)?.name || '';
+
+      // Ensure Owner Company exists (Optional but good for metadata)
+      if (!profile.owner_company_id) {
+        const { data: ownerCompany, error: companyError } = await supabase
+          .from('owner_companies')
+          .insert({
+            company_name: `${setupData.siteName} Company`,
+            contact_email: setupData.contactEmail || user?.email || '',
+            phone: setupData.phone || '',
+            address: setupData.address || '',
+            city: setupData.city || districtName,
+            district: districtName,
+            state: stateName,
+            country: 'India',
+          })
+          .select()
+          .single();
+
+        if (companyError) {
+          console.error('Owner company creation error:', companyError);
+          throw companyError;
+        }
+
+        // Link company to profile
+        const { error: profileUpdateError } = await supabase
+          .from('profiles')
+          .update({ owner_company_id: ownerCompany.id })
+          .eq('id', profile.id);
+          
+        if (profileUpdateError) {
+          console.error('Profile update error:', profileUpdateError);
+          throw profileUpdateError;
+        }
+      }
+
+      // Create facility linked centrally manually via owner_profile_id
+      const facilityPayload = {
+        owner_profile_id: profile.id,
+        facility_name: facilityName,
+        address: setupData.address || '',
+        state_id: selectedStateId,
+        district_id: selectedDistrictId,
+        locality_id: selectedLocalityId || null,
+        latitude: null,
+        longitude: null,
+        is_active: true,
+      };
+
+      const { data: facility, error: facilityError } = await supabase
+        .from('facilities')
+        .insert(facilityPayload)
+        .select()
+        .single();
+
+      if (facilityError) {
+        console.error('Facility creation error:', facilityError);
+        throw facilityError;
+      }
+
+      setCreatedFacilityId(facility.id);
+      setCurrentStep('rooms');
+    } catch (err) {
+      console.error('Error creating site:', err);
+      setError('Failed to create site. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateRooms = async () => {
+    // Validation
+    if (setupData.roomCount < 1) {
+      setError('Please enter at least 1 room');
+      return;
+    }
+
+    if (!setupData.roomInventoryCapacity || setupData.roomInventoryCapacity === 0) {
+      setValidationError('Inventory capacity is required.');
+      return;
+    }
+
+    if (setupData.roomInventoryCapacity < 100) {
+      setValidationError('Minimum capacity is 100 kg.');
+      return;
+    }
+
+    if (setupData.roomInventoryCapacity > 100000) {
+      setValidationError('Maximum capacity is 100,000 kg.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setValidationError('');
+
+    try {
+      const roomIds: string[] = [];
+
+      // Create rooms in cold_storage_rooms table
+      for (let i = 0; i < setupData.roomCount; i++) {
+        const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
+        const { data: room, error: roomError } = await supabase
+          .from('cold_storage_rooms')
+          .insert({
+            room_code: roomCode,
+            facility_id: createdFacilityId, // UUID
+            room_name: `Room ${i + 1}`,
+            capacity_kg: setupData.roomInventoryCapacity, // Owner-configured capacity
+            current_utilization_kg: 0,
+            status: 'Active', // Operational status: Active, Maintenance, Inactive
+            is_active: true
+          })
+          .select()
+          .single();
+
+        if (roomError) throw roomError;
+        roomIds.push(room.id);
+      }
+
+      console.log(`✓ Created ${roomIds.length} rooms in cold_storage_rooms`);
+      setCreatedRoomIds(roomIds);
+      setCurrentStep('sensors');
+    } catch (err) {
+      console.error('Error creating rooms:', err);
+      setError('Failed to create rooms. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfigureSensors = async () => {
+    // Validation: at least one sensor selected
+    const totalSensors = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
+    if (totalSensors === 0) {
+      setError('Please select at least one sensor type');
+      return;
+    }
+
+    // Validation: all selected sensors must have quantity >= 1
+    for (const [sensorKey, quantity] of Object.entries(setupData.sensorQuantities)) {
+      if (quantity > 0 && quantity < 1) {
+        setError(`Quantity for ${getDisplayName(sensorKey)} must be at least 1`);
+        return;
+      }
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Create sensor devices for each room with quantities
+      for (const roomId of createdRoomIds) {
+        for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
+          if (quantity === 0) continue; // Skip sensors with zero quantity
+          
+          const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
+          if (!sensorDef) {
+            console.error(`Sensor definition not found for key: ${internalKey}`);
+            continue;
+          }
+
+          for (let i = 0; i < quantity; i++) {
+            const displayName = sensorDef.displayName;
+            const serialNumber = generateSerialNumber();
+            const mqttTopic = generateMQTTTopic(roomId, internalKey, i + 1);
+            
+            const { error: sensorError } = await supabase
+              .from('sensor_devices')
+              .insert({
+                room_id: roomId, // UUID
+                sensor_name: displayName, // Display name from registry
+                sensor_type: internalKey, // Internal key for backend logic
+                serial_number: serialNumber,
+                mqtt_topic: mqttTopic,
+                firmware_version: '1.0.0',
+                installation_date: new Date().toISOString(),
+                last_calibration: new Date().toISOString(),
+                status: 'Online', // Database constraint: Online, Offline, Maintenance, Faulty
+                last_seen: new Date().toISOString(),
+                battery_percentage: 100,
+                remarks: '',
+              });
+
+            if (sensorError) throw sensorError;
+          }
+        }
+      }
+
+      const totalSensorsCreated = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
+      console.log(`✓ Created ${totalSensorsCreated} sensor devices for ${createdRoomIds.length} rooms`);
+
+      // Mark onboarding as complete
+      completeStep('profile');
+      
+      // Clear selected facility to force reload of facilities list
+      setSelectedFacilityId(null);
+      
+      // Navigate to dashboard
+      navigate('/');
+    } catch (err) {
+      console.error('Error configuring sensors:', err);
+      setError('Failed to configure sensors. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep === 'rooms') {
+      setCurrentStep('site');
+    } else if (currentStep === 'sensors') {
+      setCurrentStep('rooms');
+    }
+  };
+
+  const renderSiteStep = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Create Your Cold Storage Site
+        </h2>
+        <p className="text-gray-500 dark:text-gray-400">
+          Enter the details for your cold storage facility
+        </p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Site Name *
+          </label>
+          <input
+            type="text"
+            value={setupData.siteName}
+            onChange={(e) => setSetupData(prev => ({ ...prev, siteName: e.target.value }))}
+            placeholder="Enter site name (e.g., 'Central Cold Storage')"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Contact Email
+          </label>
+          <input
+            type="email"
+            value={setupData.contactEmail}
+            onChange={(e) => setSetupData(prev => ({ ...prev, contactEmail: e.target.value }))}
+            placeholder="Contact email (optional)"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Phone
+          </label>
+          <input
+            type="tel"
+            value={setupData.phone}
+            onChange={(e) => setSetupData(prev => ({ ...prev, phone: e.target.value }))}
+            placeholder="Phone number (optional)"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Address
+          </label>
+          <input
+            type="text"
+            value={setupData.address}
+            onChange={(e) => setSetupData(prev => ({ ...prev, address: e.target.value }))}
+            placeholder="Street address (optional)"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            City
+          </label>
+          <input
+            type="text"
+            value={setupData.city}
+            onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
+            placeholder="City (optional)"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            State *
+          </label>
+          <SearchableSelect
+            placeholder="Select state"
+            options={states.map(s => s.name)}
+            value={setupData.state}
+            onChange={handleStateSelect}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            District *
+          </label>
+          <SearchableSelect
+            placeholder="Select district"
+            options={districts.map(d => d.name)}
+            value={setupData.district}
+            onChange={handleDistrictSelect}
+            disabled={!selectedStateId}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Locality (Optional)
+          </label>
+          <SearchableSelect
+            placeholder="Select locality"
+            options={localities.map(l => l.name)}
+            value={setupData.locality}
+            onChange={handleLocalitySelect}
+            disabled={!selectedDistrictId}
+          />
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        variant="primary"
+        className="w-full"
+        loading={loading}
+        onClick={handleCreateSite}
+        disabled={!setupData.state || !setupData.district || !setupData.siteName}
+      >
+        Continue to Room Setup
+        <ChevronRight className="h-4 w-4 ml-2" />
+      </Button>
+    </div>
+  );
+
+  const renderRoomsStep = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Configure Rooms
+        </h2>
+        <p className="text-gray-500 dark:text-gray-400">
+          How many rooms does your cold storage contain?
+        </p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Number of Rooms *
+        </label>
+        <input
+          type="number"
+          min="1"
+          max="50"
+          value={setupData.roomCount}
+          onChange={(e) => setSetupData(prev => ({ ...prev, roomCount: parseInt(e.target.value) || 1 }))}
+          className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          required
+        />
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Rooms will be automatically generated with unique display names (Room 1, Room 2, etc.)
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Inventory Capacity per Room (kg) *
+        </label>
+        <input
+          type="number"
+          min="100"
+          max="100000"
+          step="100"
+          placeholder="5000"
+          value={setupData.roomInventoryCapacity || ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSetupData(prev => ({ 
+              ...prev, 
+              roomInventoryCapacity: value === '' ? 0 : parseInt(value) 
+            }));
+          }}
+          className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        {validationError && (
+          <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationError}</p>
+        )}
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Maximum inventory capacity for each room in kilograms (min: 100, max: 100,000)
+        </p>
+      </div>
+
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Warehouse className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
+              Room Generation Details
+            </p>
+            <ul className="text-xs text-blue-800 dark:text-blue-200 mt-2 space-y-1">
+              <li>• Each room will get a unique database ID</li>
+              <li>• Display names will be "Room 1", "Room 2", etc.</li>
+              <li>• Rooms will be linked to your facility</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex-1"
+          onClick={handleBack}
+          disabled={loading}
+        >
+          <ChevronLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          className="flex-1"
+          loading={loading}
+          onClick={handleCreateRooms}
+          disabled={setupData.roomCount < 1}
+        >
+          Continue to Sensor Setup
+          <ChevronRight className="h-4 w-4 ml-2" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderSensorsStep = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Configure Sensors
+        </h2>
+        <p className="text-gray-500 dark:text-gray-400">
+          Select sensor types and specify quantities for each room
+        </p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {SENSOR_REGISTRY.map((sensor) => {
+          const Icon = ICON_MAP[sensor.defaultIcon] || Thermometer;
+          const quantity = setupData.sensorQuantities[sensor.internalKey] || 0;
+          const isSelected = quantity > 0;
+          
+          return (
+            <div
+              key={sensor.internalKey}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                isSelected
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-slate-700'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                    {sensor.displayName}
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    const newSelected = e.target.checked;
+                    setSetupData(prev => ({
+                      ...prev,
+                      sensorQuantities: {
+                        ...prev.sensorQuantities,
+                        [sensor.internalKey]: newSelected ? 1 : 0 // Reset to 0 when unchecked, default to 1 when checked
+                      }
+                    }));
+                  }}
+                  className="h-5 w-5 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Unit: {sensor.unit} • Category: {sensor.category}
+              </p>
+              {isSelected && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600 dark:text-gray-400">Quantity:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={quantity}
+                    onChange={(e) => {
+                      const newQuantity = parseInt(e.target.value) || 0;
+                      setSetupData(prev => ({
+                        ...prev,
+                        sensorQuantities: {
+                          ...prev.sensorQuantities,
+                          [sensor.internalKey]: newQuantity
+                        }
+                      }));
+                    }}
+                    className="w-20 px-2 py-1 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Thermometer className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
+              Sensor Configuration Details
+            </p>
+            <p className="text-xs text-blue-800 dark:text-blue-200 mt-2">
+              Sensors will be created with specified quantities for all {setupData.roomCount} rooms.
+            </p>
+            <p className="text-xs text-blue-800 dark:text-blue-200 mt-1">
+              Total sensors per room: {Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex-1"
+          onClick={handleBack}
+          disabled={loading}
+        >
+          <ChevronLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          className="flex-1"
+          loading={loading}
+          onClick={handleConfigureSensors}
+          disabled={Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0) === 0}
+        >
+          Complete Setup
+          <Check className="h-4 w-4 ml-2" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">
+      <div className="w-full max-w-4xl">
+        <Card variant="default" className="w-full">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Warehouse className="h-8 w-8 text-white" />
+            </div>
+            <CardTitle className="text-3xl">Owner Setup Wizard</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">
+              {currentStep === 'site' && 'Step 1 of 3: Create Site'}
+              {currentStep === 'rooms' && 'Step 2 of 3: Configure Rooms'}
+              {currentStep === 'sensors' && 'Step 3 of 3: Configure Sensors'}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {currentStep === 'site' && renderSiteStep()}
+            {currentStep === 'rooms' && renderRoomsStep()}
+            {currentStep === 'sensors' && renderSensorsStep()}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default OwnerSetup;

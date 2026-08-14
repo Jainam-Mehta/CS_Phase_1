@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: sensor_simulator
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: sensor
+
+  template:
+    metadata:
+      labels:
+        app: sensor
+
+    spec:
+      containers:
+      - name: sensor
+        image: coldsense_sensor:v1
+        imagePullPolicy: Never
