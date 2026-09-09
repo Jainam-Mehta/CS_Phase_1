@@ -1,114 +1,125 @@
 """
-Market Intelligence API
-Current prices, changes, nearby markets per site
+Market Intelligence API — ColdSense Backend
+
+Real tables:
+  market_prices      (product_id, state, city, market_name, price_per_kg, recorded_at)
+  market_predictions (product_id, state, city, predicted_price, prediction_date, confidence)
+  products           (id, name, ...)
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime, timezone, date
 
 from app.database.supabase import supabase
 
 router = APIRouter()
 
-class MarketValueResponse(BaseModel):
+
+class MarketPriceResponse(BaseModel):
     id: str
     product_id: str
-    site_id: str
-    current_price: float
-    price_change: float
-    demand_level: str
-    supply_level: str
-    forecast: str
+    product_name: Optional[str] = None
+    state: str
+    city: Optional[str] = None
+    market_name: Optional[str] = None
+    price_per_kg: float
+    recorded_at: str
 
-class MarketValueCreate(BaseModel):
+
+class MarketPriceCreate(BaseModel):
     product_id: str
-    site_id: str
-    current_price: float
-    price_change: float
-    demand_level: str
-    supply_level: str
-    forecast: str
+    state: str
+    city: Optional[str] = None
+    market_name: Optional[str] = None
+    price_per_kg: float
+    source: Optional[str] = None
 
-# Nearby markets for each site
-NEARBY_MARKETS = {
-    "hamirpur-id": [
-        {"name": "Hamirpur APMC", "distance": "5 km", "avg_price": "₹115/kg", "demand": "high"},
-        {"name": "Mandi Market", "distance": "35 km", "avg_price": "₹125/kg", "demand": "moderate"},
-        {"name": "Kullu Market", "distance": "50 km", "avg_price": "₹130/kg", "demand": "high"},
-        {"name": "Shimla Mandi", "distance": "120 km", "avg_price": "₹140/kg", "demand": "high"}
-    ],
-    "bajaura-id": [
-        {"name": "Bajaura Market", "distance": "2 km", "avg_price": "₹80/kg", "demand": "moderate"},
-        {"name": "Kullu Market", "distance": "45 km", "avg_price": "₹88/kg", "demand": "high"},
-        {"name": "Mandi Market", "distance": "60 km", "avg_price": "₹90/kg", "demand": "moderate"},
-        {"name": "Aut Market", "distance": "15 km", "avg_price": "₹82/kg", "demand": "moderate"}
-    ]
-}
 
-@router.get("/values/{site_id}", response_model=List[MarketValueResponse])
-async def get_market_values(site_id: str):
-    """
-    Get market values for a specific site
-    """
+@router.get("/prices/product/{product_id}", response_model=List[MarketPriceResponse])
+async def get_product_prices(product_id: str, state: Optional[str] = None):
+    """Return market prices for a product, optionally filtered by state."""
     try:
-        response = supabase.table("market_values").select("*, products(*)").eq("site_id", site_id).execute()
-        
-        # Enrich with product names
-        enriched_values = []
-        for item in response.data:
-            item_data = item.copy()
-            if "products" in item:
-                item_data["product_name"] = item["products"]["name"]
-            enriched_values.append(item_data)
-        
-        return enriched_values
+        q = (
+            supabase.table("market_prices")
+            .select("*, products(name)")
+            .eq("product_id", product_id)
+            .order("recorded_at", desc=True)
+            .limit(50)
+        )
+        if state:
+            q = q.eq("state", state)
+
+        resp = q.execute()
+        result = []
+        for row in (resp.data or []):
+            prod = row.get("products") or {}
+            if isinstance(prod, list):
+                prod = prod[0] if prod else {}
+            result.append({
+                **row,
+                "product_name": prod.get("name"),
+            })
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch market values: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch market prices: {e}")
 
-@router.get("/markets/{site_id}")
-async def get_nearby_markets(site_id: str):
-    """
-    Get nearby markets for a specific site
-    """
+
+@router.get("/prices/state/{state}")
+async def get_state_prices(state: str):
+    """Return all latest market prices for a state."""
     try:
-        markets = NEARBY_MARKETS.get(site_id, [])
-        return {"site_id": site_id, "markets": markets}
+        resp = (
+            supabase.table("market_prices")
+            .select("*, products(name)")
+            .eq("state", state)
+            .order("recorded_at", desc=True)
+            .limit(100)
+            .execute()
+        )
+        result = []
+        for row in (resp.data or []):
+            prod = row.get("products") or {}
+            if isinstance(prod, list):
+                prod = prod[0] if prod else {}
+            result.append({**row, "product_name": prod.get("name")})
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch nearby markets: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch state prices: {e}")
 
-@router.post("/values", response_model=MarketValueResponse)
-async def create_market_value(market_value: MarketValueCreate):
-    """
-    Create a new market value entry
-    """
+
+@router.get("/predictions/product/{product_id}")
+async def get_price_predictions(product_id: str):
+    """Return AI price predictions for a product."""
     try:
-        market_data = market_value.dict()
-        
-        response = supabase.table("market_values").insert(market_data).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=500, detail="Failed to create market value")
-        
-        return response.data[0]
+        resp = (
+            supabase.table("market_predictions")
+            .select("*")
+            .eq("product_id", product_id)
+            .order("prediction_date", desc=True)
+            .limit(30)
+            .execute()
+        )
+        return resp.data or []
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create market value: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch predictions: {e}")
 
-@router.put("/values/{market_value_id}", response_model=MarketValueResponse)
-async def update_market_value(market_value_id: str, market_value: MarketValueCreate):
-    """
-    Update an existing market value
-    """
+
+@router.post("/prices/", response_model=MarketPriceResponse)
+async def create_market_price(data: MarketPriceCreate):
+    """Insert a new market price record."""
     try:
-        market_data = market_value.dict()
-        
-        response = supabase.table("market_values").update(market_data).eq("id", market_value_id).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Market value not found")
-        
-        return response.data[0]
+        payload = data.dict()
+        payload["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        payload["created_at"] = payload["recorded_at"]
+
+        resp = supabase.table("market_prices").insert(payload).execute()
+        if not resp.data:
+            raise HTTPException(status_code=500, detail="Insert returned no data")
+        row = resp.data[0]
+        return {**row, "product_name": None}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update market value: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create price record: {e}")

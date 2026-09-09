@@ -27,7 +27,7 @@ const Energy: React.FC = () => {
     if (selectedFacilityId) {
       fetchRoomsAndSensors();
     }
-  }, [user, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId]);
 
   const fetchRoomsAndSensors = async () => {
     if (!user || !selectedFacilityId) return;

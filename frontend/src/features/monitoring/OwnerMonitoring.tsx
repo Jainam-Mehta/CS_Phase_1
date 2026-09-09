@@ -1,22 +1,51 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, Wind, ArchiveX, ShieldAlert, BadgeCheck, Wrench } from 'lucide-react';
+import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, Wind, ArchiveX, ShieldAlert, BadgeCheck, Wrench, Plus, X } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+
+interface Sensor {
+  id: string;
+  sensor_type: string;
+  sensor_name: string;
+  status: string;
+  battery_percentage: number | null;
+  last_reading_value: number | null;
+  last_reading_unit: string | null;
+  last_seen: string | null;
+  room_id: string;
+}
+
+const AVAILABLE_SENSOR_TYPES = [
+  { value: 'Temperature', label: 'Temperature Sensor', unit: '°C', icon: 'Thermometer' },
+  { value: 'Humidity', label: 'Humidity Sensor', unit: '%', icon: 'Droplets' },
+  { value: 'Pressure', label: 'Pressure Sensor', unit: 'Psi', icon: 'Gauge' },
+  { value: 'Battery', label: 'Battery Monitor', unit: '%', icon: 'Battery' },
+  { value: 'Door', label: 'Door Sensor', unit: '', icon: 'MapPin' },
+  { value: 'CO2', label: 'CO2 Sensor', unit: 'ppm', icon: 'Wind' },
+  { value: 'Oxygen', label: 'Oxygen Sensor', unit: '%', icon: 'Wind' },
+  { value: 'Ammonia', label: 'Ammonia Sensor', unit: 'ppm', icon: 'ShieldAlert' },
+  { value: 'Ethylene', label: 'Ethylene Sensor', unit: 'ppm', icon: 'ArchiveX' },
+];
 
 const OwnerMonitoring: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
   const [loading, setLoading] = useState(true);
 
-  const [dbSensors, setDbSensors] = useState<any[]>([]);
+  const [dbSensors, setDbSensors] = useState<Sensor[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
+  const [showAddSensorModal, setShowAddSensorModal] = useState(false);
+  const [addSensorForm, setAddSensorForm] = useState({
+    sensor_type: '',
+    quantity: 1
+  });
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadMonitoringData();
     }
-  }, [user, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId]);
 
   const loadMonitoringData = async () => {
     try {
@@ -31,60 +60,41 @@ const OwnerMonitoring: React.FC = () => {
       if (resolvedRooms.length > 0) {
         const roomIds = resolvedRooms.map((r) => r.id);
 
+        // Fetch sensors from sensor_devices table
         const { data: sensorData } = await supabase
           .from('sensor_devices')
           .select('*')
-          .in('room_id', roomIds);
+          .in('room_id', roomIds)
+          .order('sensor_type', { ascending: true });
         
-        // Normalize sensor data to handle different field names
-        const normalizedSensors = (sensorData || []).map(sensor => ({
-          ...sensor,
-          // Ensure consistent field names (handle both device_type and sensor_type)
-          device_type: sensor.device_type || sensor.sensor_type || 'Unknown',
-          name: sensor.name || sensor.sensor_name || 'Unnamed Sensor',
-          sensor_type: sensor.sensor_type || sensor.device_type || 'Unknown',
-          sensor_name: sensor.sensor_name || sensor.name || 'Unnamed Sensor',
-          // Ensure status is never null
-          status: sensor.status || 'inactive',
-        }));
+        // Group sensors by type and add numbering (Temperature 1, Temperature 2, etc.)
+        const sensorsByType: Record<string, number> = {};
+        const numberedSensors = (sensorData || []).map(sensor => {
+          const type = sensor.sensor_type || 'Unknown';
+          sensorsByType[type] = (sensorsByType[type] || 0) + 1;
+          const number = sensorsByType[type];
+          
+          return {
+            ...sensor,
+            display_name: number > 1 || sensorsByType[type] > 1 
+              ? `${type} ${number}` 
+              : type,
+            sensor_number: number
+          };
+        });
         
-        setDbSensors(normalizedSensors);
+        setDbSensors(numberedSensors);
 
-        // NEW SCHEMA: Query batch_room_allocations -> batches -> profiles for this room
+        // Get unique farmers count
         const { data: allocationData } = await supabase
           .from('batch_room_allocations')
           .select(`
-            quantity_kg,
-            assigned_at,
-            removed_at,
-            batches!inner(
-              id,
-              batch_code,
-              farmer_id,
-              product_id,
-              harvest_date,
-              expiry_date,
-              initial_quantity_kg,
-              remaining_quantity_kg,
-              quality_grade,
-              remarks,
-              created_at,
-              profiles(id)
-            )
+            batches!inner(farmer_id)
           `)
           .in('room_id', roomIds)
           .is('removed_at', null);
 
-        // Transform the data to match expected structure
-        const transformedInventory = allocationData?.map((allocation: any) => ({
-          ...allocation.batches,
-          room_id: allocation.room_id,
-          quantity_kg: allocation.quantity_kg,
-          assigned_at: allocation.assigned_at,
-          farmer_profile_id: allocation.batches.farmer_id
-        })) || [];
-
-        setInventory(transformedInventory);
+        setInventory(allocationData || []);
       } else {
         setDbSensors([]);
         setInventory([]);
@@ -123,6 +133,58 @@ const OwnerMonitoring: React.FC = () => {
     return <Radio className="w-5 h-5 text-slate-500" />;
   };
 
+  const handleAddSensor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Get the first room for this facility
+      const { data: roomData } = await supabase
+        .from('cold_storage_rooms')
+        .select('id')
+        .eq('facility_id', selectedFacilityId)
+        .limit(1)
+        .single();
+
+      if (!roomData) {
+        alert('No room found for this facility');
+        return;
+      }
+
+      // Count existing sensors of this type to determine starting number
+      const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
+      const startNumber = existingOfType.length + 1;
+
+      // Create sensors based on quantity
+      const sensorsToAdd = [];
+      for (let i = 0; i < addSensorForm.quantity; i++) {
+        const sensorNumber = startNumber + i;
+        const sensorType = AVAILABLE_SENSOR_TYPES.find(t => t.value === addSensorForm.sensor_type);
+        
+        sensorsToAdd.push({
+          room_id: roomData.id,
+          sensor_type: addSensorForm.sensor_type,
+          sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
+          sensor_code: `${addSensorForm.sensor_type.toUpperCase()}_${String(sensorNumber).padStart(3, '0')}`,
+          status: 'active',
+          battery_percentage: 100,
+          last_reading_unit: sensorType?.unit || ''
+        });
+      }
+
+      const { error } = await supabase
+        .from('sensor_devices')
+        .insert(sensorsToAdd);
+
+      if (error) throw error;
+
+      setShowAddSensorModal(false);
+      setAddSensorForm({ sensor_type: '', quantity: 1 });
+      loadMonitoringData(); // Reload data
+    } catch (error) {
+      console.error('Error adding sensors:', error);
+      alert('Failed to add sensors. Please try again.');
+    }
+  };
+
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
@@ -142,8 +204,18 @@ const OwnerMonitoring: React.FC = () => {
     );
   }
 
-  const activeSensors = dbSensors.length || 6; // Show actual sensor count from database, fallback to 6 (matches directory)
-  const uniqueFarmers = 142; // Demo value for presentation
+  const isSensorActive = (s: any) => {
+    const st = s.status?.toLowerCase();
+    // A sensor is ONLY active if database status is active/online AND a real reading has passed through it
+    const hasPassedReading = s.last_reading_value != null || (s.last_seen != null && s.last_seen !== '');
+    return (st === 'active' || st === 'online') && hasPassedReading;
+  };
+
+  const activeSensors = dbSensors.filter(isSensorActive).length;
+  const uniqueFarmers = new Set(
+    inventory.filter(i => i.farmer_id || i.farmer_profile_id)
+      .map(i => i.farmer_id || i.farmer_profile_id)
+  ).size;
   const isNetworkConnected = true; // Always show as connected for presentation
 
   return (
@@ -163,7 +235,7 @@ const OwnerMonitoring: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* KPI Cards */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
@@ -185,52 +257,14 @@ const OwnerMonitoring: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4 col-span-1 md:col-span-2">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
           <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-xl">
             <Activity className="w-6 h-6 text-slate-600 dark:text-slate-400" />
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Network Status</h3>
-            <p className="text-lg font-medium text-slate-900 dark:text-white mt-1">
-              Connected
-            </p>
-            <p className="text-sm text-slate-500">
-              Jio 4G is used
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Live Telemetry Feed</h2>
-            <span className={`w-2 h-2 rounded-full ${isNetworkConnected ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></span>
-          </div>
-          
-          <div className="flex flex-col items-center justify-center p-12 text-center h-64">
-            <Radio className="w-10 h-10 text-green-500 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-300 mb-1">
-              Live Telemetry Feed
-            </h3>
-            <p className="text-sm text-slate-500 max-w-sm mx-auto">
-              Sensors are published and subscribed, live temperature, humidity, pressure, energy will be updated minutely.
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Active Irregularities</h2>
-          </div>
-          
-          <div className="flex flex-col items-center justify-center p-12 text-center h-64">
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-3">
-              <BadgeCheck className="w-6 h-6 text-green-500" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">All Systems Clear</h3>
-            <p className="text-sm text-slate-500">
-              No anomalies detected. Data flow relies on sensor activity.
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">
+              {isNetworkConnected ? 'Connected' : 'Disconnected'}
             </p>
           </div>
         </div>
@@ -238,8 +272,15 @@ const OwnerMonitoring: React.FC = () => {
 
       {/* Sensor Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Sensor Directory</h2>
+          <button 
+            onClick={() => setShowAddSensorModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Sensor
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -261,46 +302,158 @@ const OwnerMonitoring: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                dbSensors.map((sensor, index) => (
-                  <tr key={sensor.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{index + 1}</td>
-                    <td className="px-6 py-4">
-                      {getSensorIcon(sensor.device_type)}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{sensor.name}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      {sensor.last_reading_value !== null && sensor.last_reading_value !== undefined ? `${sensor.last_reading_value}` : 'No Data'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                        ${sensor.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                        : sensor.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {sensor.status ? sensor.status.charAt(0).toUpperCase() + sensor.status.slice(1) : 'Unknown'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {sensor.status === 'maintenance' ? (
-                          <>
-                            <Wrench className="w-4 h-4 text-amber-500" />
-                            <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Maintenance Required</span>
-                          </>
-                        ) : (
-                          <>
-                            <BadgeCheck className="w-4 h-4 text-emerald-500" />
-                            <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">No Maintenance Required</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                dbSensors.map((sensor: any, index) => {
+                  // Get actual reading value with unit - NO HARDCODED DEMO FALLBACKS
+                  const getReadingDisplay = () => {
+                    if (sensor.last_reading_value != null) {
+                      const unit = sensor.last_reading_unit || '';
+                      return `${sensor.last_reading_value} ${unit}`.trim();
+                    }
+                    
+                    if (sensor.sensor_type?.toLowerCase().includes('battery') && sensor.battery_percentage != null) {
+                      return `${sensor.battery_percentage}%`;
+                    }
+                    
+                    return 'No Telemetry';
+                  };
+
+                  const isActive = isSensorActive(sensor);
+                  const isMaintenance = sensor.status?.toLowerCase() === 'maintenance';
+                  const displayStatus = isActive ? 'Active' : isMaintenance ? 'Maintenance' : 'Offline';
+                  
+                  return (
+                    <tr key={sensor.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{index + 1}</td>
+                      <td className="px-6 py-4">
+                        {getSensorIcon(sensor.sensor_type)}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
+                        {sensor.display_name || sensor.sensor_name || sensor.sensor_type}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">
+                        {getReadingDisplay()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                          ${isActive ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
+                          : isMaintenance ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+                          {displayStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {isMaintenance ? (
+                            <>
+                              <Wrench className="w-4 h-4 text-amber-500" />
+                              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Required</span>
+                            </>
+                          ) : (
+                            <>
+                              <BadgeCheck className="w-4 h-4 text-emerald-500" />
+                              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Not Required</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Add Sensor Modal */}
+      {showAddSensorModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Add New Sensor</h2>
+              <button 
+                onClick={() => setShowAddSensorModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddSensor} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Sensor Type
+                </label>
+                <select
+                  required
+                  value={addSensorForm.sensor_type}
+                  onChange={(e) => setAddSensorForm({ ...addSensorForm, sensor_type: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Select sensor type...</option>
+                  {AVAILABLE_SENSOR_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  max="10"
+                  value={addSensorForm.quantity}
+                  onChange={(e) => setAddSensorForm({ ...addSensorForm, quantity: parseInt(e.target.value) })}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Sensors will be numbered automatically (e.g., Temperature 1, Temperature 2)
+                </p>
+              </div>
+
+              {addSensorForm.sensor_type && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <strong>Preview:</strong> Will create {addSensorForm.quantity} sensor{addSensorForm.quantity > 1 ? 's' : ''} named:
+                    <br />
+                    {Array.from({ length: Math.min(addSensorForm.quantity, 3) }, (_, i) => {
+                      const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
+                      return (
+                        <span key={i} className="block ml-2 mt-1">
+                          • {addSensorForm.sensor_type} {existingOfType.length + i + 1}
+                        </span>
+                      );
+                    })}
+                    {addSensorForm.quantity > 3 && <span className="block ml-2 mt-1">• ... and {addSensorForm.quantity - 3} more</span>}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSensorModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Add Sensor{addSensorForm.quantity > 1 ? 's' : ''}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

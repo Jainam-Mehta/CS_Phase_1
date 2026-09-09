@@ -6,12 +6,12 @@ import { Gauge } from './components/Gauge';
 import { 
   ThermometerSun, Droplets, MapPin, Package, Clock, Lock, 
   AlertCircle, RefreshCw, ChevronDown, CheckCircle2, XCircle, 
-  Activity, Leaf, ActivitySquare, Battery, Zap, DoorOpen, Plus, Boxes, Calendar
+  Activity, Zap, DoorOpen
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell 
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
+  ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 
 class DashboardErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorMsg: string}> {
@@ -56,76 +56,7 @@ export default function FarmerDashboard() {
   );
 }
 
-// Demo data generator for presentation
-const getDemoData = (roomIndex: number = 0) => {
-  const now = new Date();
-  const roomData = [
-    { temp: 2.4, hum: 86, ambientTemp: 27, ambientHum: 63, door: 'Closed', doorOpens: 2, doorLastOpen: '2 mins ago', energy: 12.6, solar: 71, battery: 89, grid: 29, product: 'Dragon Fruit', freshness: 98 },
-    { temp: 5.7, hum: 85, ambientTemp: 29, ambientHum: 69, door: 'Open', doorOpens: 5, doorLastOpen: '18 sec ago', energy: 18.9, solar: 63, battery: 82, grid: 37, product: 'Avocado', freshness: 96 },
-    { temp: 7.1, hum: 87, ambientTemp: 31, ambientHum: 71, door: 'Closed', doorOpens: 1, doorLastOpen: '45 mins ago', energy: 10.2, solar: 81, battery: 94, grid: 19, product: 'Mango', freshness: 91 }
-  ];
-  const data = roomData[roomIndex % 3];
-  
-  // Generate 24h temperature history with smooth curves between -2 and 10
-  const tempHistory = [];
-  const humHistory = [];
-  for (let i = 0; i < 24; i++) {
-    const hour = (now.getHours() - 23 + i + 24) % 24;
-    // Smooth temperature curve between -2 and 10, no large spikes
-    const baseTemp = 2.5 + Math.sin(i / 6) * 1.5 + Math.cos(i / 8) * 0.5;
-    const clampedTemp = Math.max(-2, Math.min(10, baseTemp));
-    const baseHum = 86 + Math.cos(i / 4) * 2; // 84-88% range
-    tempHistory.push({ time: `${hour}:00`, value: parseFloat(clampedTemp.toFixed(1)) });
-    humHistory.push({ time: `${hour}:00`, value: Math.round(baseHum) });
-  }
-  
-  // Generate energy data
-  const energyHistory = [];
-  for (let i = 0; i < 12; i++) {
-    energyHistory.push({ hour: `${i}:00`, value: (data.energy / 12 * (1 + Math.random() * 0.3)).toFixed(1) });
-  }
-  
-  // Generate demo inventory
-  const demoInventory = [
-    {
-      batches: {
-        products: { name: data.product },
-        batch_code: `BTH-${1000 + roomIndex}`,
-        harvest_date: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        expiry_date: new Date(now.getTime() + 18 * 24 * 60 * 60 * 1000).toISOString(),
-        quality_grade: 'GOOD'
-      },
-      quantity_kg: 1200 + roomIndex * 500
-    },
-    {
-      batches: {
-        products: { name: data.product },
-        batch_code: `BTH-${2000 + roomIndex}`,
-        harvest_date: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        expiry_date: new Date(now.getTime() + 20 * 24 * 60 * 60 * 1000).toISOString(),
-        quality_grade: 'GOOD'
-      },
-      quantity_kg: 1250 + roomIndex * 300
-    }
-  ];
-  
-  return {
-    liveConditions: { temp: data.temp, hum: data.hum, ambientTemp: data.ambientTemp, ambientHum: data.ambientHum, date: now.toISOString() },
-    doorStats: { status: data.door, count: data.doorOpens, duration: data.door === 'Open' ? 18 : 0, lastOpenTime: data.doorLastOpen },
-    energyData: [{ total_kwh: data.energy, solar: data.solar, battery: data.battery, grid: data.grid }],
-    temperatureHistory: tempHistory,
-    humidityHistory: humHistory,
-    energyHistory: energyHistory,
-    inventory: demoInventory,
-    aiRecommendation: data.product === 'Dragon Fruit' 
-      ? 'Excellent Storage Conditions. Maintain 2-4°C. Expected shelf life 18 days.'
-      : data.product === 'Avocado'
-      ? 'Humidity slightly low. Increase RH to 85%.'
-      : 'Temperature optimal. Ethylene concentration acceptable.',
-    freshness: data.freshness,
-    lastUpdated: now.toLocaleString()
-  };
-};
+// NO DEMO DATA - All data from database
 
 function FarmerDashboardCore() {
   const { user } = useAuthStore();
@@ -154,34 +85,43 @@ function FarmerDashboardCore() {
   const [hasAnyPending, setHasAnyPending] = useState(false);
   const [pendingDetails, setPendingDetails] = useState<any>(null);
   
-  // Live temperature/humidity update every minute
+  // Live temperature/humidity update from database every minute
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (roomIndex !== null) {
-        const demo = getDemoData(roomIndex);
-        // Fluctuate temperature between 2-4°C, rounded to 1 decimal
-        const newTemp = parseFloat((2.0 + Math.random() * 2.0).toFixed(1));
-        // Fluctuate humidity between 84-88%, rounded to 1 decimal
-        const newHum = parseFloat((84 + Math.random() * 4).toFixed(1));
-        
-        setLiveConditions(prev => ({
-          ...prev,
-          temp: prev ? newTemp : demo.liveConditions.temp,
-          hum: prev ? newHum : demo.liveConditions.hum,
-          date: new Date().toISOString()
-        }));
+    const interval = setInterval(async () => {
+      if (activeRoomId) {
+        try {
+          // Fetch latest sensor reading
+          const { data: latestReading } = await supabase
+            .from('sensor_readings')
+            .select('temperature_celsius, humidity_percentage, recorded_at')
+            .eq('room_id', activeRoomId)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+          if (latestReading) {
+            setLiveConditions((prev: any) => ({
+              ...prev,
+              temp: latestReading.temperature_celsius,
+              hum: latestReading.humidity_percentage,
+              date: latestReading.recorded_at
+            }));
+          }
+        } catch (error) {
+          console.error('Error fetching live conditions:', error);
+        }
       }
     }, 60000); // Update every 60 seconds
     
     return () => clearInterval(interval);
-  }, [roomIndex]);
+  }, [activeRoomId]);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
-  // Update timestamp every second
+  // Update timestamp every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
       setLiveTimestamp(new Date().toLocaleString());
-    }, 1000);
+    }, 300000); // Update every 5 minutes
     return () => clearInterval(interval);
   }, []);
 
@@ -265,24 +205,21 @@ function FarmerDashboardCore() {
     initializeDashboard();
   }, [user?.id]);
 
-  // Set demo data as fallback when real data is missing
+  // Initialize with empty data - NO DEMO FALLBACK
   useEffect(() => {
     if (!loading && !liveConditions) {
-      const demo = getDemoData(roomIndex);
-      setLiveConditions(demo.liveConditions);
-      setDoorStats(demo.doorStats);
-      setEnergyData(demo.energyData);
-      setTemperatureHistory(demo.temperatureHistory);
-      if (!temperatureHistory || temperatureHistory.length === 0) {
-        setTemperatureHistory(demo.temperatureHistory);
-      }
+      setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
+      setDoorStats({ status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' });
+      setEnergyData([]);
+      setTemperatureHistory([]);
     }
-  }, [loading, liveConditions, roomIndex]);
+  }, [loading, liveConditions]);
 
   useEffect(() => {
      if (!activeRoomId || !profileId) return;
 
      const fetchRoomData = async () => {
+         // NO DEMO DATA - Fetch real data only
          const { data: invRows } = await supabase
             .from('batch_room_allocations')
             .select(`
@@ -337,7 +274,7 @@ function FarmerDashboardCore() {
             .select('temperature, humidity, recorded_at')
             .eq('room_id', activeRoomId)
             .order('recorded_at', { ascending: false })
-            .limit(24);
+            .limit(8);
          
          if (hist) setTemperatureHistory(hist.reverse());
 
@@ -361,11 +298,10 @@ function FarmerDashboardCore() {
                 status: doors.length > 0 ? (doors[0].event_type === 'Closed' ? 'Closed' : 'Open') : 'Closed',
                 count: openCount,
                 duration: totalDur,
-                lastOpenTime: lastOpen ? new Date(lastOpen.occurred_at).toLocaleTimeString() : demo.doorStats.lastOpenTime
+                lastOpenTime: lastOpen ? new Date(lastOpen.occurred_at).toLocaleTimeString() : 'N/A'
              });
          } else {
-             const demo = getDemoData(roomIndex);
-             setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: demo.doorStats.lastOpenTime });
+             setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
          }
 
          const { data: alData } = await supabase
@@ -432,10 +368,11 @@ function FarmerDashboardCore() {
   if (!hasAnyApproved) {
      if (hasAnyPending) {
          return (
-             <div className="p-8 max-w-4xl mx-auto min-h-screen pt-16 text-center">
-                <Clock className="w-16 h-16 text-yellow-500 animate-pulse mx-auto mb-6" />
-                <h1 className="text-3xl font-bold">Waiting for Approval</h1>
-                <p className="text-slate-500 mt-2">Your request for {pendingDetails?.roomName} at {pendingDetails?.facilityName} is pending.</p>
+             <div className="flex items-center justify-center min-h-screen">
+               <div className="text-center">
+                <Clock className="w-20 h-20 text-yellow-500 animate-pulse mx-auto mb-6" />
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Waiting for Approval</h1>
+               </div>
              </div>
          );
      }
@@ -449,28 +386,27 @@ function FarmerDashboardCore() {
   }
 
   const roomOptions = rooms.filter(r => r.facilityId === selectedFacilityId);
-  const totalVolume = inventory.length > 0 ? inventory.reduce((sum, item) => sum + (item.quantity_kg || 0), 0) : 2450;
   
-  // Use demo data for evaluation when real data is missing
-  const demo = getDemoData(roomIndex);
-  const displayTemp = liveConditions?.temp ?? parseFloat((2.5 + Math.random() * 0.5).toFixed(1)); // 2.5-3°C rounded
-  const displayHum = liveConditions?.hum ?? parseFloat((84 + Math.random() * 4).toFixed(1)); // 84-88% rounded
-  const displayAmbientTemp = liveConditions?.ambientTemp ?? demo.liveConditions.ambientTemp;
-  const displayAmbientHum = liveConditions?.ambientHum ?? demo.liveConditions.ambientHum;
-  const displayDoorStats = doorStats ?? demo.doorStats;
-  const displayEnergyData = energyData.length > 0 ? energyData : demo.energyData;
-  const displayTemperatureHistory = temperatureHistory.length > 0 ? temperatureHistory : demo.temperatureHistory;
-  const displayHumidityHistory = temperatureHistory.length > 0 ? temperatureHistory.map((h: any) => ({ time: h.time, value: h.humidity })) : demo.humidityHistory;
-  const displayFreshness = demo.freshness;
-  const displayAIRecommendation = demo.aiRecommendation;
-  const displayInventory = inventory.length > 0 ? inventory : demo.inventory;
+  // NO DEMO DATA - Use real data or fallback to 0/empty
+  const displayTemp = liveConditions?.temp ?? 0;
+  const displayHum = liveConditions?.hum ?? 0;
+  const displayAmbientTemp = liveConditions?.ambientTemp ?? 0;
+  const displayAmbientHum = liveConditions?.ambientHum ?? 0;
+  const displayDoorStats = doorStats ?? { status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' };
+  const displayEnergyData = energyData.length > 0 ? energyData : [];
+  const displayTemperatureHistory = temperatureHistory.length > 0 ? temperatureHistory : [];
+  const displayHumidityHistory = temperatureHistory.length > 0
+    ? temperatureHistory.map((h: any) => ({ time: h.time, value: h.humidity }))
+    : [];
   
   let tempEval = { status: 'GOOD', style: 'bg-emerald-100 text-emerald-700', message: 'Optimal' };
   let humEval = { status: 'GOOD', style: 'bg-emerald-100 text-emerald-700', message: 'Optimal' };
   
-  // New target ranges: Temperature 1-5°C, Humidity 82-96%
-  const tempMin = 1, tempMax = 5;
-  const humMin = 82, humMax = 96;
+  // Use optimal ranges from database (products table)
+  const tempMin = activeProductData?.storage_temp_min ?? 1;
+  const tempMax = activeProductData?.storage_temp_max ?? 5;
+  const humMin = activeProductData?.storage_humidity_min ?? 82;
+  const humMax = activeProductData?.storage_humidity_max ?? 96;
   
   if (liveConditions) {
       if (displayTemp < tempMin) {
@@ -487,24 +423,6 @@ function FarmerDashboardCore() {
           humEval = { status: 'Too High', style: 'bg-red-100 text-red-700', message: `High` };
       } else {
           humEval = { status: 'Optimal', style: 'bg-emerald-100 text-emerald-700', message: 'Optimal' };
-      }
-  }
-
-  let aiRecommendation = displayAIRecommendation;
-  let statusCondition = "Optimal";
-
-  if (liveConditions) {
-      if (tempEval.status === 'Optimal' && humEval.status === 'Optimal') {
-          aiRecommendation = "Storage conditions perfectly match product optimality profiles. Expected shelf life is highly stabilized.";
-          statusCondition = "Optimal";
-      } else {
-          aiRecommendation = `Alert: Environmental deviation detected. `;
-          if (tempEval.status === 'Too High') aiRecommendation += `Temperature needs to be reduced by ${(displayTemp - tempMax).toFixed(1)}C. `;
-          if (tempEval.status === 'Too Low') aiRecommendation += `Temperature is critically low, increase by ${(tempMin - displayTemp).toFixed(1)}C. `;
-          if (humEval.status === 'Too High') aiRecommendation += `Humidity exceeds optimal threshold, risk of rot. `;
-          if (humEval.status === 'Too Low') aiRecommendation += `Humidity is low, risk of moisture loss. `;
-          aiRecommendation += `Adjust climate controls promptly.`;
-          statusCondition = 'Optimal';
       }
   }
 
@@ -534,21 +452,6 @@ function FarmerDashboardCore() {
                 </div>
              </div>
              <div className="flex-1 relative">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Approved Room</label>
-                <div className="relative">
-                  <select 
-                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg p-3 font-semibold outline-none focus:ring-2 focus:ring-primary-500 appearance-none disabled:opacity-50"
-                     value={activeRoomId || ''}
-                     onChange={(e) => setActiveRoomId(e.target.value)}
-                     disabled={roomOptions.length === 0}
-                  >
-                     {roomOptions.length === 0 && <option value="">No Rooms</option>}
-                     {roomOptions.map(r => (<option key={r.roomId} value={r.roomId}>{r.roomName}</option>))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
-                </div>
-             </div>
-             <div className="flex-1 relative">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Product</label>
                 <div className="relative">
                   <select 
@@ -573,86 +476,33 @@ function FarmerDashboardCore() {
            </div>
        ) : (
            <div className="space-y-6 pt-2">
-              {/* 2. PRODUCT HEALTH AI CARD */}
-              <Card className="border-none shadow-xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white overflow-hidden">
-                 <CardContent className="p-0">
-                    <div className="p-6 md:p-8 flex flex-col md:flex-row justify-between gap-8">
-                       <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                             <Leaf className="w-6 h-6 text-emerald-400"/>
-                             <h2 className="text-3xl font-black tracking-tight">{activeProductData?.name}</h2>
-                          </div>
-                          <p className="text-indigo-200 mb-6 text-lg font-medium">{totalVolume.toLocaleString()} Kg Stored Quantity</p>
-                          
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mt-4">
-                             <div className="bg-white/10 p-4 rounded-xl border border-white/5">
-                                <span className="block text-indigo-300 font-bold uppercase text-[10px] tracking-wider mb-2">Temp Target</span>
-                                <span className="text-2xl font-bold">1 - 5°C</span>
-                             </div>
-                             <div className="bg-white/10 p-4 rounded-xl border border-white/5">
-                                <span className="block text-indigo-300 font-bold uppercase text-[10px] tracking-wider mb-2">Live Temp</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-2xl font-bold">{displayTemp}C</span>
-                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${tempEval.status === 'Optimal' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>Optimal</span>
-                                </div>
-                             </div>
-                             <div className="bg-white/10 p-4 rounded-xl border border-white/5">
-                                <span className="block text-indigo-300 font-bold uppercase text-[10px] tracking-wider mb-2">Humidity Target</span>
-                                <span className="text-2xl font-bold">82 - 96%</span>
-                             </div>
-                             <div className="bg-white/10 p-4 rounded-xl border border-white/5">
-                                <span className="block text-indigo-300 font-bold uppercase text-[10px] tracking-wider mb-2">Live Humidity</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-2xl font-bold">{displayHum}%</span>
-                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${humEval.status === 'Optimal' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>Optimal</span>
-                                </div>
-                             </div>
-                          </div>
-                       </div>
-                       
-                       {/* 8. AI Rec Panel */}
-                       <div className="flex-1 md:max-w-md bg-white/5 rounded-2xl p-6 border border-white/10 flex flex-col justify-between">
-                          <div>
-                            <h3 className="text-emerald-400 font-bold uppercase tracking-widest text-xs mb-3 flex items-center gap-2">
-                               <Activity className="w-4 h-4"/> AI Health Recommendation
-                            </h3>
-                            <p className="text-lg leading-relaxed text-slate-100 min-h-[5rem]">
-                               {aiRecommendation}
-                            </p>
-                          </div>
-                          <div className="flex justify-between items-end border-t border-white/10 pt-4 mt-6">
-                             <div>
-                                <span className="block text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1">Shelf Life Remaining</span>
-                                <span className="text-2xl font-bold">{shelfLifeRemaining}</span>
-                             </div>
-                             <div>
-                                <span className={`px-4 py-2 ${statusCondition === 'Optimal' ? 'bg-emerald-500 text-white' : statusCondition === 'Critical' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white'} rounded-full text-xs uppercase font-bold tracking-wider`}>
-                                   Status: {statusCondition}
-                                </span>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                 </CardContent>
-              </Card>
-
               {/* 3 & 4 & 5. KEY METRICS GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  {/* Gauges */}
                  <Card className="shadow-sm border-slate-200">
                     <CardContent className="p-6 flex flex-col justify-center items-center h-full">
-                       <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Temperature</h3>
+                       <div className="w-12 h-12 mb-4 flex items-center justify-center bg-blue-50 rounded-full">
+                         <ThermometerSun className="w-7 h-7 text-blue-600" />
+                       </div>
                        {liveConditions ? (
                            <Gauge value={liveConditions.temp} min={-10} max={30} label="Temperature" unit="C" gradientColors={['#3b82f6', '#ef4444']} />
-                       ) : <Gauge value={getDemoData(roomIndex).liveConditions.temp} min={-10} max={30} label="Temperature" unit="C" gradientColors={['#3b82f6', '#ef4444']} />}
+                       ) : <Gauge value={0} min={-10} max={30} label="Temperature" unit="C" gradientColors={['#3b82f6', '#ef4444']} />}
+                       <p className="text-xs font-semibold mt-4 text-slate-600">
+                         Status: <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${tempEval.style}`}>{tempEval.status}</span>
+                       </p>
                     </CardContent>
                  </Card>
                  <Card className="shadow-sm border-slate-200">
                     <CardContent className="p-6 flex flex-col justify-center items-center h-full">
-                       <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Humidity</h3>
+                       <div className="w-12 h-12 mb-4 flex items-center justify-center bg-emerald-50 rounded-full">
+                         <Droplets className="w-7 h-7 text-emerald-600" />
+                       </div>
                        {liveConditions ? (
                            <Gauge value={liveConditions.hum} min={0} max={100} label="Humidity" unit="%" gradientColors={['#22c55e', '#f97316']} />
-                       ) : <Gauge value={getDemoData(roomIndex).liveConditions.hum} min={0} max={100} label="Humidity" unit="%" gradientColors={['#22c55e', '#f97316']} />}
+                       ) : <Gauge value={0} min={0} max={100} label="Humidity" unit="%" gradientColors={['#22c55e', '#f97316']} />}
+                       <p className="text-xs font-semibold mt-4 text-slate-600">
+                         Status: <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${humEval.style}`}>{humEval.status}</span>
+                       </p>
                     </CardContent>
                  </Card>
 
@@ -662,7 +512,7 @@ function FarmerDashboardCore() {
                        <CardContent className="p-6 flex justify-between items-center h-full">
                           <div>
                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Energy Consumed</p>
-                             <p className="text-3xl font-black mt-2 text-slate-800">{energyData.length > 0 ? `${energyData[0].total_kwh} kWh` : `${getDemoData(roomIndex).energyData[0].total_kwh} kWh`}</p>
+                             <p className="text-3xl font-black mt-2 text-slate-800">{energyData.length > 0 ? `${energyData[0].total_kwh} kWh` : '0 kWh'}</p>
                           </div>
                           <div className="p-4 bg-amber-50 text-amber-500 rounded-2xl"><Zap className="w-8 h-8"/></div>
                        </CardContent>
@@ -696,13 +546,16 @@ function FarmerDashboardCore() {
                           <div className="p-4 bg-slate-50 text-slate-600 rounded-2xl"><DoorOpen className="w-8 h-8"/></div>
                        </CardContent>
                     </Card>
-                    {/* 9. Alerts */}
+                 {/* 9. Alerts */}
                     <Card className="flex-1 shadow-sm border-slate-200">
                        <CardContent className="p-6 flex justify-between items-center h-full">
                           <div>
                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Alerts</p>
-                             <p className="text-3xl font-black mt-2 text-amber-600">1</p>
-                             <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[120px]">1 Warning Alert</p>
+                             {/* Use real alerts.length instead of hardcoded 1 */}
+                             <p className="text-3xl font-black mt-2 text-amber-600">{alerts.length}</p>
+                             <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[120px]">
+                               {alerts.length === 0 ? 'All Clear' : `${alerts.length} Alert${alerts.length > 1 ? 's' : ''}`}
+                             </p>
                           </div>
                           <div className={`p-4 rounded-2xl ${alerts.length > 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}`}>
                              {alerts.length > 0 ? <AlertCircle className="w-8 h-8"/> : <CheckCircle2 className="w-8 h-8" />}
@@ -715,20 +568,19 @@ function FarmerDashboardCore() {
               {/* 6. CHARTS SECTION */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  <Card className="shadow-sm border-slate-200">
-                    <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Temperature History (24h)</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Temperature History (Last 8 Readings)</CardTitle></CardHeader>
                     <CardContent className="h-72">
-                       {true ? (
+                       {displayTemperatureHistory.length > 0 ? (
                            <ResponsiveContainer width="100%" height="100%">
-                             <LineChart data={getDemoData(roomIndex).temperatureHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                             <AreaChart data={displayTemperatureHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                                <XAxis dataKey="time" tickFormatter={(t) => t} stroke="#94a3b8" fontSize={11} axisLine={false} tickLine={false} />
                                <YAxis stroke="#94a3b8" fontSize={11} axisLine={false} tickLine={false} />
-                               <RechartsTooltip 
+                               <RechartsTooltip
                                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                  labelFormatter={(l) => new Date(l).toLocaleString()} 
                                />
-                               <Line type="monotone" dataKey="value" stroke="#0f172a" strokeWidth={3} dot={false} />
-                             </LineChart>
+                               <Area type="monotone" dataKey="value" stroke="#ef4444" fillOpacity={0.15} fill="#ef4444" strokeWidth={3} />
+                             </AreaChart>
                            </ResponsiveContainer>
                        ) : (
                            <div className="flex items-center justify-center h-full text-slate-400">No temperature data available</div>
@@ -738,9 +590,9 @@ function FarmerDashboardCore() {
                  <Card className="shadow-sm border-slate-200">
                     <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Air Humidity Profile</CardTitle></CardHeader>
                     <CardContent className="h-72">
-                       {(temperatureHistory.length > 0 || true) ? (
+                       {displayHumidityHistory.length > 0 ? (
                            <ResponsiveContainer width="100%" height="100%">
-                             <AreaChart data={temperatureHistory.length > 0 ? temperatureHistory : getDemoData(roomIndex).humidityHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                             <AreaChart data={displayHumidityHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                                <XAxis dataKey="time" tick={{fontSize: 10}} />
                                <YAxis tick={{fontSize: 10}} />
@@ -749,61 +601,11 @@ function FarmerDashboardCore() {
                              </AreaChart>
                            </ResponsiveContainer>
                        ) : (
-                           <LineChart data={temperatureHistory.length > 0 ? temperatureHistory : getDemoData(roomIndex).temperatureHistory}>
-                            <XAxis dataKey="time" tick={{fontSize: 10}} />
-                            <YAxis tick={{fontSize: 10}} />
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <RechartsTooltip />
-                            <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                          </LineChart>
+                           <div className="flex items-center justify-center h-full text-slate-400">No humidity data available</div>
                        )}
                     </CardContent>
                  </Card>
               </div>
-
-              {/* 7. INVENTORY TABLE */}
-              <Card className="shadow-sm border-slate-200 overflow-hidden">
-                 <CardHeader className="bg-slate-50 border-b border-slate-100">
-                    <CardTitle className="flex items-center gap-2 text-lg text-slate-800"><Boxes className="w-5 h-5 text-indigo-500"/> Live Inventory Tracking</CardTitle>
-                 </CardHeader>
-                 <CardContent className="p-0">
-                    {displayInventory.length > 0 ? (
-                        <div className="overflow-x-auto">
-                           <table className="w-full text-left border-collapse">
-                              <thead>
-                                 <tr className="bg-white border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                                    <th className="py-4 px-6">Product</th>
-                                    <th className="py-4 px-6">Batch ID</th>
-                                    <th className="py-4 px-6 text-right">Quantity</th>
-                                    <th className="py-4 px-6">Quality</th>
-                                    <th className="py-4 px-6">Harvest Date</th>
-                                    <th className="py-4 px-6">Expiry Date</th>
-                                 </tr>
-                              </thead>
-                              <tbody>
-                                 {displayInventory.map((row, idx) => (
-                                    <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm">
-                                       <td className="py-4 px-6 font-bold text-slate-900">{row.batches.products?.name}</td>
-                                       <td className="py-4 px-6 tracking-wider">{row.batches.batch_code || 'N/A'}</td>
-                                       <td className="py-4 px-6 font-bold text-indigo-600 text-right">{row.quantity_kg} <span className="text-xs font-normal text-slate-400">Kg</span></td>
-                                       <td className="py-4 px-6">
-                                           <span className="px-3 py-1 bg-emerald-100 text-emerald-700 font-bold rounded text-[10px] uppercase tracking-widest">{row.batches.quality_grade || 'GOOD'}</span>
-                                       </td>
-                                       <td className="py-4 px-6">{new Date(row.batches.harvest_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
-                                       <td className="py-4 px-6">{new Date(row.batches.expiry_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
-                                    </tr>
-                                 ))}
-                              </tbody>
-                           </table>
-                        </div>
-                    ) : (
-                        <div className="p-12 text-center text-slate-400 font-semibold flex flex-col items-center gap-2">
-                           <Package className="w-10 h-10 text-slate-200" />
-                           No inventory allocations found for this active selection.
-                        </div>
-                    )}
-                 </CardContent>
-              </Card>
 
            </div>
        )}

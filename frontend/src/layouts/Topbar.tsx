@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useThemeStore } from '../stores/useThemeStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 import { useTheme } from '../hooks/useTheme';
 import { Search, Bell, Moon, Sun, User, Menu, ChevronDown, MapPin } from 'lucide-react';
 
@@ -22,7 +22,7 @@ interface TopbarProps {
 const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed, onToggleSidebar }) => {
   const navigate = useNavigate();
   const { logout, user, selectedSite, setSelectedSite } = useAuthStore();
-  const { theme, setTheme } = useThemeStore();
+  const { appearance, setAppearance } = useSettingsStore();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showSiteSelector, setShowSiteSelector] = useState(false);
@@ -31,11 +31,11 @@ const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed, onToggleSidebar }) =>
   useTheme();
 
   const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
+    const newAppearance = appearance === 'dark' ? 'light' : 'dark';
+    setAppearance(newAppearance);
   };
 
-  const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const isDarkMode = appearance === 'dark' || (appearance === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const handleSignOut = () => {
     logout();
@@ -46,8 +46,7 @@ const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed, onToggleSidebar }) =>
   const handleSiteChange = (site: Site) => {
     setSelectedSite(site);
     setShowSiteSelector(false);
-    // Force page reload to update all components with new site
-    window.location.reload();
+    // No full-page reload — Zustand state updates reactively
   };
 
   // Farmer 1 has only 1 site (Hamirpur) - no selector needed
@@ -209,27 +208,27 @@ const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed, onToggleSidebar }) =>
                   <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user?.role || 'Admin'}</p>
                 </div>
                 <div className="py-1">
-                  <a
-                    href="/profile"
-                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  <button
+                    onClick={() => { setShowProfileMenu(false); navigate(`/${user?.role}/profile`); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Profile
-                  </a>
-                  <a
-                    href="/settings"
-                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  </button>
+                  <button
+                    onClick={() => { setShowProfileMenu(false); navigate(`/${user?.role}/settings`); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Settings
-                  </a>
-                  <a
-                    href="/preferences"
-                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  </button>
+                  <button
+                    onClick={() => { setShowProfileMenu(false); navigate(`/${user?.role}/preferences`); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Preferences
-                  </a>
+                  </button>
                 </div>
                 <div className="border-t border-gray-200 dark:border-slate-800 py-1">
-                  <button 
+                  <button
                     onClick={handleSignOut}
                     className="block w-full text-left px-4 py-2 text-sm text-error-600 dark:text-error-400 hover:bg-gray-50 dark:hover:bg-slate-800"
                   >

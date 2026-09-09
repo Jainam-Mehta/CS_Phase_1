@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { useThemeStore } from '../../stores/useThemeStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useUserStore } from '../../stores/useUserStore';
 
 interface PreferencesState {
@@ -18,7 +18,7 @@ interface PreferencesState {
 }
 
 const Preferences: React.FC = () => {
-  const { theme } = useThemeStore();
+  const { appearance } = useSettingsStore();
   const { updateUser } = useUserStore();
   const [preferences, setPreferences] = useState<PreferencesState>({
     emailNotifications: true,
@@ -38,7 +38,7 @@ const Preferences: React.FC = () => {
     // Save preferences to user store
     updateUser({
       preferences: {
-        theme,
+        theme: appearance,
         language: preferences.language,
         notifications: {
           email: preferences.emailNotifications,

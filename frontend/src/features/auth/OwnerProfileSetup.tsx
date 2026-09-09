@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import SearchableSelect from '../../components/ui/SearchableSelect';
-import { User, MapPin, Calendar, Check, AlertCircle, Building } from 'lucide-react';
+import { User, MapPin, Calendar, Check, AlertCircle, Building, Phone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getOwnerRoleId } from '../../services/roleService';
 import type { State, District, Locality } from '../../lib/supabase';
@@ -15,6 +15,7 @@ const OwnerProfileSetup: React.FC = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    phoneNumber: '',
     dateOfBirth: '',
     gender: '',
     state: '',
@@ -144,6 +145,12 @@ const OwnerProfileSetup: React.FC = () => {
       return;
     }
 
+    // Optional phone validation (if provided, must be 10 digits)
+    if (formData.phoneNumber && !/^[0-9]{10}$/.test(formData.phoneNumber)) {
+      setError('Phone number must be exactly 10 digits');
+      return;
+    }
+
     if (!acceptTerms) {
       setError('Please accept the Terms & Conditions');
       return;
@@ -201,6 +208,7 @@ const OwnerProfileSetup: React.FC = () => {
           auth_user_id: user.id,
           first_name: formData.firstName,
           last_name: formData.lastName || null,
+          phone: formData.phoneNumber || null,
           date_of_birth: formData.dateOfBirth || null,
           gender: formData.gender || null,
           state_id: selectedStateId,
@@ -278,7 +286,7 @@ const OwnerProfileSetup: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Illustration Section */}
+        {/* Illustration Section - Professional Cold Storage Business */}
         <div className="hidden lg:flex flex-col items-center justify-center">
           <svg viewBox="0 0 400 400" className="w-full h-full max-w-md">
             <defs>
@@ -290,32 +298,89 @@ const OwnerProfileSetup: React.FC = () => {
                 <stop offset="0%" stopColor="#4A90E2" />
                 <stop offset="100%" stopColor="#357ABD" />
               </linearGradient>
+              <linearGradient id="roofGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#2C3E50" />
+                <stop offset="100%" stopColor="#34495E" />
+              </linearGradient>
+              <linearGradient id="truckGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#E74C3C" />
+                <stop offset="100%" stopColor="#C0392B" />
+              </linearGradient>
             </defs>
             
             {/* Sky */}
             <rect x="0" y="0" width="400" height="400" fill="url(#skyGradient)" />
             
             {/* Sun */}
-            <circle cx="320" cy="80" r="50" fill="#FFD700" />
+            <circle cx="320" cy="60" r="40" fill="#FFD700" opacity="0.9" />
             
-            {/* Building */}
-            <rect x="100" y="150" width="200" height="200" fill="url(#buildingGradient)" rx="10" />
+            {/* Ground */}
+            <rect x="0" y="320" width="400" height="80" fill="#95A5A6" />
             
-            {/* Windows */}
-            <rect x="120" y="170" width="40" height="50" fill="#87CEEB" rx="5" />
-            <rect x="180" y="170" width="40" height="50" fill="#87CEEB" rx="5" />
-            <rect x="240" y="170" width="40" height="50" fill="#87CEEB" rx="5" />
-            <rect x="120" y="240" width="40" height="50" fill="#87CEEB" rx="5" />
-            <rect x="180" y="240" width="40" height="50" fill="#87CEEB" rx="5" />
-            <rect x="240" y="240" width="40" height="50" fill="#87CEEB" rx="5" />
+            {/* Cold Storage Building */}
+            <rect x="80" y="140" width="240" height="180" fill="url(#buildingGradient)" rx="5" />
             
-            {/* Door */}
-            <rect x="170" y="310" width="60" height="40" fill="#8B4513" rx="5" />
+            {/* Roof */}
+            <polygon points="80,140 200,100 320,140" fill="url(#roofGradient)" />
+            
+            {/* Company Sign */}
+            <rect x="150" y="115" width="100" height="25" fill="#2C3E50" rx="3" />
+            <text x="200" y="133" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">COLDSENSE</text>
+            
+            {/* Large Loading Door */}
+            <rect x="160" y="240" width="80" height="80" fill="#34495E" rx="3" />
+            <rect x="165" y="245" width="70" height="70" fill="#7F8C8D" rx="2" />
+            
+            {/* Windows with reflection effect */}
+            <rect x="100" y="160" width="35" height="45" fill="#87CEEB" rx="3" />
+            <rect x="100" y="160" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
+            
+            <rect x="255" y="160" width="35" height="45" fill="#87CEEB" rx="3" />
+            <rect x="255" y="160" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
+            
+            <rect x="100" y="220" width="35" height="45" fill="#87CEEB" rx="3" />
+            <rect x="100" y="220" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
+            
+            <rect x="255" y="220" width="35" height="45" fill="#87CEEB" rx="3" />
+            <rect x="255" y="220" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
+            
+            {/* AC Units on roof */}
+            <rect x="110" y="145" width="25" height="15" fill="#7F8C8D" rx="2" />
+            <rect x="265" y="145" width="25" height="15" fill="#7F8C8D" rx="2" />
+            
+            {/* Delivery Truck #1 */}
+            <g transform="translate(20, 290)">
+              <rect x="0" y="15" width="60" height="25" fill="url(#truckGradient)" rx="3" />
+              <rect x="50" y="10" width="30" height="15" fill="#C0392B" rx="2" />
+              <circle cx="15" cy="40" r="6" fill="#2C3E50" />
+              <circle cx="15" cy="40" r="3" fill="#95A5A6" />
+              <circle cx="55" cy="40" r="6" fill="#2C3E50" />
+              <circle cx="55" cy="40" r="3" fill="#95A5A6" />
+              <rect x="55" y="17" width="20" height="10" fill="rgba(255,255,255,0.3)" rx="1" />
+            </g>
+            
+            {/* Delivery Truck #2 */}
+            <g transform="translate(320, 290)">
+              <rect x="0" y="15" width="60" height="25" fill="#27AE60" rx="3" />
+              <rect x="50" y="10" width="30" height="15" fill="#229954" rx="2" />
+              <circle cx="15" cy="40" r="6" fill="#2C3E50" />
+              <circle cx="15" cy="40" r="3" fill="#95A5A6" />
+              <circle cx="55" cy="40" r="6" fill="#2C3E50" />
+              <circle cx="55" cy="40" r="3" fill="#95A5A6" />
+              <rect x="55" y="17" width="20" height="10" fill="rgba(255,255,255,0.3)" rx="1" />
+            </g>
+            
+            {/* Snowflake icon on building (indicating cold storage) */}
+            <g transform="translate(200, 180)">
+              <circle cx="0" cy="0" r="20" fill="rgba(255,255,255,0.2)" />
+              <path d="M 0,-12 L 0,12 M -12,0 L 12,0 M -8,-8 L 8,8 M -8,8 L 8,-8" 
+                    stroke="#E8F8F5" strokeWidth="3" strokeLinecap="round" />
+            </g>
           </svg>
           
           <div className="text-center mt-6">
-            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Owner!</h2>
-            <p className="text-white/80">Your journey to smart cold storage management begins here</p>
+            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Business Owner!</h2>
+            <p className="text-white/80">Manage your cold storage empire with ColdSense</p>
           </div>
         </div>
 
@@ -359,7 +424,7 @@ const OwnerProfileSetup: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Last Name (Optional)
+                    Last Name
                   </label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -374,10 +439,29 @@ const OwnerProfileSetup: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={formData.phoneNumber}
+                    onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                    placeholder="Enter your phone number"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional - 10 digits if provided</p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth (Optional)
+                    Date of Birth
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -392,7 +476,7 @@ const OwnerProfileSetup: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Gender (Optional)
+                    Gender
                   </label>
                   <select
                     value={formData.gender}
@@ -442,7 +526,7 @@ const OwnerProfileSetup: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Locality (Optional)
+                      Locality
                     </label>
                     <SearchableSelect
                       placeholder="Select locality"

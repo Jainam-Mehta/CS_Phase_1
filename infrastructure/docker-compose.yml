@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Self-Managed)
+  postgres:
+    image: postgres:15-alpine
+    container_name: coldsense-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: coldsense_user
+      POSTGRES_PASSWORD: coldsense_secure_password_2026
+      POSTGRES_DB: coldsense
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - coldsense-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coldsense_user -d coldsense"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: coldsense-backend
+    restart: always
+    environment:
+      # Database connection (using postgres service)
+      DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
+      
+      # Supabase Auth (keep for authentication)
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      
+      # MQTT
+      MQTT_BROKER: broker.emqx.io
+      MQTT_PORT: 1883
+      
+      # App settings
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - coldsense-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MQTT Subscriber
+  mqtt-subscriber:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: coldsense-mqtt
+    restart: always
+    command: python -m app.mqtt.subscriber
+    environment:
+      DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
+      MQTT_BROKER: broker.emqx.io
+      MQTT_PORT: 1883
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - coldsense-network
+
+  # Simulator (generates fake sensor data)
+  simulator:
+    build:
+      context: ../backend/simulators
+      dockerfile: Dockerfile
+    container_name: coldsense-simulator
+    restart: always
+    environment:
+      MQTT_BROKER: broker.emqx.io
+      MQTT_PORT: 1883
+      SIMULATION_INTERVAL: 60
+      NUM_FACILITIES: 10
+    networks:
+      - coldsense-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  coldsense-network:
+    driver: bridge

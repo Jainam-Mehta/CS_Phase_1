@@ -7,7 +7,7 @@ import StakeholderLayout from '../layouts/StakeholderLayout';
 import NotFound from '../components/common/NotFound';
 import ProtectedRoute from '../components/common/ProtectedRoute';
 import OnboardingRoute from '../components/common/OnboardingRoute';
-import { AuthProvider } from '../providers/AuthProvider';
+import { AuthProvider, useAuthLoading } from '../providers/AuthProvider';
 import { useAuthStore } from '../stores/useAuthStore';
 
 // Role redirect component
@@ -15,30 +15,56 @@ const RoleRedirect: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [hasRedirected, setHasRedirected] = useState(false);
+  const authLoadingState = useAuthLoading();
 
   useEffect(() => {
-    if (user && !hasRedirected) {
-      console.log('=== ROLE REDIRECT ===');
+    const { loading: authLoading, isLoadingRole } = authLoadingState;
+
+    console.log('=== ROLE REDIRECT CHECK ===');
+    console.log('Auth loading:', authLoading);
+    console.log('Role loading:', isLoadingRole);
+    console.log('User:', user);
+    console.log('User Role:', user?.role);
+    console.log('Has redirected:', hasRedirected);
+
+    // Wait for BOTH auth loading and role loading to complete
+    if (authLoading || isLoadingRole) {
+      console.log('Still loading, waiting...');
+      return;
+    }
+
+    // Wait until user object AND role are both available before redirecting.
+    // Without this guard, a null role (while profile is still loading) would
+    // send the user to /role-selection on every login.
+    if (user && user.role && !hasRedirected) {
+      console.log('=== REDIRECTING BASED ON ROLE ===');
       console.log('User Role:', user.role);
-      console.log('Redirecting to:', user.role === 'owner' ? '/owner/dashboard' : user.role === 'farmer' ? '/farmer/dashboard' : user.role === 'stakeholder' ? '/stakeholder/dashboard' : '/role-selection');
-      
-      if (user.role === 'owner') {
-        navigate('/owner/dashboard');
-      } else if (user.role === 'farmer') {
-        navigate('/farmer/dashboard');
-      } else if (user.role === 'stakeholder') {
-        navigate('/stakeholder/map');
-      } else {
-        navigate('/role-selection');
-      }
-      
+
+      const roleRoutes: Record<string, string> = {
+        owner: '/owner/dashboard',
+        farmer: '/farmer/dashboard',
+        stakeholder: '/stakeholder/map',
+      };
+
+      const targetRoute = roleRoutes[user.role] || '/role-selection';
+      console.log('Redirecting to:', targetRoute);
+
+      navigate(targetRoute);
+      setHasRedirected(true);
+    } else if (user && !user.role && !hasRedirected) {
+      // User exists but has no role - send to role selection
+      console.log('User has no role, redirecting to role-selection');
+      navigate('/role-selection');
       setHasRedirected(true);
     }
-  }, [user, navigate, hasRedirected]);
+  }, [user, navigate, hasRedirected, authLoadingState]);
 
   return (
     <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
+        <p className="text-gray-600 dark:text-gray-400">Loading your dashboard...</p>
+      </div>
     </div>
   );
 };
@@ -70,6 +96,7 @@ const OwnerDashboard = React.lazy(() => import('../features/dashboard/OwnerDashb
 const OwnerMonitoring = React.lazy(() => import('../features/monitoring/OwnerMonitoring'));
 const OwnerInventory = React.lazy(() => import('../features/inventory/OwnerInventory'));
 const OwnerEnergy = React.lazy(() => import('../features/energy/OwnerEnergy'));
+const OwnerFinance = React.lazy(() => import('../features/finance/OwnerFinance'));
 const OwnerCarbonCredits = React.lazy(() => import('../features/carbon-credits/OwnerCarbonCredits'));
 const OwnerAlerts = React.lazy(() => import('../features/alerts/OwnerAlerts'));
 const OwnerBatchTraceability = React.lazy(() => import('../features/batch-traceability/OwnerBatchTraceability'));
@@ -89,6 +116,7 @@ const FarmerFinance = React.lazy(() => import('../features/finance/FarmerFinance
 const StakeholderMap = React.lazy(() => import('../features/stakeholder/StakeholderMap'));
 const StakeholderState = React.lazy(() => import('../features/stakeholder/StakeholderState'));
 const StakeholderDistrict = React.lazy(() => import('../features/stakeholder/StakeholderDistrict'));
+const StakeholderDashboard = React.lazy(() => import('../features/stakeholder/StakeholderDashboard'));
 
 // Shared pages
 const Notifications = React.lazy(() => import('../features/notifications/Notifications'));
@@ -288,6 +316,14 @@ export const router = createBrowserRouter([
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
             <OwnerEnergy />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: 'finance',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <OwnerFinance />
           </React.Suspense>
         ),
       },
@@ -511,7 +547,7 @@ export const router = createBrowserRouter([
         path: 'dashboard/:facilityId',
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
-            <StakeholderMap />
+            <StakeholderDashboard />
           </React.Suspense>
         ),
       },
@@ -548,6 +584,20 @@ export const router = createBrowserRouter([
         ),
       },
     ],
+  },
+
+  // Notifications route (referenced by Topbar)
+  {
+    path: '/notifications',
+    element: (
+      <AuthLayout>
+        <ProtectedRoute>
+          <React.Suspense fallback={<LoadingFallback />}>
+            <Notifications />
+          </React.Suspense>
+        </ProtectedRoute>
+      </AuthLayout>
+    ),
   },
 
   // Root redirect based on role

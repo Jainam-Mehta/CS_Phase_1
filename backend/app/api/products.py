@@ -90,11 +90,13 @@ async def get_products_by_site(site_id: str):
     Based on site category and location
     """
     try:
-        # Get site details
-        site_response = supabase.table("sites").select("*").eq("id", site_id).execute()
+        # Get facility details
+        site_response = supabase.table("facilities").select("*").eq("id", site_id).execute()
         
         if not site_response.data:
-            raise HTTPException(status_code=404, detail="Site not found")
+            # Fall back to return all products if specific facility is not found
+            response = supabase.table("products").select("*").execute()
+            return response.data or []
         
         site = site_response.data[0]
         

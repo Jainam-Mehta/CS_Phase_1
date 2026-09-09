@@ -18,7 +18,7 @@ const Maintenance: React.FC = () => {
 
   useEffect(() => {
     fetchMaintenanceData();
-  }, [user]);
+  }, [user?.id]);
 
   const fetchMaintenanceData = async () => {
     if (!user) return;

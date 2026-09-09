@@ -25,10 +25,12 @@ import {
   LogOut,
   Plus,
   CheckSquare,
+  IndianRupee,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { resolveProfile } from '../lib/profileUtils';
 import { useSiteStore } from '../stores/useSiteStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
 const ownerNavigation = [
@@ -36,7 +38,9 @@ const ownerNavigation = [
   { name: 'Monitoring', href: '/owner/monitoring', icon: Activity },
   { name: 'Inventory', href: '/owner/inventory', icon: TrendingUp },
   { name: 'Energy', href: '/owner/energy', icon: Zap },
-  { name: 'Carbon Credits', href: '/owner/carbon-credits', icon: Leaf },
+  { name: 'Profits', href: '/owner/finance', icon: IndianRupee },
+  // Hidden for future use - Carbon Credits feature
+  // { name: 'Carbon Credits', href: '/owner/carbon-credits', icon: Leaf },
   { name: 'Alerts & Insights', href: '/owner/alerts', icon: AlertTriangle },
   { name: 'Batch Traceability', href: '/owner/batch-traceability', icon: GitBranch },
   { name: 'Maintenance', href: '/owner/maintenance', icon: Wrench },
@@ -54,23 +58,19 @@ const OwnerLayout: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuthStore();
   const { selectedFacilityId, setSelectedFacilityId } = useSiteStore();
+  const { appearance, setAppearance } = useSettingsStore();
   const [facilities, setFacilities] = useState<any[]>([]);
   const [fetchingSites, setFetchingSites] = useState(true);
 
   // Header Dropdown States
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  // Derive isDark from the persisted settings store — stays correct after refresh
+  const isDark = appearance === 'dark' || (appearance === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const toggleTheme = () => {
-    if (isDark) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    }
-    setIsDark(!isDark);
+    // Write through the store so ThemeProvider and localStorage stay in sync
+    setAppearance(isDark ? 'light' : 'dark');
   };
 
   const handleLogout = async () => {
@@ -119,7 +119,8 @@ const OwnerLayout: React.FC = () => {
       }
     }
     loadFacilities();
-  }, [user?.id, selectedFacilityId, setSelectedFacilityId]); // Reload when user changes or selectedFacilityId changes (when set to null after setup)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only re-run when the logged-in user changes
 
   const navigation = [...ownerNavigation, ...settingsNavigation];
 
@@ -232,6 +233,13 @@ const OwnerLayout: React.FC = () => {
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Owner</p>
               </div>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Log out"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
             </div>
           </div>
         )}

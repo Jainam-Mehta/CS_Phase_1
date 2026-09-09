@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator
+  namespace: coldsense
+  labels:
+    app: simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator
+  template:
+    metadata:
+      labels:
+        app: simulator
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: simulator
+        image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/simulator:v1.0
+        imagePullPolicy: Always
+        env:
+        # MQTT Configuration
+        - name: MQTT_BROKER
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-credentials
+              key: mqtt-broker
+        - name: MQTT_PORT
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-credentials
+              key: mqtt-port
+        
+        # Simulation settings
+        - name: SIMULATION_INTERVAL
+          value: "60"
+        - name: NUM_FACILITIES
+          value: "10"
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      restartPolicy: Always

@@ -27,51 +27,7 @@ import { supabase } from '../../lib/supabase';
 import HVACIllustration from '../../components/HVACIllustration';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts';
 
-// Demo data generator for stakeholder dashboard
-const getStakeholderDemoData = () => {
-  const now = new Date();
-  
-  // Generate 24h investment/ROI curve
-  const roiHistory = [];
-  for (let i = 0; i < 24; i++) {
-    const hour = (now.getHours() - 23 + i + 24) % 24;
-    const baseROI = 18.7 + Math.sin(i / 6) * 0.5 + Math.random() * 0.3;
-    roiHistory.push({ time: `${hour}:00`, value: parseFloat(baseROI.toFixed(2)) });
-  }
-  
-  // Generate monthly profit curve
-  const profitHistory = [];
-  for (let i = 0; i < 12; i++) {
-    const baseProfit = 23.4 + Math.sin(i / 2) * 3 + Math.random() * 2;
-    profitHistory.push({ month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i], value: parseFloat(baseProfit.toFixed(1)) });
-  }
-  
-  // Generate carbon credits curve
-  const carbonHistory = [];
-  for (let i = 0; i < 24; i++) {
-    const hour = (now.getHours() - 23 + i + 24) % 24;
-    const baseCarbon = 145.2 + Math.cos(i / 4) * 5 + Math.random() * 2;
-    carbonHistory.push({ time: `${hour}:00`, value: parseFloat(baseCarbon.toFixed(1)) });
-  }
-  
-  return {
-    investment: { total: 18.4 },
-    roi: { percentage: 18.7 },
-    monthlyProfit: { amount: 23.4 },
-    carbonCredits: { total: 145.2 },
-    states: [
-      { name: 'Maharashtra', value: 8.2 },
-      { name: 'Gujarat', value: 5.1 },
-      { name: 'Karnataka', value: 5.1 }
-    ],
-    charts: {
-      roiHistory,
-      profitHistory,
-      carbonHistory
-    },
-    lastUpdated: now.toLocaleTimeString()
-  };
-};
+// NO DEMO DATA - All data from database
 
 const Dashboard: React.FC = () => {
   const { user, selectedSite } = useAuthStore();
@@ -79,17 +35,87 @@ const Dashboard: React.FC = () => {
   const [hasApprovedRooms, setHasApprovedRooms] = useState<boolean | null>(null);
   const [loadingRoomStatus, setLoadingRoomStatus] = useState(true);
   const [roomStatusError, setRoomStatusError] = useState('');
-  const [demoData, setDemoData] = useState<any>(null);
+  
+  // Real stakeholder data - NO DEMO
+  const [stakeholderData, setStakeholderData] = useState<any>(null);
 
-  // Set demo data as fallback
   useEffect(() => {
-    setDemoData(getStakeholderDemoData());
-  }, []);
+    if (user?.id) {
+      loadStakeholderData();
+    }
+  }, [user?.id]);
+
+  const loadStakeholderData = async () => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', user!.id)
+        .maybeSingle();
+
+      if (!profile) return;
+
+      const { data: invs } = await supabase
+        .from('stakeholder_investments')
+        .select('*, facilities(id, facility_name, localities(districts(states(name))))')
+        .eq('stakeholder_id', profile.id)
+        .eq('status', 'Active');
+
+      if (invs && invs.length > 0) {
+        const totalInv = invs.reduce((sum, i) => sum + (Number(i.investment_amount_inr) || 0), 0);
+        const avgRoi = invs.reduce((sum, i) => sum + (Number(i.roi_percentage_estimate) || 0), 0) / invs.length;
+
+        const stateMap = new Map<string, number>();
+        invs.forEach((i: any) => {
+          const stName = i.facilities?.localities?.districts?.states?.name || 'Local State';
+          const amt = Number(i.investment_amount_inr) || 0;
+          stateMap.set(stName, (stateMap.get(stName) || 0) + (amt / 10000000));
+        });
+
+        const stateList = Array.from(stateMap.entries()).map(([name, value]) => ({
+          name,
+          value: Number(value.toFixed(2)),
+        }));
+
+        setStakeholderData({
+          investment: { total: Number((totalInv / 10000000).toFixed(2)) },
+          roi: { percentage: Number(avgRoi.toFixed(1)) },
+          monthlyProfit: { amount: 0 }, // Calculate from payments if needed
+          carbonCredits: { total: 0 }, // Calculate if needed
+          states: stateList,
+          charts: {
+            roiHistory: [],
+            profitHistory: [],
+            carbonHistory: []
+          },
+          lastUpdated: new Date().toLocaleTimeString()
+        });
+      } else {
+        // No investments - set empty state
+        setStakeholderData({
+          investment: { total: 0 },
+          roi: { percentage: 0 },
+          monthlyProfit: { amount: 0 },
+          carbonCredits: { total: 0 },
+          states: [],
+          charts: {
+            roiHistory: [],
+            profitHistory: [],
+            carbonHistory: []
+          },
+          lastUpdated: new Date().toLocaleTimeString()
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching stakeholder data:', e);
+      setStakeholderData(null);
+    }
+  };
   
   // Check if farmer has approved rooms
   useEffect(() => {
     checkRoomApprovalStatus();
-  }, [user]);
+  }, [user?.id]);
 
   const checkRoomApprovalStatus = async () => {
     if (!user || user.role !== 'farmer') {
@@ -421,7 +447,7 @@ For professional PDF generation, a PDF library can be integrated.
             {/* Last Updated */}
             <StatCard
               title="Last Updated"
-              value={lastFetchTime ? new Date(lastFetchTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : demoData?.lastUpdated || new Date().toLocaleTimeString()}
+              value={lastFetchTime ? new Date(lastFetchTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : stakeholderData?.lastUpdated || new Date().toLocaleTimeString()}
               icon={RefreshCw}
               iconColor="purple"
               subtitle="Sensor data"
@@ -440,23 +466,23 @@ For professional PDF generation, a PDF library can be integrated.
           </div>
 
           {/* Stakeholder Dashboard Charts - Admin/Owner Only */}
-          {!isFarmer && demoData && (
+          {!isFarmer && stakeholderData && (
             <>
               {/* Financial Overview */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                 <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 shadow-sm text-white">
                   <h3 className="text-sm font-medium text-white/80 mb-2 uppercase tracking-wider">Total Investment</h3>
-                  <p className="text-4xl font-bold">₹{demoData.investment.total} Cr</p>
+                  <p className="text-4xl font-bold">₹{stakeholderData.investment.total} Cr</p>
                   <p className="text-sm text-white/70 mt-2">Capital deployed</p>
                 </div>
                 <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl p-6 shadow-sm text-white">
                   <h3 className="text-sm font-medium text-white/80 mb-2 uppercase tracking-wider">ROI</h3>
-                  <p className="text-4xl font-bold">{demoData.roi.percentage}%</p>
+                  <p className="text-4xl font-bold">{stakeholderData.roi.percentage}%</p>
                   <p className="text-sm text-white/70 mt-2">Annual return</p>
                 </div>
                 <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl p-6 shadow-sm text-white">
                   <h3 className="text-sm font-medium text-white/80 mb-2 uppercase tracking-wider">Monthly Profit</h3>
-                  <p className="text-4xl font-bold">₹{demoData.monthlyProfit.amount} L</p>
+                  <p className="text-4xl font-bold">₹{stakeholderData.monthlyProfit.amount} L</p>
                   <p className="text-sm text-white/70 mt-2">Net income</p>
                 </div>
               </div>
@@ -468,7 +494,7 @@ For professional PDF generation, a PDF library can be integrated.
                   <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">ROI Trend (24h)</h3>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={demoData.charts.roiHistory}>
+                      <LineChart data={stakeholderData.charts.roiHistory}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
                         <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
@@ -484,7 +510,7 @@ For professional PDF generation, a PDF library can be integrated.
                   <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Monthly Profit (₹ L)</h3>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={demoData.charts.profitHistory}>
+                      <BarChart data={stakeholderData.charts.profitHistory}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
                         <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
@@ -503,7 +529,7 @@ For professional PDF generation, a PDF library can be integrated.
                   <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Carbon Credits (tCO₂)</h3>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={demoData.charts.carbonHistory}>
+                      <AreaChart data={stakeholderData.charts.carbonHistory}>
                         <defs>
                           <linearGradient id="colorCarbon" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
@@ -520,7 +546,7 @@ For professional PDF generation, a PDF library can be integrated.
                   </div>
                   <div className="mt-4">
                     <p className="text-xs text-slate-500">Total Carbon Credits</p>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{demoData.carbonCredits.total} tCO₂</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{stakeholderData.carbonCredits.total} tCO₂</p>
                   </div>
                 </div>
 
@@ -528,7 +554,7 @@ For professional PDF generation, a PDF library can be integrated.
                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
                   <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Revenue by State (₹ Cr)</h3>
                   <div className="space-y-4">
-                    {demoData.states.map((state: any, index: number) => (
+                    {stakeholderData.states.map((state: any, index: number) => (
                       <div key={index}>
                         <div className="flex justify-between mb-1">
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{state.name}</span>

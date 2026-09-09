@@ -18,16 +18,37 @@ import {
   LogOut,
 } from 'lucide-react';
 import RupeeIcon from '../components/icons/RupeeIcon';
+import { FEATURE_FLAGS } from '../config/features.config';
 
+// Navigation items with feature flags
+// Items marked with featureFlag will only show if that feature is enabled
 const farmerNavigation = [
   { name: 'Dashboard', href: '/farmer/dashboard', icon: LayoutDashboard },
   { name: 'Inventory', href: '/farmer/inventory', icon: Package },
-  { name: 'Price Calculator', href: '/farmer/price-calculator', icon: Calculator },
-  { name: 'Market Intelligence', href: '/farmer/market-intelligence', icon: TrendingUp },
+  // HIDDEN UNTIL ML MODELS READY - Code intact, just not visible in menu
+  { 
+    name: 'Price Calculator', 
+    href: '/farmer/price-calculator', 
+    icon: Calculator,
+    featureFlag: 'FARMER_PRICE_CALCULATOR' // Will show when FEATURE_FLAGS.FARMER_PRICE_CALCULATOR = true
+  },
+  // Market Intelligence now includes Finance section merged below the market prices
+  { 
+    name: 'Market Intelligence', 
+    href: '/farmer/market-intelligence', 
+    icon: TrendingUp,
+    featureFlag: 'FARMER_MARKET_INTELLIGENCE' // Will show when FEATURE_FLAGS.FARMER_MARKET_INTELLIGENCE = true
+  },
   { name: 'Alerts & Insights', href: '/farmer/alerts', icon: AlertTriangle },
   { name: 'Orders', href: '/farmer/orders', icon: ShoppingCart },
-  { name: 'Finance', href: '/farmer/finance', icon: RupeeIcon },
-];
+  // Finance tab removed - now merged into Market Intelligence
+].filter(item => {
+  // Filter out items that have a featureFlag and that flag is false
+  if ('featureFlag' in item && item.featureFlag) {
+    return FEATURE_FLAGS[item.featureFlag as keyof typeof FEATURE_FLAGS];
+  }
+  return true; // Show items without feature flags
+});
 
 const settingsNavigation = [
   { name: 'Settings', href: '/farmer/settings', icon: Settings },

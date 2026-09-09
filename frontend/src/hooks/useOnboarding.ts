@@ -119,9 +119,31 @@ export const useOnboarding = () => {
       console.log('✓ Profile found');
       console.log('User role:', profile.roles?.name);
 
-      // Owners skip farmer onboarding
+      // Owners: Check if they have a facility, if not, send to owner-setup
       if (profile.roles?.name === 'Owner') {
-        console.log('Owner role detected, skipping farmer onboarding');
+        console.log('Owner role detected, checking for facility...');
+        
+        // Check if owner has created a facility
+        const { data: facilities } = await supabase
+          .from('facilities')
+          .select('id')
+          .eq('owner_profile_id', profile.id)
+          .limit(1);
+        
+        if (!facilities || facilities.length === 0) {
+          console.log('Owner has no facility -> step: site (owner-setup)');
+          setState(prev => ({
+            ...prev,
+            step: 'site', // This will map to /owner-setup
+            loading: false,
+            hasProfile: true,
+            hasSite: false,
+            profile,
+          }));
+          return;
+        }
+        
+        console.log('✓ Owner has facility -> step: dashboard');
         setState(prev => ({
           ...prev,
           step: 'dashboard',
@@ -138,6 +160,23 @@ export const useOnboarding = () => {
       // Stakeholders skip farmer onboarding
       if (profile.roles?.name === 'Stakeholder') {
         console.log('Stakeholder role detected, skipping farmer onboarding');
+        setState(prev => ({
+          ...prev,
+          step: 'dashboard',
+          loading: false,
+          hasProfile: true,
+          hasSite: true,
+          hasRooms: true,
+          hasProducts: true,
+          profile,
+        }));
+        return;
+      }
+
+      // Farmers skip storage selection onboarding - they go directly to dashboard
+      // They can add cold storage later via Settings tab
+      if (profile.roles?.name === 'Farmer') {
+        console.log('Farmer role detected -> skip storage selection, go to dashboard');
         setState(prev => ({
           ...prev,
           step: 'dashboard',
@@ -285,19 +324,40 @@ export const useOnboarding = () => {
   };
 
   const navigateToCurrentStep = () => {
-    // DISABLED: Navigation is now handled by AuthProvider (single source of truth)
-    // This function only returns the target route without navigating
     if (state.loading) return null;
 
-    const stepRoutes: Record<OnboardingStep, string> = {
-      'profile': '/farmer-profile-setup',
-      'site': '/storage-selection',
+    // Return null when onboarding is complete — no redirect needed
+    if (state.step === 'dashboard') return null;
+
+    // Handle profile step based on user role
+    if (state.step === 'profile') {
+      const userRole = user?.role;
+      if (userRole === 'owner') {
+        return '/owner-setup'; // Owner goes to facility setup
+      } else if (userRole === 'stakeholder') {
+        return '/stakeholder-profile-setup';
+      } else if (userRole === 'farmer') {
+        return '/farmer-profile-setup';
+      }
+      // Default to farmer profile setup if role is unknown
+      return '/farmer-profile-setup';
+    }
+
+    // Handle site step - for owners, this means facility setup
+    if (state.step === 'site') {
+      const userRole = user?.role || state.profile?.roles?.name?.toLowerCase();
+      if (userRole === 'owner' || userRole === 'Owner') {
+        return '/owner-setup'; // Owner creates facility
+      }
+      return '/storage-selection'; // Farmers select storage
+    }
+
+    const stepRoutes: Record<Exclude<OnboardingStep, 'dashboard' | 'profile' | 'site'>, string> = {
       'rooms': '/room-selection',
       'products': '/product-selection',
-      'dashboard': '/',
     };
 
-    return stepRoutes[state.step];
+    return stepRoutes[state.step as Exclude<OnboardingStep, 'dashboard' | 'profile' | 'site'>] ?? null;
   };
 
   const completeStep = (step: OnboardingStep) => {

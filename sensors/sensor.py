@@ -47,4 +47,4 @@ while True:
 
     print(json.dumps(payload, indent=4))
 
-    time.sleep(60)
+    time.sleep(5)

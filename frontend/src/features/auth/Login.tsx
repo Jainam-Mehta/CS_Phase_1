@@ -5,10 +5,12 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Mail, Lock, AlertCircle, ArrowLeft, Sprout, BarChart3, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuthLoading } from '../../providers/AuthProvider';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedRole, setUser, clearSelectedRole, isAuthenticated } = useAuthStore();
+  const { selectedRole, clearSelectedRole, isAuthenticated, user } = useAuthStore();
+  const authLoadingState = useAuthLoading();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,11 +23,23 @@ const Login: React.FC = () => {
     }
   }, [selectedRole, navigate]);
 
+  // Only redirect when auth is fully resolved, user is authenticated, AND role is loaded
   useEffect(() => {
-    if (isAuthenticated) {
+    const { loading: authLoading, isLoadingRole } = authLoadingState;
+    
+    console.log('Login redirect check:', { 
+      authLoading, 
+      isLoadingRole, 
+      isAuthenticated, 
+      userRole: user?.role 
+    });
+
+    // Wait for all async operations to complete
+    if (!authLoading && !isLoadingRole && isAuthenticated && user?.role) {
+      console.log('All conditions met, navigating to dashboard');
       navigate('/');
     }
-  }, [isAuthenticated, navigate]);
+  }, [authLoadingState, isAuthenticated, user, navigate]);
 
   const roleConfig = {
     farmer: {
@@ -111,16 +125,9 @@ const Login: React.FC = () => {
 
       console.log('Login successful:', { user: data.user, session: data.session });
 
-      // Set user with Supabase data
-      setUser({
-        id: data.user.id,
-        name: data.user.user_metadata?.name || email.split('@')[0],
-        email: data.user.email || email,
-        role: selectedRole,
-        sites: [],
-      });
-
-      navigate('/');
+      // Do NOT manually call setUser here — AuthProvider's onAuthStateChange
+      // will fire a SIGNED_IN event and set the user with the correct profile + role.
+      // Navigating is also deferred to the isAuthenticated effect above.
     } catch (err: any) {
       console.error('Login error:', err);
       // Error is already set above
@@ -180,34 +187,32 @@ const Login: React.FC = () => {
               )}
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Email Address
-                </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Email Address"
+                    autoComplete="off"
+                    name="email-new"
+                    className="w-full pl-10 pr-4 py-3.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white dark:focus:bg-slate-900 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Password
-                </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="•••••••••"
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Password"
+                    autoComplete="new-password"
+                    name="password-new"
+                    className="w-full pl-10 pr-4 py-3.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white dark:focus:bg-slate-900 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500"
                     required
                   />
                 </div>

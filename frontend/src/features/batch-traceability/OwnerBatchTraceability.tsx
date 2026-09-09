@@ -14,19 +14,46 @@ const OwnerBatchHistory: React.FC = () => {
   const [inventory, setInventory] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user?.id && selectedFacilityId) {
+    if (user?.id) {
       loadBatchHistory();
     }
-  }, [user, selectedFacilityId]);
+  }, [user?.id]);
 
   const loadBatchHistory = async () => {
     try {
       setLoading(true);
       
+      // Get ALL facilities for this owner, not just the selected one
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Get owner's profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+      if (!profile) return;
+
+      // Get all facilities for this owner
+      const { data: facilitiesData } = await supabase
+        .from('facilities')
+        .select('id, facility_name')
+        .eq('owner_profile_id', profile.id);
+
+      if (!facilitiesData || facilitiesData.length === 0) {
+        setInventory([]);
+        return;
+      }
+
+      const facilityIds = facilitiesData.map(f => f.id);
+
+      // Get all rooms for all facilities
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
-        .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .select('id, facility_id, room_name')
+        .in('facility_id', facilityIds);
 
       const resolvedRooms = rmData || [];
       
@@ -47,7 +74,7 @@ const OwnerBatchHistory: React.FC = () => {
         
         const farmerIds = accessData.map(a => a.farmer_id);
 
-        // NEW SCHEMA: Query batch_room_allocations -> batches -> products -> profiles
+        // Query batch_room_allocations -> batches -> products -> profiles
         const { data: allocationData } = await supabase
           .from('batch_room_allocations')
           .select(`
@@ -55,6 +82,7 @@ const OwnerBatchHistory: React.FC = () => {
             assigned_at,
             removed_at,
             room_id,
+            cold_storage_rooms(room_name, facility_id),
             batches!inner(
               id,
               batch_code,
@@ -75,20 +103,29 @@ const OwnerBatchHistory: React.FC = () => {
           .is('removed_at', null)
           .order('assigned_at', { ascending: false });
           
-        // Transform to match expected structure
-        const transformedInventory = allocationData?.map(allocation => ({
-          ...allocation.batches,
-          room_id: allocation.room_id,
-          quantity_kg: allocation.quantity_kg,
-          assigned_at: allocation.assigned_at,
-          product_name: (() => {
-            const products = allocation.batches.products;
-            if (Array.isArray(products)) {
-              return products[0]?.name || 'Unknown Product';
-            }
-            return products?.name || 'Unknown Product';
-          })()
-        })) || [];
+        // Transform to match expected structure and add facility name
+        const transformedInventory = allocationData?.map(allocation => {
+          const roomData = allocation.cold_storage_rooms;
+          const room = Array.isArray(roomData) ? roomData[0] : roomData;
+          const facilityId = room?.facility_id;
+          const facility = facilitiesData.find(f => f.id === facilityId);
+          
+          return {
+            ...allocation.batches,
+            room_id: allocation.room_id,
+            quantity_kg: allocation.quantity_kg,
+            assigned_at: allocation.assigned_at,
+            room_name: room?.room_name,
+            facility_name: facility?.facility_name || 'Unknown Facility',
+            product_name: (() => {
+              const products = (allocation.batches as any)?.products;
+              if (Array.isArray(products)) {
+                return products[0]?.name || 'Unknown Product';
+              }
+              return products?.name || 'Unknown Product';
+            })()
+          };
+        }) || [];
 
         setInventory(transformedInventory);
       } else {
@@ -101,16 +138,7 @@ const OwnerBatchHistory: React.FC = () => {
     }
   };
 
-  if (!selectedFacilityId) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
-        <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown in the top header.
-        </p>
-      </div>
-    );
-  }
+  // Remove facility selection guard - show all facilities
 
   const activeBatches = inventory.length;
   const uniqueFarmers = new Set(inventory.filter((i) => i.farmer_id).map((i) => i.farmer_id)).size;
@@ -129,10 +157,10 @@ const OwnerBatchHistory: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Batch History
+            Batch Traceability
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
-            Historical log of all products tracked in your facility.
+            Track all batches across all your facilities.
           </p>
         </div>
         <div className="relative">
@@ -208,7 +236,7 @@ const OwnerBatchHistory: React.FC = () => {
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product Name</th>
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Room</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Facility</th>
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Quantity</th>
                 </tr>
               </thead>
@@ -225,13 +253,16 @@ const OwnerBatchHistory: React.FC = () => {
                       {item.product_name || item.commodity || item.crop_type || item.name || 'Unknown Item'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      {item.profiles?.full_name || 'Unknown Farmer'}
+                      {/* profiles join returns first_name + last_name, no full_name column */}
+                      {item.profiles
+                        ? `${item.profiles.first_name || ''} ${item.profiles.last_name || ''}`.trim() || 'Unknown Farmer'
+                        : 'Unknown Farmer'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      {item.cold_storage_rooms?.name || `Room ${item.room_id.substring(0,4)}`}
+                      {item.facility_name || 'Unknown Facility'}
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white text-right">
-                      {item.quantity}
+                      {item.quantity_kg ?? item.remaining_quantity_kg ?? 0} kg
                     </td>
                   </tr>
                 ))}

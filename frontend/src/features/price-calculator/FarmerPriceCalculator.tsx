@@ -1,20 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
+import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Calculator, TrendingUp, IndianRupee, PieChart, Activity, Clock, Percent } from 'lucide-react';
 
-const MARKET_TRENDS_DB: Record<string, { current: number, predicted: number, window: string }> = {
-    'Avocado': { current: 185, predicted: 203, window: 'Wait 7 Days' },
-    'Mango': { current: 120, predicted: 110, window: 'Sell Immediately' },
-    'Apple': { current: 95, predicted: 105, window: 'Wait 14 Days' },
-    'Banana': { current: 50, predicted: 48, window: 'Sell Immediately' },
-    'Dragon Fruit': { current: 250, predicted: 280, window: 'Wait 10 Days' },
-    'Milk': { current: 50, predicted: 50, window: 'Sell Immediately' },
-};
-
-const getTrend = (product: string) => MARKET_TRENDS_DB[product] || { current: 45, predicted: 50, window: 'Hold' };
+// REMOVED: Hardcoded MARKET_TRENDS_DB - now using useMarketPrices hook with live/simulated data
+// Note: This entire component is hidden via FEATURE_FLAGS.PRICE_CALCULATOR
+// Kept for future when ML predictions are re-enabled
 
 const FarmerPriceCalculator: React.FC = () => {
   const { user } = useAuthStore();
@@ -23,6 +17,14 @@ const FarmerPriceCalculator: React.FC = () => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Extract unique product names for market price fetching
+  const productNames = useMemo(() => {
+    return [...new Set(batches.map(b => b.product).filter(Boolean))];
+  }, [batches]);
+
+  // Use market prices hook (fetches from API/store with 24hr cache)
+  const { getTrend, loading: pricesLoading, error: pricesError } = useMarketPrices(productNames);
 
   useEffect(() => {
      if (!user?.id) {
@@ -95,12 +97,13 @@ const FarmerPriceCalculator: React.FC = () => {
      load();
   }, [user?.id, activeRoomId, activeProductId]);
 
-  if (loading) {
+  if (loading || pricesLoading) {
       return <div className="p-8"><div className="animate-pulse h-64 bg-slate-100 dark:bg-slate-800 rounded-xl"></div></div>;
   }
 
   // Analytics Evaluator mappings
-  const storageCostPerKg = 2.5;
+  // TODO (Priority 2): Fetch from cold_storage_rooms.storage_rate_per_kg_month
+  const storageCostPerKg = 2.5; // ₹/kg/month - System default
   let totalCurrentValue = 0;
   let totalFutureValue = 0;
   let totalStorageCost = 0;
@@ -109,7 +112,7 @@ const FarmerPriceCalculator: React.FC = () => {
   batches.forEach(b => {
       const kg = b.initial_quantity_kg || 0;
       const productName = b.product || b.products?.name || 'Unknown';
-      const trend = getTrend(productName);
+      const trend = getTrend(productName); // Now fetches from market store
       
       totalCurrentValue += (kg * trend.current);
       totalFutureValue += (kg * trend.predicted);
@@ -178,8 +181,16 @@ const FarmerPriceCalculator: React.FC = () => {
              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Algorithm Action Hooks</h2>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {batches.map(b => {
-                     const trend = getTrend(b.product);
+                     const trend = getTrend(b.product); // Now fetches from market store
                      const positive = trend.predicted > trend.current;
+                     
+                     // Determine optimal action window based on price trend
+                     let window = 'Hold';
+                     if (trend.predicted > trend.current * 1.1) {
+                         window = 'Wait 7-14 Days';
+                     } else if (trend.predicted < trend.current) {
+                         window = 'Sell Immediately';
+                     }
 
                      return (
                          <Card key={b.id} className="border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-300 transition-colors">
@@ -187,7 +198,7 @@ const FarmerPriceCalculator: React.FC = () => {
                                  <div className="flex justify-between items-start mb-4">
                                      <h3 className="text-xl font-bold text-slate-900 dark:text-white capitalize">{b.product} <span className="text-sm font-medium text-slate-400">({b.initial_quantity_kg}kg)</span></h3>
                                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${positive ? 'bg-indigo-50 text-indigo-700' : 'bg-orange-50 text-orange-700'}`}>
-                                         {trend.window}
+                                         {window}
                                      </span>
                                  </div>
                                  <div className="flex justify-between items-end mb-4">

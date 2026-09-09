@@ -16,7 +16,7 @@ const BatchTraceability: React.FC = () => {
 
   useEffect(() => {
     fetchBatchesAndRooms();
-  }, [user]);
+  }, [user?.id]);
 
   const fetchBatchesAndRooms = async () => {
     if (!user) return;

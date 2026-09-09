@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-subscriber
+  namespace: coldsense
+  labels:
+    app: mqtt-subscriber
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mqtt-subscriber
+  template:
+    metadata:
+      labels:
+        app: mqtt-subscriber
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: mqtt-subscriber
+        image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/backend:v1.0
+        imagePullPolicy: Always
+        command: ["python", "-m", "app.mqtt.subscriber"]
+        env:
+        # Database connection
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: database-url
+        
+        # MQTT Configuration
+        - name: MQTT_BROKER
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-credentials
+              key: mqtt-broker
+        - name: MQTT_PORT
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-credentials
+              key: mqtt-port
+        
+        # Application settings
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      restartPolicy: Always

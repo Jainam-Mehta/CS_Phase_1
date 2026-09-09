@@ -28,7 +28,7 @@ const Inventory: React.FC = () => {
 
   useEffect(() => {
     fetchRoomsAndInventory();
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (showCalculator) {

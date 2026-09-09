@@ -1,22 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
+import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { IndianRupee, LayoutDashboard, TrendingUp, Wallet, Receipt, CreditCard } from 'lucide-react';
 
-const MARKET_TRENDS_DB: Record<string, { current: number, predicted: number }> = {
-    'Avocado': { current: 185, predicted: 203 },
-    'Mango': { current: 120, predicted: 110 },
-    'Apple': { current: 95, predicted: 105 },
-    'Tomato': { current: 35, predicted: 22 },
-    'Onion': { current: 40, predicted: 65 },
-    'Potato': { current: 28, predicted: 30 },
-    'Banana': { current: 50, predicted: 48 },
-    'Dragon Fruit': { current: 250, predicted: 280 }
-};
-
-const getTrend = (product: string) => MARKET_TRENDS_DB[product] || { current: 45, predicted: 50 };
+// REMOVED: Hardcoded MARKET_TRENDS_DB - now using useMarketPrices hook with live/simulated data
 
 const FarmerFinance: React.FC = () => {
   const { user } = useAuthStore();
@@ -25,6 +15,14 @@ const FarmerFinance: React.FC = () => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Extract unique product names for market price fetching
+  const productNames = useMemo(() => {
+    return [...new Set(batches.map(b => b.product).filter(Boolean))];
+  }, [batches]);
+
+  // Use market prices hook (fetches from API/store with 24hr cache)
+  const { getTrend, loading: pricesLoading, error: pricesError } = useMarketPrices(productNames);
 
   useEffect(() => {
      if (!user?.id || !activeRoomId) {
@@ -100,25 +98,27 @@ const FarmerFinance: React.FC = () => {
       );
   }
 
-  if (loading) {
+  if (loading || pricesLoading) {
       return <div className="p-8"><div className="animate-pulse h-64 bg-slate-100 dark:bg-slate-800 rounded-xl"></div></div>;
   }
 
-  // Calculate Finances natively!
+  // Calculate Finances using real/simulated market data
   let currentGrossValue = 0;
   let predictedGrossValue = 0;
   let totalKg = 0;
 
   batches.forEach(b => {
       const kg = b.initial_quantity_kg || 0;
-      const trend = getTrend(b.product);
+      const trend = getTrend(b.product); // Now fetches from market store with live/simulated data
       totalKg += kg;
       currentGrossValue += (trend.current * kg);
       predictedGrossValue += (trend.predicted * kg);
   });
 
-  // Calculate storage expenses (approximate dummy rate for UI demonstration natively if none assigned in DB: 2.5 ₹/kg/month)
-  const storageRate = 2.5; 
+  // Storage rate calculation
+  // TODO (Priority 2): Fetch from cold_storage_rooms.storage_rate_per_kg_month
+  // For now using system default, will be replaced with DB value
+  const storageRate = 2.5; // ₹/kg/month - System default 
   const storageCharges = totalKg * storageRate;
   const potentialProfit = predictedGrossValue - storageCharges;
 

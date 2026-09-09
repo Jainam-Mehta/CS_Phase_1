@@ -41,6 +41,8 @@ const StakeholderState: React.FC = () => {
   const loadStateData = async () => {
     try {
       setLoading(true);
+      
+      // NO DEMO DATA - All states use database query
       const profile = await resolveProfile(user!.id);
       if (!profile) throw new Error('Profile not found');
 

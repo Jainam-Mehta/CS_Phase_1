@@ -4,7 +4,38 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>coldsense-ai</title>
+    <title>ColdSense AI - Smart Cold Storage Management</title>
+    
+    <!-- Apply theme BEFORE React loads to prevent flash -->
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem('coldsense-settings');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const appearance = parsed.state?.appearance || 'system';
+            
+            if (appearance === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else if (appearance === 'light') {
+              document.documentElement.classList.remove('dark');
+            } else {
+              // system
+              if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+              }
+            }
+          } else {
+            // Default to system preference
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.classList.add('dark');
+            }
+          }
+        } catch (e) {
+          // Silent fail - let React handle it
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

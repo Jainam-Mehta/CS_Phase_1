@@ -84,7 +84,7 @@ const StakeholderMap: React.FC = () => {
       
     // Always load the portfolio data regardless of map status
     loadMapData();
-  }, [user]);
+  }, [user?.id]);
 
   const loadMapData = async () => {
     if (!user) return;
@@ -134,123 +134,11 @@ const StakeholderMap: React.FC = () => {
       setFacilities(flatFacilities);
       setInvestments(invs || []);
       
-      // For presentation: add demo data if no real investments
-      if (!invs || invs.length === 0) {
-        const demoInvestments = [
-          { facility_id: 'demo-1', investment_amount_inr: 25000000, roi_percentage_estimate: 18.5 },
-          { facility_id: 'demo-2', investment_amount_inr: 15000000, roi_percentage_estimate: 17.2 },
-          { facility_id: 'demo-3', investment_amount_inr: 15000000, roi_percentage_estimate: 20.1 },
-          { facility_id: 'demo-4', investment_amount_inr: 12000000, roi_percentage_estimate: 19.3 },
-          { facility_id: 'demo-5', investment_amount_inr: 10000000, roi_percentage_estimate: 16.8 },
-          { facility_id: 'demo-6', investment_amount_inr: 13000000, roi_percentage_estimate: 21.4 },
-          { facility_id: 'demo-7', investment_amount_inr: 11000000, roi_percentage_estimate: 18.9 },
-          { facility_id: 'demo-8', investment_amount_inr: 9000000, roi_percentage_estimate: 17.5 },
-          { facility_id: 'demo-9', investment_amount_inr: 14000000, roi_percentage_estimate: 20.7 },
-          { facility_id: 'demo-10', investment_amount_inr: 8000000, roi_percentage_estimate: 16.2 },
-          { facility_id: 'demo-11', investment_amount_inr: 10000000, roi_percentage_estimate: 19.8 },
-          { facility_id: 'demo-12', investment_amount_inr: 8500000, roi_percentage_estimate: 18.1 },
-          { facility_id: 'demo-13', investment_amount_inr: 9500000, roi_percentage_estimate: 20.3 },
-          { facility_id: 'demo-14', investment_amount_inr: 10500000, roi_percentage_estimate: 17.9 },
-          { facility_id: 'demo-15', investment_amount_inr: 9000000, roi_percentage_estimate: 19.5 },
-          { facility_id: 'demo-16', investment_amount_inr: 7500000, roi_percentage_estimate: 16.5 },
-          { facility_id: 'demo-17', investment_amount_inr: 11000000, roi_percentage_estimate: 21.1 },
-          { facility_id: 'demo-18', investment_amount_inr: 8000000, roi_percentage_estimate: 18.7 },
-          { facility_id: 'demo-19', investment_amount_inr: 9500000, roi_percentage_estimate: 20.0 },
-          { facility_id: 'demo-20', investment_amount_inr: 10000000, roi_percentage_estimate: 17.6 },
-          { facility_id: 'demo-21', investment_amount_inr: 8500000, roi_percentage_estimate: 19.2 },
-          { facility_id: 'demo-22', investment_amount_inr: 7500000, roi_percentage_estimate: 16.9 },
-          { facility_id: 'demo-23', investment_amount_inr: 9000000, roi_percentage_estimate: 20.5 },
-          { facility_id: 'demo-24', investment_amount_inr: 8800000, roi_percentage_estimate: 18.4 },
-          { facility_id: 'demo-25', investment_amount_inr: 12000000, roi_percentage_estimate: 19.6 },
-          { facility_id: 'demo-26', investment_amount_inr: 7000000, roi_percentage_estimate: 17.8 },
-          { facility_id: 'demo-27', investment_amount_inr: 9500000, roi_percentage_estimate: 20.2 }
-        ];
-        setInvestments(demoInvestments);
-        
-        // Add demo facilities for map visualization across India (27 invested + 46 non-invested = 73 total)
-        const demoFacilities = [
-          // Invested facilities (27)
-          { id: 'demo-1', facility_name: 'Cold Storage Mumbai', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Mumbai', cityName: 'Mumbai' },
-          { id: 'demo-2', facility_name: 'Cold Storage Ahmedabad', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Ahmedabad', cityName: 'Ahmedabad' },
-          { id: 'demo-3', facility_name: 'Cold Storage Bangalore', stateId: 'KA', stateName: 'Karnataka', districtName: 'Bangalore', cityName: 'Bangalore' },
-          { id: 'demo-4', facility_name: 'Cold Storage Shimla', stateId: 'HP', stateName: 'Himachal Pradesh', districtName: 'Shimla', cityName: 'Shimla' },
-          { id: 'demo-5', facility_name: 'Cold Storage Hamirpur', stateId: 'HP', stateName: 'Himachal Pradesh', districtName: 'Hamirpur', cityName: 'Hamirpur' },
-          { id: 'demo-6', facility_name: 'Cold Storage Kullu', stateId: 'HP', stateName: 'Himachal Pradesh', districtName: 'Kullu', cityName: 'Kullu' },
-          { id: 'demo-7', facility_name: 'Cold Storage Kanyakumari', stateId: 'TN', stateName: 'Tamil Nadu', districtName: 'Kanyakumari', cityName: 'Kanyakumari' },
-          { id: 'demo-8', facility_name: 'Cold Storage Chennai', stateId: 'TN', stateName: 'Tamil Nadu', districtName: 'Chennai', cityName: 'Chennai' },
-          { id: 'demo-9', facility_name: 'Cold Storage Delhi', stateId: 'DL', stateName: 'Delhi', districtName: 'Central Delhi', cityName: 'Delhi' },
-          { id: 'demo-10', facility_name: 'Cold Storage Kolkata', stateId: 'WB', stateName: 'West Bengal', districtName: 'Kolkata', cityName: 'Kolkata' },
-          { id: 'demo-11', facility_name: 'Cold Storage Hyderabad', stateId: 'TS', stateName: 'Telangana', districtName: 'Hyderabad', cityName: 'Hyderabad' },
-          { id: 'demo-12', facility_name: 'Cold Storage Pune', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Pune', cityName: 'Pune' },
-          { id: 'demo-13', facility_name: 'Cold Storage Nagpur', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Nagpur', cityName: 'Nagpur' },
-          { id: 'demo-14', facility_name: 'Cold Storage Surat', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Surat', cityName: 'Surat' },
-          { id: 'demo-15', facility_name: 'Cold Storage Vadodara', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Vadodara', cityName: 'Vadodara' },
-          { id: 'demo-16', facility_name: 'Cold Storage Mysore', stateId: 'KA', stateName: 'Karnataka', districtName: 'Mysore', cityName: 'Mysore' },
-          { id: 'demo-17', facility_name: 'Cold Storage Hubli', stateId: 'KA', stateName: 'Karnataka', districtName: 'Hubli', cityName: 'Hubli' },
-          { id: 'demo-18', facility_name: 'Cold Storage Jaipur', stateId: 'RJ', stateName: 'Rajasthan', districtName: 'Jaipur', cityName: 'Jaipur' },
-          { id: 'demo-19', facility_name: 'Cold Storage Lucknow', stateId: 'UP', stateName: 'Uttar Pradesh', districtName: 'Lucknow', cityName: 'Lucknow' },
-          { id: 'demo-20', facility_name: 'Cold Storage Kanpur', stateId: 'UP', stateName: 'Uttar Pradesh', districtName: 'Kanpur', cityName: 'Kanpur' },
-          { id: 'demo-21', facility_name: 'Cold Storage Bhopal', stateId: 'MP', stateName: 'Madhya Pradesh', districtName: 'Bhopal', cityName: 'Bhopal' },
-          { id: 'demo-22', facility_name: 'Cold Storage Indore', stateId: 'MP', stateName: 'Madhya Pradesh', districtName: 'Indore', cityName: 'Indore' },
-          { id: 'demo-23', facility_name: 'Cold Storage Chandigarh', stateId: 'CH', stateName: 'Chandigarh', districtName: 'Chandigarh', cityName: 'Chandigarh' },
-          { id: 'demo-24', facility_name: 'Cold Storage Amritsar', stateId: 'PB', stateName: 'Punjab', districtName: 'Amritsar', cityName: 'Amritsar' },
-          { id: 'demo-25', facility_name: 'Cold Storage Guwahati', stateId: 'AS', stateName: 'Assam', districtName: 'Kamrup', cityName: 'Guwahati' },
-          { id: 'demo-26', facility_name: 'Cold Storage Dibrugarh', stateId: 'AS', stateName: 'Assam', districtName: 'Dibrugarh', cityName: 'Dibrugarh' },
-          { id: 'demo-27', facility_name: 'Cold Storage Jorhat', stateId: 'AS', stateName: 'Assam', districtName: 'Jorhat', cityName: 'Jorhat' },
-          // Non-invested facilities (46 more for visualization only)
-          { id: 'demo-28', facility_name: 'Cold Storage Thane', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Thane', cityName: 'Thane' },
-          { id: 'demo-29', facility_name: 'Cold Storage Nashik', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Nashik', cityName: 'Nashik' },
-          { id: 'demo-30', facility_name: 'Cold Storage Aurangabad', stateId: 'MH', stateName: 'Maharashtra', districtName: 'Aurangabad', cityName: 'Aurangabad' },
-          { id: 'demo-31', facility_name: 'Cold Storage Rajkot', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Rajkot', cityName: 'Rajkot' },
-          { id: 'demo-32', facility_name: 'Cold Storage Bhavnagar', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Bhavnagar', cityName: 'Bhavnagar' },
-          { id: 'demo-33', facility_name: 'Cold Storage Jamnagar', stateId: 'GJ', stateName: 'Gujarat', districtName: 'Jamnagar', cityName: 'Jamnagar' },
-          { id: 'demo-34', facility_name: 'Cold Storage Mangalore', stateId: 'KA', stateName: 'Karnataka', districtName: 'Mangalore', cityName: 'Mangalore' },
-          { id: 'demo-35', facility_name: 'Cold Storage Belgaum', stateId: 'KA', stateName: 'Karnataka', districtName: 'Belgaum', cityName: 'Belgaum' },
-          { id: 'demo-36', facility_name: 'Cold Storage Davanagere', stateId: 'KA', stateName: 'Karnataka', districtName: 'Davanagere', cityName: 'Davanagere' },
-          { id: 'demo-37', facility_name: 'Cold Storage Manali', stateId: 'HP', stateName: 'Himachal Pradesh', districtName: 'Kullu', cityName: 'Manali' },
-          { id: 'demo-38', facility_name: 'Cold Storage Dharamshala', stateId: 'HP', stateName: 'Himachal Pradesh', districtName: 'Kangra', cityName: 'Dharamshala' },
-          { id: 'demo-39', facility_name: 'Cold Storage Coimbatore', stateId: 'TN', stateName: 'Tamil Nadu', districtName: 'Coimbatore', cityName: 'Coimbatore' },
-          { id: 'demo-40', facility_name: 'Cold Storage Madurai', stateId: 'TN', stateName: 'Tamil Nadu', districtName: 'Madurai', cityName: 'Madurai' },
-          { id: 'demo-41', facility_name: 'Cold Storage Tiruchirappalli', stateId: 'TN', stateName: 'Tamil Nadu', districtName: 'Tiruchirappalli', cityName: 'Tiruchirappalli' },
-          { id: 'demo-42', facility_name: 'Cold Storage New Delhi', stateId: 'DL', stateName: 'Delhi', districtName: 'New Delhi', cityName: 'New Delhi' },
-          { id: 'demo-43', facility_name: 'Cold Storage North Delhi', stateId: 'DL', stateName: 'Delhi', districtName: 'North Delhi', cityName: 'North Delhi' },
-          { id: 'demo-44', facility_name: 'Cold Storage South Delhi', stateId: 'DL', stateName: 'Delhi', districtName: 'South Delhi', cityName: 'South Delhi' },
-          { id: 'demo-45', facility_name: 'Cold Storage Howrah', stateId: 'WB', stateName: 'West Bengal', districtName: 'Howrah', cityName: 'Howrah' },
-          { id: 'demo-46', facility_name: 'Cold Storage Durgapur', stateId: 'WB', stateName: 'West Bengal', districtName: 'Bardhaman', cityName: 'Durgapur' },
-          { id: 'demo-47', facility_name: 'Cold Storage Asansol', stateId: 'WB', stateName: 'West Bengal', districtName: 'Bardhaman', cityName: 'Asansol' },
-          { id: 'demo-48', facility_name: 'Cold Storage Warangal', stateId: 'TS', stateName: 'Telangana', districtName: 'Warangal', cityName: 'Warangal' },
-          { id: 'demo-49', facility_name: 'Cold Storage Nizamabad', stateId: 'TS', stateName: 'Telangana', districtName: 'Nizamabad', cityName: 'Nizamabad' },
-          { id: 'demo-50', facility_name: 'Cold Storage Karimnagar', stateId: 'TS', stateName: 'Telangana', districtName: 'Karimnagar', cityName: 'Karimnagar' },
-          { id: 'demo-51', facility_name: 'Cold Storage Udaipur', stateId: 'RJ', stateName: 'Rajasthan', districtName: 'Udaipur', cityName: 'Udaipur' },
-          { id: 'demo-52', facility_name: 'Cold Storage Jodhpur', stateId: 'RJ', stateName: 'Rajasthan', districtName: 'Jodhpur', cityName: 'Jodhpur' },
-          { id: 'demo-53', facility_name: 'Cold Storage Kota', stateId: 'RJ', stateName: 'Rajasthan', districtName: 'Kota', cityName: 'Kota' },
-          { id: 'demo-54', facility_name: 'Cold Storage Agra', stateId: 'UP', stateName: 'Uttar Pradesh', districtName: 'Agra', cityName: 'Agra' },
-          { id: 'demo-55', facility_name: 'Cold Storage Varanasi', stateId: 'UP', stateName: 'Uttar Pradesh', districtName: 'Varanasi', cityName: 'Varanasi' },
-          { id: 'demo-56', facility_name: 'Cold Storage Prayagraj', stateId: 'UP', stateName: 'Uttar Pradesh', districtName: 'Prayagraj', cityName: 'Prayagraj' },
-          { id: 'demo-57', facility_name: 'Cold Storage Gwalior', stateId: 'MP', stateName: 'Madhya Pradesh', districtName: 'Gwalior', cityName: 'Gwalior' },
-          { id: 'demo-58', facility_name: 'Cold Storage Jabalpur', stateId: 'MP', stateName: 'Madhya Pradesh', districtName: 'Jabalpur', cityName: 'Jabalpur' },
-          { id: 'demo-59', facility_name: 'Cold Storage Sagar', stateId: 'MP', stateName: 'Madhya Pradesh', districtName: 'Sagar', cityName: 'Sagar' },
-          { id: 'demo-60', facility_name: 'Cold Storage Ludhiana', stateId: 'PB', stateName: 'Punjab', districtName: 'Ludhiana', cityName: 'Ludhiana' },
-          { id: 'demo-61', facility_name: 'Cold Storage Jalandhar', stateId: 'PB', stateName: 'Punjab', districtName: 'Jalandhar', cityName: 'Jalandhar' },
-          { id: 'demo-62', facility_name: 'Cold Storage Patiala', stateId: 'PB', stateName: 'Punjab', districtName: 'Patiala', cityName: 'Patiala' },
-          { id: 'demo-63', facility_name: 'Cold Storage Srinagar', stateId: 'JK', stateName: 'Jammu & Kashmir', districtName: 'Srinagar', cityName: 'Srinagar' },
-          { id: 'demo-64', facility_name: 'Cold Storage Jammu', stateId: 'JK', stateName: 'Jammu & Kashmir', districtName: 'Jammu', cityName: 'Jammu' },
-          { id: 'demo-65', facility_name: 'Cold Storage Tezpur', stateId: 'AS', stateName: 'Assam', districtName: 'Sonitpur', cityName: 'Tezpur' },
-          { id: 'demo-66', facility_name: 'Cold Storage Silchar', stateId: 'AS', stateName: 'Assam', districtName: 'Cachar', cityName: 'Silchar' },
-          { id: 'demo-67', facility_name: 'Cold Storage Bhubaneswar', stateId: 'OD', stateName: 'Odisha', districtName: 'Khordha', cityName: 'Bhubaneswar' },
-          { id: 'demo-68', facility_name: 'Cold Storage Cuttack', stateId: 'OD', stateName: 'Odisha', districtName: 'Cuttack', cityName: 'Cuttack' },
-          { id: 'demo-69', facility_name: 'Cold Storage Rourkela', stateId: 'OD', stateName: 'Odisha', districtName: 'Sundargarh', cityName: 'Rourkela' },
-          { id: 'demo-70', facility_name: 'Cold Storage Puri', stateId: 'OD', stateName: 'Odisha', districtName: 'Puri', cityName: 'Puri' },
-          { id: 'demo-71', facility_name: 'Cold Storage Kochi', stateId: 'KL', stateName: 'Kerala', districtName: 'Ernakulam', cityName: 'Kochi' },
-          { id: 'demo-72', facility_name: 'Cold Storage Thiruvananthapuram', stateId: 'KL', stateName: 'Kerala', districtName: 'Thiruvananthapuram', cityName: 'Thiruvananthapuram' },
-          { id: 'demo-73', facility_name: 'Cold Storage Kozhikode', stateId: 'KL', stateName: 'Kerala', districtName: 'Kozhikode', cityName: 'Kozhikode' }
-        ];
-        setFacilities(demoFacilities);
-      }
+      // NO DEMO DATA - Show real investments only
+      // If stakeholder has no investments, they'll see empty state
       
     } catch (e) {
       console.error("Error loading portfolio data:", e);
-      // Set empty arrays to prevent UI from hanging
       setFacilities([]);
       setInvestments([]);
     } finally {

@@ -223,12 +223,8 @@ const StakeholderInvestmentPreferences: React.FC = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('mode') === 'extension') {
-           navigate('/stakeholder/settings?extended=true');
-        } else {
-           navigate('/stakeholder/dashboard');
-        }
+        // Always go to stakeholder map after saving preferences
+        navigate('/stakeholder/map');
       }, 2000);
     } catch (err: any) {
       console.error('Error saving preferences:', err);
@@ -253,6 +249,9 @@ const StakeholderInvestmentPreferences: React.FC = () => {
           <div className="flex items-center justify-center gap-3 mb-2">
             <Briefcase className="h-8 w-8 text-white" />
             <h1 className="text-3xl font-bold text-white">Investment Preferences</h1>
+            <div className="text-sm font-semibold text-purple-600 bg-white px-3 py-1 rounded-full">
+              Step 3/3
+            </div>
           </div>
           <p className="text-white/90">Tell us where you'd like to invest</p>
         </div>

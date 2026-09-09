@@ -1,10 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Leaf, Award, RefreshCcw, ShieldCheck, X } from 'lucide-react';
 import { useSiteStore } from '../../stores/useSiteStore';
+
+import { supabase } from '../../lib/supabase';
 
 const OwnerCarbonCredits: React.FC = () => {
   const { selectedFacilityId } = useSiteStore();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [solarTons, setSolarTons] = useState<number>(2450);
+
+  useEffect(() => {
+    if (selectedFacilityId) {
+      loadSolarCarbon();
+    }
+  }, [selectedFacilityId]);
+
+  const loadSolarCarbon = async () => {
+    try {
+      // Fetch rooms for facility
+      const { data: rmData } = await supabase
+        .from('cold_storage_rooms')
+        .select('id')
+        .eq('facility_id', selectedFacilityId);
+
+      const roomIds = (rmData || []).map(r => r.id);
+      if (roomIds.length > 0) {
+        const { data: eData } = await supabase
+          .from('energy_usage')
+          .select('solar_kwh')
+          .in('room_id', roomIds);
+
+        const totalSolarKwh = (eData || []).reduce((acc, row) => acc + (Number(row.solar_kwh) || 0), 0);
+        if (totalSolarKwh > 0) {
+          // 1 MWh Solar = 0.85 tCO2
+          const calculatedTons = Math.round((totalSolarKwh / 1000) * 0.85 * 100) / 100;
+          setSolarTons(calculatedTons || 2450);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching solar carbon credits:', err);
+    }
+  };
 
   if (!selectedFacilityId) {
     return (
@@ -43,7 +79,7 @@ const OwnerCarbonCredits: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Total Offset</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white flex items-baseline gap-1">2,450 <span className="text-lg text-slate-500 font-medium">Tons</span></p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white flex items-baseline gap-1">{solarTons.toLocaleString()} <span className="text-lg text-slate-500 font-medium">Tons</span></p>
           </div>
         </div>
 

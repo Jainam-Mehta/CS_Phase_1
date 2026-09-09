@@ -46,8 +46,7 @@ const FarmerProfile: React.FC = () => {
      approvedRooms: 0,
      pendingRequests: 0,
      activeProducts: 0,
-     totalQuantityStored: 0,
-     currentFacility: 'None'
+     totalQuantityStored: 0
   });
 
   // Edit Mode Data
@@ -127,21 +126,16 @@ const FarmerProfile: React.FC = () => {
       setSelectedLocalityId(data.locality_id?.toString());
 
       // Fetch Storage Stats
-      let appRooms = 0, penRooms = 0, cf = 'None';
+      let appRooms = 0, penRooms = 0;
       const { data: rooms } = await supabase
         .from('farmer_room_access')
-        .select(`status, cold_storage_rooms(facilities(facility_name))`)
+        .select(`status`)
         .eq('farmer_id', data.id);
       
       if (rooms) {
          for (const r of rooms) {
             if (r.status === 'Approved') {
                appRooms++;
-               const rm = Array.isArray(r.cold_storage_rooms) ? r.cold_storage_rooms[0] : r.cold_storage_rooms;
-               if (rm?.facilities) {
-                  const fac = Array.isArray(rm.facilities) ? rm.facilities[0] : rm.facilities;
-                  if (fac) cf = fac.facility_name;
-               }
             } else if (r.status === 'Pending') {
                penRooms++;
             }
@@ -151,17 +145,21 @@ const FarmerProfile: React.FC = () => {
       const { count: aProd } = await supabase.from('farmer_products').select('*', { count: 'exact', head: true }).eq('farmer_id', data.id);
       
       let totKg = 0;
-      const { data: inv } = await supabase.from('farmer_inventory').select('current_quantity_kg').eq('farmer_profile_id', data.id);
+      // farmer_inventory table doesn't exist — use batch_room_allocations joined with batches
+      const { data: inv } = await supabase
+        .from('batch_room_allocations')
+        .select('quantity_kg, batches!inner(farmer_id)')
+        .eq('batches.farmer_id', data.id)
+        .is('removed_at', null);
       if (inv) {
-         totKg = inv.reduce((sum, item) => sum + (item.current_quantity_kg || 0), 0);
+         totKg = inv.reduce((sum, item) => sum + (Number(item.quantity_kg) || 0), 0);
       }
 
       setStats({
           approvedRooms: appRooms,
           pendingRequests: penRooms,
           activeProducts: aProd || 0,
-          totalQuantityStored: totKg,
-          currentFacility: cf
+          totalQuantityStored: totKg
       });
 
     } catch (err) {
@@ -275,11 +273,6 @@ const FarmerProfile: React.FC = () => {
                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
                   <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Products</span>
                   <span className="font-bold text-slate-900 dark:text-white">{stats.activeProducts}</span>
-               </div>
-
-               <div className="pt-2">
-                  <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">Current Facility</p>
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 border p-2 rounded shadow-sm">{stats.currentFacility}</p>
                </div>
             </CardContent>
           </Card>

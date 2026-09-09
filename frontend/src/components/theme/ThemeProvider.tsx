@@ -5,7 +5,35 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const { appearance } = useSettingsStore();
   const [mounted, setMounted] = useState(false);
 
+  // Apply theme IMMEDIATELY on mount (before React hydration)
   useEffect(() => {
+    // Get theme from localStorage directly (faster than waiting for Zustand)
+    // Default to 'light' theme when no preference is stored
+    const getInitialTheme = () => {
+      try {
+        const stored = localStorage.getItem('coldsense-settings');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return parsed.state?.appearance || 'light';
+        }
+      } catch {
+        return 'light';
+      }
+      return 'light';
+    };
+
+    const initialTheme = getInitialTheme();
+    const root = document.documentElement;
+    
+    if (initialTheme === 'dark') {
+      root.classList.add('dark');
+    } else if (initialTheme === 'light') {
+      root.classList.remove('dark');
+    } else {
+      // system - default to light instead of following system preference
+      root.classList.remove('dark');
+    }
+
     setMounted(true);
   }, []);
 
@@ -28,7 +56,7 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       return 'light';
     };
 
-    // Apply initial theme
+    // Apply theme when appearance changes
     if (appearance === 'system') {
       applyTheme(getSystemTheme());
     } else {
@@ -46,11 +74,6 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [appearance, mounted]);
-
-  // Prevent flash of unstyled content
-  if (!mounted) {
-    return <>{children}</>;
-  }
 
   return <>{children}</>;
 };

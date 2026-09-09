@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { Plus, Building, User, Warehouse, Clock, CheckCircle, XCircle, Briefcase } from 'lucide-react';
+import { Plus, Building, User, Warehouse, Clock, CheckCircle, XCircle, Briefcase, Users, IndianRupee, Save, Edit2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -15,6 +15,12 @@ const SettingsPage: React.FC = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [stakeholderRequests, setStakeholderRequests] = useState<any[]>([]);
   const [loadingReqs, setLoadingReqs] = useState(false);
+  
+  // Facilities Details State
+  const [facilities, setFacilities] = useState<any[]>([]);
+  const [loadingFacilities, setLoadingFacilities] = useState(false);
+  const [editingPricing, setEditingPricing] = useState<{facilityId: string, farmerId: string} | null>(null);
+  const [pricingInput, setPricingInput] = useState<string>('');
 
   const {
     doorAlerts,
@@ -37,8 +43,10 @@ const SettingsPage: React.FC = () => {
          loadMyRequests();
     } else if (user?.role === 'stakeholder') {
          loadStakeholderRequests();
+    } else if (user?.role === 'owner') {
+         loadFacilitiesWithFarmers();
     }
-  }, [user]);
+  }, [user?.id]);
 
   const loadMyRequests = async () => {
     if (!user?.id) return;
@@ -88,12 +96,147 @@ const SettingsPage: React.FC = () => {
      }
   };
 
+  const loadFacilitiesWithFarmers = async () => {
+    if (!user?.id) return;
+    try {
+      setLoadingFacilities(true);
+      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+      if (!profile) return;
+      
+      // Get all facilities owned by this owner
+      const { data: facilitiesData, error: facilityError } = await supabase
+        .from('facilities')
+        .select('id, facility_name, location')
+        .eq('owner_id', profile.id)
+        .order('facility_name');
+      
+      if (facilityError) throw facilityError;
+      if (!facilitiesData || facilitiesData.length === 0) {
+        setFacilities([]);
+        return;
+      }
+      
+      // For each facility, get approved farmers with their pricing
+      const facilitiesWithFarmers = await Promise.all(
+        facilitiesData.map(async (facility) => {
+          // Get rooms for this facility
+          const { data: rooms } = await supabase
+            .from('cold_storage_rooms')
+            .select('id')
+            .eq('facility_id', facility.id);
+          
+          if (!rooms || rooms.length === 0) {
+            return { ...facility, farmers: [] };
+          }
+          
+          const roomIds = rooms.map(r => r.id);
+          
+          // Get approved farmer accesses for these rooms
+          const { data: accesses } = await supabase
+            .from('farmer_room_access')
+            .select(`
+              id,
+              farmer_id,
+              price_per_crate,
+              profiles!farmer_room_access_farmer_id_fkey(
+                id,
+                full_name,
+                auth_user_id
+              )
+            `)
+            .in('room_id', roomIds)
+            .eq('status', 'Approved');
+          
+          // Group by farmer (since we're treating 1 facility = 1 room concept)
+          const farmerMap = new Map();
+          if (accesses) {
+            accesses.forEach(access => {
+              const farmerProfile = Array.isArray(access.profiles) ? access.profiles[0] : access.profiles;
+              if (farmerProfile && !farmerMap.has(access.farmer_id)) {
+                farmerMap.set(access.farmer_id, {
+                  farmerId: access.farmer_id,
+                  farmerName: farmerProfile.full_name || 'Unknown Farmer',
+                  pricePerCrate: access.price_per_crate || null,
+                  accessId: access.id
+                });
+              }
+            });
+          }
+          
+          return {
+            ...facility,
+            farmers: Array.from(farmerMap.values())
+          };
+        })
+      );
+      
+      setFacilities(facilitiesWithFarmers);
+    } catch (err) {
+      console.error('Failed loading facilities with farmers:', err);
+    } finally {
+      setLoadingFacilities(false);
+    }
+  };
+
+  const handleSavePricing = async (facilityId: string, farmerId: string, accessId: string) => {
+    try {
+      const price = parseFloat(pricingInput);
+      if (isNaN(price) || price < 0) {
+        alert('Please enter a valid price');
+        return;
+      }
+      
+      // Update the farmer_room_access record with the new pricing
+      const { error } = await supabase
+        .from('farmer_room_access')
+        .update({ price_per_crate: price })
+        .eq('id', accessId);
+      
+      if (error) throw error;
+      
+      // Update local state
+      setFacilities(prev => prev.map(facility => {
+        if (facility.id === facilityId) {
+          return {
+            ...facility,
+            farmers: facility.farmers.map((f: any) => 
+              f.farmerId === farmerId ? { ...f, pricePerCrate: price } : f
+            )
+          };
+        }
+        return facility;
+      }));
+      
+      setEditingPricing(null);
+      setPricingInput('');
+    } catch (err) {
+      console.error('Failed to update pricing:', err);
+      alert('Failed to update pricing. Please try again.');
+    }
+  };
+
+  const startEditingPricing = (facilityId: string, farmerId: string, currentPrice: number | null) => {
+    setEditingPricing({ facilityId, farmerId });
+    setPricingInput(currentPrice?.toString() || '');
+  };
+
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+
   const handleSave = () => {
-    alert('Settings saved successfully!');
+    // Settings are already persisted reactively via useSettingsStore (Zustand persist)
+    // Show a brief success banner instead of a blocking alert()
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   const handleReset = () => {
-    if (confirm('Are you sure you want to reset all settings to default?')) resetSettings();
+    setResetConfirm(true);
+  };
+
+  const confirmReset = () => {
+    resetSettings();
+    setResetConfirm(false);
   };
 
   const getStatusBadge = (status: string) => {
@@ -106,6 +249,30 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pt-6 px-4 pb-12">
+      {/* Save success banner */}
+      {saveSuccess && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 bg-emerald-600 text-white rounded-xl shadow-xl">
+          <CheckCircle className="w-5 h-5" />
+          <span className="font-medium text-sm">Settings saved successfully!</span>
+        </div>
+      )}
+
+      {/* Reset confirmation modal */}
+      {resetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 border border-slate-200 dark:border-slate-700">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Reset Settings?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              This will restore all settings to their defaults. Your account data won't be affected.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setResetConfirm(false)} className="flex-1">Cancel</Button>
+              <Button variant="primary" onClick={confirmReset} className="flex-1 bg-red-600 hover:bg-red-700 border-red-600">Reset</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
           Settings
@@ -117,27 +284,175 @@ const SettingsPage: React.FC = () => {
 
       {/* Facilities Management (Owner Only) */}
       {user?.role === 'owner' && (
-        <Card variant="default" className="border-blue-100 dark:border-blue-900/30">
-          <CardHeader className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-50 dark:border-blue-900/20">
-            <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Building className="w-5 h-5" />
-              Facilities Management
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Add New Site</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mt-1">
-                  Register a new cold storage facility to your network. This will begin the setup process for new rooms and sensor gateways.
+        <>
+          <Card variant="default" className="border-blue-100 dark:border-blue-900/30">
+            <CardHeader className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-50 dark:border-blue-900/20">
+              <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                <Building className="w-5 h-5" />
+                Facilities Management
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Add New Site</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mt-1">
+                    Register a new cold storage facility to your network. This will begin the setup process for new rooms and sensor gateways.
+                  </p>
+                </div>
+                <Button variant="primary" onClick={() => navigate('/owner-setup')} className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" /> Add Facility
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Facilities Details Section */}
+          <Card variant="default" className="border-emerald-100 dark:border-emerald-900/30">
+            <CardHeader className="bg-emerald-50/50 dark:bg-emerald-900/10 border-b border-emerald-50 dark:border-emerald-900/20">
+              <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                <Users className="w-5 h-5" />
+                Facilities Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {loadingFacilities ? (
+                <div className="text-center py-8 text-gray-500">Loading facilities...</div>
+              ) : facilities.length === 0 ? (
+                <div className="text-center py-8">
+                  <Building className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    No facilities found. Add your first facility to get started.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {facilities.map((facility) => (
+                    <div key={facility.id} className="border border-gray-200 dark:border-slate-700 rounded-xl p-5 bg-gray-50/30 dark:bg-slate-800/30">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                            <Building className="w-5 h-5 text-emerald-600" />
+                            {facility.facility_name}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {facility.location || 'Location not specified'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-sm font-medium">
+                          <Users className="w-4 h-4" />
+                          {facility.farmers.length} Farmer{facility.farmers.length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                      
+                      {facility.farmers.length === 0 ? (
+                        <div className="text-center py-6 bg-white dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700">
+                          <User className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500 dark:text-gray-400">No farmers currently using this facility</p>
+                        </div>
+                      ) : (
+                        <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-200 dark:border-slate-700">
+                              <tr>
+                                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Farmer Name</th>
+                                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Price per Crate</th>
+                                <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                              {facility.farmers.map((farmer: any) => {
+                                const isEditing = editingPricing?.facilityId === facility.id && editingPricing?.farmerId === farmer.farmerId;
+                                
+                                return (
+                                  <tr key={farmer.farmerId} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                      <div className="flex items-center gap-2">
+                                        <User className="w-4 h-4 text-gray-400" />
+                                        {farmer.farmerName}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {isEditing ? (
+                                        <div className="flex items-center gap-2">
+                                          <div className="relative flex-1 max-w-[120px]">
+                                            <IndianRupee className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                            <input
+                                              type="number"
+                                              value={pricingInput}
+                                              onChange={(e) => setPricingInput(e.target.value)}
+                                              className="w-full pl-9 pr-3 py-1.5 border border-emerald-300 dark:border-emerald-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                                              placeholder="0.00"
+                                              autoFocus
+                                            />
+                                          </div>
+                                          <span className="text-gray-500 dark:text-gray-400">/ crate</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
+                                          {farmer.pricePerCrate !== null ? (
+                                            <>
+                                              <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                              <span className="font-semibold">{farmer.pricePerCrate.toFixed(2)}</span>
+                                              <span className="text-gray-500 dark:text-gray-400">/ crate</span>
+                                            </>
+                                          ) : (
+                                            <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      {isEditing ? (
+                                        <div className="flex items-center justify-end gap-2">
+                                          <Button
+                                            variant="primary"
+                                            onClick={() => handleSavePricing(facility.id, farmer.farmerId, farmer.accessId)}
+                                            className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1"
+                                          >
+                                            <Save className="w-3 h-3" /> Save
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                              setEditingPricing(null);
+                                              setPricingInput('');
+                                            }}
+                                            className="px-3 py-1.5 text-xs"
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <Button
+                                          variant="outline"
+                                          onClick={() => startEditingPricing(facility.id, farmer.farmerId, farmer.pricePerCrate)}
+                                          className="px-3 py-1.5 text-xs flex items-center gap-1"
+                                        >
+                                          <Edit2 className="w-3 h-3" />
+                                          {farmer.pricePerCrate !== null ? 'Edit' : 'Set'} Price
+                                        </Button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30">
+                <p className="text-sm text-blue-700 dark:text-blue-400">
+                  <strong>Note:</strong> Multiple farmers can use the same facility at different times. Set individual pricing per farmer per facility based on your agreement. Price is charged per crate (25kg).
                 </p>
               </div>
-              <Button variant="primary" onClick={() => navigate('/owner-setup')} className="flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Add Facility
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Storage Access Management (Farmer Only) */}

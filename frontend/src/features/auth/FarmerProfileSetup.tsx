@@ -6,7 +6,7 @@ import { getFarmerRoleId } from '../../services/roleService';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import SearchableSelect from '../../components/ui/SearchableSelect';
-import { User, MapPin, Calendar, Check, AlertCircle, Sprout } from 'lucide-react';
+import { User, MapPin, Calendar, Check, AlertCircle, Sprout, Phone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { State, District, Locality } from '../../lib/supabase';
 
@@ -17,6 +17,7 @@ const FarmerProfileSetup: React.FC = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    phoneNumber: '',
     dateOfBirth: '',
     gender: '',
     state: '',
@@ -140,8 +141,15 @@ const FarmerProfileSetup: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    // Required fields validation
     if (!formData.firstName || !selectedStateId || !selectedDistrictId) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Optional phone validation (if provided, must be 10 digits)
+    if (formData.phoneNumber && !/^[0-9]{10}$/.test(formData.phoneNumber)) {
+      setError('Phone number must be exactly 10 digits');
       return;
     }
 
@@ -203,6 +211,7 @@ const FarmerProfileSetup: React.FC = () => {
           auth_user_id: user.id,
           first_name: formData.firstName,
           last_name: formData.lastName || null,
+          phone: formData.phoneNumber || null,
           date_of_birth: formData.dateOfBirth || null,
           gender: formData.gender || null,
           state_id: selectedStateId,
@@ -218,8 +227,9 @@ const FarmerProfileSetup: React.FC = () => {
 
       console.log('✓ Farmer profile created successfully in public.profiles');
 
-      // Clear signup data to prevent stale data
+      // Clear signup data and any old storage request data to prevent stale data
       localStorage.removeItem('signupData');
+      localStorage.removeItem('storageAccessRequest');
 
       // Clear selected role from store to prevent stale data on refresh
       setSelectedRole(null);
@@ -233,8 +243,8 @@ const FarmerProfileSetup: React.FC = () => {
         sites: [],
       });
 
-      // Immediately navigate to site selection
-      navigate('/storage-selection');
+      // Navigate directly to farmer dashboard (skip storage selection)
+      navigate('/farmer');
     } catch (err) {
       console.error('Error saving profile:', err);
       setError('Failed to save profile. Please try again.');
@@ -391,7 +401,14 @@ const FarmerProfileSetup: React.FC = () => {
 
         {/* Form Card */}
         <Card variant="default" className="w-full max-w-lg">
-          <CardHeader className="text-center">
+          <CardHeader className="text-center relative">
+            {/* Step Indicator */}
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
+                Step 2/2
+              </span>
+            </div>
+            
             <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Sprout className="h-8 w-8 text-white" />
             </div>
@@ -429,7 +446,7 @@ const FarmerProfileSetup: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Last Name (Optional)
+                    Last Name
                   </label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -444,10 +461,29 @@ const FarmerProfileSetup: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={formData.phoneNumber}
+                    onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                    placeholder="Enter your phone number"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional - 10 digits if provided</p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth (Optional)
+                    Date of Birth
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -462,7 +498,7 @@ const FarmerProfileSetup: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Gender (Optional)
+                    Gender
                   </label>
                   <select
                     value={formData.gender}
@@ -510,7 +546,7 @@ const FarmerProfileSetup: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Locality (Optional)
+                  Locality
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -544,7 +580,7 @@ const FarmerProfileSetup: React.FC = () => {
                 className="w-full"
                 loading={loading}
               >
-                Confirm Profile
+                Create Account
               </Button>
             </form>
           </CardContent>

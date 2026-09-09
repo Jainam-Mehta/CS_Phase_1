@@ -1,13 +1,15 @@
 /**
  * OnboardingRoute Component
- * CRITICAL FIX: This component should ONLY gate access, not navigate
- * Navigation is handled by RoleRedirect in routes
- * 
- * Wraps protected routes to ensure onboarding is complete before allowing access
- * Uses the useOnboarding hook to determine the correct routing
+ *
+ * Gates access to protected pages by checking onboarding completion.
+ * If onboarding is not done, navigates the user to the correct next step.
+ * Navigation here is intentional — RoleRedirect handles the initial
+ * role-based redirect; OnboardingRoute handles the step-based redirect
+ * that happens AFTER the role layout has mounted.
  */
 
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useOnboarding } from '../../hooks/useOnboarding';
 
 interface OnboardingRouteProps {
@@ -15,17 +17,19 @@ interface OnboardingRouteProps {
 }
 
 const OnboardingRoute: React.FC<OnboardingRouteProps> = ({ children }) => {
-  const { step, loading, navigateToCurrentStep } = useOnboarding();
+  const navigate = useNavigate();
+  const { step, loading, targetRoute } = useOnboarding();
 
   useEffect(() => {
-    if (!loading) {
-      // Only navigate to onboarding steps if not on dashboard
-      // Do NOT navigate to dashboards - that's handled by RoleRedirect
-      if (step !== 'dashboard') {
-        navigateToCurrentStep();
-      }
+    if (loading) return;
+
+    // targetRoute is null when step === 'dashboard' (onboarding complete)
+    // or when loading. Only navigate away if there's an actual step to go to.
+    if (step !== 'dashboard' && targetRoute) {
+      console.log('OnboardingRoute: onboarding incomplete, navigating to', targetRoute);
+      navigate(targetRoute);
     }
-  }, [loading, step, navigateToCurrentStep]);
+  }, [loading, step, targetRoute, navigate]);
 
   if (loading) {
     return (
@@ -35,12 +39,12 @@ const OnboardingRoute: React.FC<OnboardingRouteProps> = ({ children }) => {
     );
   }
 
-  // Only render children if onboarding is complete
+  // Render children only when onboarding is fully complete
   if (step === 'dashboard') {
     return <>{children}</>;
   }
 
-  // Otherwise, don't render anything (the navigateToCurrentStep will handle redirection)
+  // Navigation is in flight — render nothing to avoid a layout flash
   return null;
 };
 

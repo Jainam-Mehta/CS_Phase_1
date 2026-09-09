@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent white space when scrolling - FIXED */
+html, body {
+  @apply h-full w-full;
+  overflow-x: hidden;
+  overflow-y: scroll; /* Always show scrollbar to prevent layout shift */
+  background-color: rgb(var(--background));
+}
+
+#root {
+  @apply h-full w-full;
+  min-height: 100vh;
+  min-height: 100dvh; /* For mobile browsers */
+  background-color: inherit;
+}
+
+/* Ensure no overscroll */
+html {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 @layer base {
   body {
     @apply bg-white text-gray-900;

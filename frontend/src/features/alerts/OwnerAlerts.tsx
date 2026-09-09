@@ -1,7 +1,172 @@
-import React from 'react';
-import { Bell, ShieldCheck, AlertCircle, Clock, CheckCircle, User, Wrench } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Bell, ShieldCheck, AlertCircle, Clock, CheckCircle, User, Wrench, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/useAuthStore';
+
+interface Alert {
+  id: string;
+  room_id: string;
+  alert_type: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  description: string;
+  status: 'unresolved' | 'resolved';
+  resolved_at?: string;
+  created_at: string;
+}
 
 const OwnerAlerts: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadAlerts();
+    }
+  }, [user?.id]);
+
+  const loadAlerts = async () => {
+    try {
+      setLoading(true);
+      
+      // Get owner's profile
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+      if (!profile) return;
+
+      // Get all facilities for this owner
+      const { data: facilitiesData } = await supabase
+        .from('facilities')
+        .select('id')
+        .eq('owner_profile_id', profile.id);
+
+      if (!facilitiesData || facilitiesData.length === 0) {
+        setAlerts([]);
+        return;
+      }
+
+      const facilityIds = facilitiesData.map(f => f.id);
+
+      // Get all rooms for these facilities
+      const { data: roomsData } = await supabase
+        .from('cold_storage_rooms')
+        .select('id')
+        .in('facility_id', facilityIds);
+
+      if (!roomsData || roomsData.length === 0) {
+        setAlerts([]);
+        return;
+      }
+
+      const roomIds = roomsData.map(r => r.id);
+
+      // Get all alerts for these rooms
+      const { data: alertsData } = await supabase
+        .from('alerts')
+        .select('*')
+        .in('room_id', roomIds)
+        .order('created_at', { ascending: false });
+
+      setAlerts(alertsData || []);
+    } catch (error) {
+      console.error('Error loading alerts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResolveAlert = async (alertId: string) => {
+    try {
+      const { error } = await supabase
+        .from('alerts')
+        .update({ 
+          status: 'resolved',
+          resolved_at: new Date().toISOString()
+        })
+        .eq('id', alertId);
+
+      if (error) throw error;
+
+      // Update local state
+      setAlerts(prev => prev.map(alert => 
+        alert.id === alertId 
+          ? { ...alert, status: 'resolved', resolved_at: new Date().toISOString() }
+          : alert
+      ));
+    } catch (error) {
+      console.error('Error resolving alert:', error);
+    }
+  };
+
+  const criticalCount = alerts.filter(a => a.severity === 'critical' && a.status === 'unresolved').length;
+  const criticalSolved = alerts.filter(a => a.severity === 'critical' && a.status === 'resolved').length;
+  const warningCount = alerts.filter(a => a.severity === 'warning' && a.status === 'unresolved').length;
+  const infoCount = alerts.filter(a => a.severity === 'info').length;
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'critical': return AlertCircle;
+      case 'warning': return Clock;
+      case 'info': return Bell;
+      default: return Bell;
+    }
+  };
+
+  const getSeverityColor = (severity: string, status: string) => {
+    if (status === 'resolved') {
+      return {
+        bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+        text: 'text-emerald-600 dark:text-emerald-400',
+        badge: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20'
+      };
+    }
+    switch (severity) {
+      case 'critical': return {
+        bg: 'bg-red-50 dark:bg-red-900/30',
+        text: 'text-red-600 dark:text-red-400',
+        badge: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+      };
+      case 'warning': return {
+        bg: 'bg-amber-50 dark:bg-amber-900/30',
+        text: 'text-amber-600 dark:text-amber-400',
+        badge: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
+      };
+      case 'info': return {
+        bg: 'bg-blue-50 dark:bg-blue-900/30',
+        text: 'text-blue-600 dark:text-blue-400',
+        badge: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+      };
+      default: return {
+        bg: 'bg-slate-50 dark:bg-slate-900/30',
+        text: 'text-slate-600 dark:text-slate-400',
+        badge: 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/20'
+      };
+    }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    return `${diffDays} days ago`;
+  };
+
   return (
     <div className="p-8 max-w-[1400px] mx-auto min-h-screen">
       <div className="flex items-center justify-between mb-8">
@@ -13,7 +178,10 @@ const OwnerAlerts: React.FC = () => {
             Review incidents, warnings, and maintenance notifications.
           </p>
         </div>
-        <button className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
+        <button 
+          onClick={() => navigate('/owner/settings')}
+          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"
+        >
           Notification Settings
         </button>
       </div>
@@ -25,8 +193,8 @@ const OwnerAlerts: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Critical Alerts</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">1</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">1 Solved</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{criticalCount}</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{criticalSolved} Solved</p>
           </div>
         </div>
 
@@ -36,7 +204,7 @@ const OwnerAlerts: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Unresolved Warnings</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">1</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{warningCount}</p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Needs Attention</p>
           </div>
         </div>
@@ -47,7 +215,7 @@ const OwnerAlerts: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Information Logs</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">2</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{infoCount}</p>
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">System Updates</p>
           </div>
         </div>
@@ -58,67 +226,62 @@ const OwnerAlerts: React.FC = () => {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recent Activity Log</h2>
         </div>
         
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-          {/* Solved Critical Alert */}
-          <div className="p-6 flex items-start gap-4">
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl">
-              <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-slate-900 dark:text-white">Temperature Sensor Broken</h3>
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">Solved</span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Sensor malfunction detected and repaired. Temperature monitoring restored to normal operation.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">2 days ago</p>
-            </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
           </div>
-
-          {/* Unresolved Warning */}
-          <div className="p-6 flex items-start gap-4">
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
-              <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+        ) : alerts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-16 text-center">
+            <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
+              <Bell className="w-8 h-8 text-slate-400" />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-slate-900 dark:text-white">Energy Consumption High</h3>
-                <span className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">Unresolved</span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">High load on HVAC system. Possible air leakage in the facility detected. Energy consumption exceeds normal thresholds.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">5 hours ago</p>
-            </div>
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No alerts yet</h3>
+            <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+              You'll see system alerts, warnings, and notifications here when they occur.
+            </p>
           </div>
-
-          {/* Information Log 1 */}
-          <div className="p-6 flex items-start gap-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-              <User className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-slate-900 dark:text-white">New Farmer Joined Your Facility</h3>
-                <span className="text-xs font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">Log</span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">New farmer registration completed successfully for Room 1 at Bajaura_site Facility.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">1 day ago</p>
-            </div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {alerts.map((alert) => {
+              const Icon = alert.status === 'resolved' ? CheckCircle : getSeverityIcon(alert.severity);
+              const colors = getSeverityColor(alert.severity, alert.status);
+              
+              return (
+                <div key={alert.id} className="p-6 flex items-start gap-4">
+                  <div className={`p-3 ${colors.bg} rounded-xl`}>
+                    <Icon className={`w-6 h-6 ${colors.text}`} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-slate-900 dark:text-white">{alert.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold uppercase tracking-widest ${colors.badge} px-2 py-1 rounded`}>
+                          {alert.status === 'resolved' ? 'Resolved' : alert.severity}
+                        </span>
+                        {alert.status === 'unresolved' && (
+                          <button
+                            onClick={() => handleResolveAlert(alert.id)}
+                            className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Check className="w-3 h-3" />
+                            Mark Resolved
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{alert.description}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                      {alert.status === 'resolved' && alert.resolved_at 
+                        ? `Resolved ${getTimeAgo(alert.resolved_at)}`
+                        : getTimeAgo(alert.created_at)
+                      }
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          {/* Information Log 2 */}
-          <div className="p-6 flex items-start gap-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-              <Wrench className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-slate-900 dark:text-white">Maintenance Was Done</h3>
-                <span className="text-xs font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">Log</span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Scheduled maintenance completed. HVAC system inspected and calibrated. All systems operational.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">43 days ago</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

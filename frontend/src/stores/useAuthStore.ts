@@ -36,11 +36,35 @@ interface AuthState {
   checkSession: () => Promise<void>;
 }
 
+// Helper functions for localStorage persistence
+const SELECTED_ROLE_KEY = 'selectedRole';
+
+const getStoredRole = (): UserRole | null => {
+  try {
+    const stored = localStorage.getItem(SELECTED_ROLE_KEY);
+    return stored as UserRole | null;
+  } catch {
+    return null;
+  }
+};
+
+const setStoredRole = (role: UserRole | null) => {
+  try {
+    if (role) {
+      localStorage.setItem(SELECTED_ROLE_KEY, role);
+    } else {
+      localStorage.removeItem(SELECTED_ROLE_KEY);
+    }
+  } catch (error) {
+    console.error('Failed to persist selectedRole:', error);
+  }
+};
+
 export const useAuthStore = create<AuthState>()((set) => ({
       isAuthenticated: false,
       user: null,
       selectedSite: null,
-      selectedRole: null,
+      selectedRole: getStoredRole(), // Initialize from localStorage
       token: null,
       login: async (email: string, password: string) => {
         // Note: This method is kept for compatibility but direct Supabase auth
@@ -73,6 +97,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       },
       logout: async () => {
         await supabase.auth.signOut();
+        setStoredRole(null); // Clear persisted role
         set({
           isAuthenticated: false,
           user: null,
@@ -82,6 +107,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
         });
       },
       clearSelectedRole: () => {
+        setStoredRole(null); // Clear persisted role
         set({ selectedRole: null });
       },
       setRole: (role) => {
@@ -90,6 +116,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
         }));
       },
       setSelectedRole: (role) => {
+        setStoredRole(role); // Persist to localStorage
         set({ selectedRole: role });
       },
       setUser: (user) => {

@@ -18,7 +18,7 @@ import {
   getDisplayName 
 } from '../../lib/sensorRegistry';
 
-type SetupStep = 'site' | 'rooms' | 'sensors' | 'complete';
+type SetupStep = 'site' | 'sensors' | 'complete';
 
 interface OwnerSetupData {
   // Site data
@@ -30,12 +30,9 @@ interface OwnerSetupData {
   // Owner company data
   contactEmail: string;
   phone: string;
-  address: string;
-  city: string;
   
-  // Room data
-  roomCount: number;
-  roomInventoryCapacity: number; // in kg
+  // Storage capacity data (in tons, will be converted to kg for rooms)
+  storageCapacityTons: number; // Default 1 ton, user can increase
   
   // Sensor data
   sensorQuantities: Record<string, number>; // sensor type -> quantity
@@ -91,10 +88,7 @@ const OwnerSetup: React.FC = () => {
     locality: '',
     contactEmail: '',
     phone: '',
-    address: '',
-    city: '',
-    roomCount: 1,
-    roomInventoryCapacity: 0, // No default - owner must enter
+    storageCapacityTons: 1, // Default 1 ton
     sensorQuantities: {}, // No defaults - owner must select
   });
   
@@ -103,7 +97,7 @@ const OwnerSetup: React.FC = () => {
   
   // Created IDs for subsequent steps
   const [createdFacilityId, setCreatedFacilityId] = useState<string | null>(null);
-  const [createdRoomIds, setCreatedRoomIds] = useState<string[]>([]);
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
 
   // Load states on mount
   useEffect(() => {
@@ -252,6 +246,11 @@ const OwnerSetup: React.FC = () => {
       return;
     }
 
+    if (!setupData.storageCapacityTons || setupData.storageCapacityTons < 1) {
+      setError('Storage capacity must be at least 1 ton');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -299,8 +298,8 @@ const OwnerSetup: React.FC = () => {
             company_name: `${setupData.siteName} Company`,
             contact_email: setupData.contactEmail || user?.email || '',
             phone: setupData.phone || '',
-            address: setupData.address || '',
-            city: setupData.city || districtName,
+            address: '',
+            city: districtName,
             district: districtName,
             state: stateName,
             country: 'India',
@@ -329,7 +328,7 @@ const OwnerSetup: React.FC = () => {
       const facilityPayload = {
         owner_profile_id: profile.id,
         facility_name: facilityName,
-        address: setupData.address || '',
+        address: '',
         state_id: selectedStateId,
         district_id: selectedDistrictId,
         locality_id: selectedLocalityId || null,
@@ -350,71 +349,32 @@ const OwnerSetup: React.FC = () => {
       }
 
       setCreatedFacilityId(facility.id);
-      setCurrentStep('rooms');
+
+      // Create single room with storage capacity
+      const capacityKg = setupData.storageCapacityTons * 1000; // Convert tons to kg
+      const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { data: room, error: roomError } = await supabase
+        .from('cold_storage_rooms')
+        .insert({
+          room_code: roomCode,
+          facility_id: facility.id,
+          room_name: 'Facility',
+          capacity_kg: capacityKg,
+          current_utilization_kg: 0,
+          status: 'Active',
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (roomError) throw roomError;
+      
+      console.log(`✓ Created facility room with ${setupData.storageCapacityTons} ton(s) capacity`);
+      setCreatedRoomId(room.id);
+      setCurrentStep('sensors');
     } catch (err) {
       console.error('Error creating site:', err);
       setError('Failed to create site. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateRooms = async () => {
-    // Validation
-    if (setupData.roomCount < 1) {
-      setError('Please enter at least 1 room');
-      return;
-    }
-
-    if (!setupData.roomInventoryCapacity || setupData.roomInventoryCapacity === 0) {
-      setValidationError('Inventory capacity is required.');
-      return;
-    }
-
-    if (setupData.roomInventoryCapacity < 100) {
-      setValidationError('Minimum capacity is 100 kg.');
-      return;
-    }
-
-    if (setupData.roomInventoryCapacity > 100000) {
-      setValidationError('Maximum capacity is 100,000 kg.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setValidationError('');
-
-    try {
-      const roomIds: string[] = [];
-
-      // Create rooms in cold_storage_rooms table
-      for (let i = 0; i < setupData.roomCount; i++) {
-        const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
-        const { data: room, error: roomError } = await supabase
-          .from('cold_storage_rooms')
-          .insert({
-            room_code: roomCode,
-            facility_id: createdFacilityId, // UUID
-            room_name: `Room ${i + 1}`,
-            capacity_kg: setupData.roomInventoryCapacity, // Owner-configured capacity
-            current_utilization_kg: 0,
-            status: 'Active', // Operational status: Active, Maintenance, Inactive
-            is_active: true
-          })
-          .select()
-          .single();
-
-        if (roomError) throw roomError;
-        roomIds.push(room.id);
-      }
-
-      console.log(`✓ Created ${roomIds.length} rooms in cold_storage_rooms`);
-      setCreatedRoomIds(roomIds);
-      setCurrentStep('sensors');
-    } catch (err) {
-      console.error('Error creating rooms:', err);
-      setError('Failed to create rooms. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -440,46 +400,44 @@ const OwnerSetup: React.FC = () => {
     setError('');
 
     try {
-      // Create sensor devices for each room with quantities
-      for (const roomId of createdRoomIds) {
-        for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
-          if (quantity === 0) continue; // Skip sensors with zero quantity
+      // Create sensor devices for the room with quantities
+      for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
+        if (quantity === 0) continue; // Skip sensors with zero quantity
+        
+        const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
+        if (!sensorDef) {
+          console.error(`Sensor definition not found for key: ${internalKey}`);
+          continue;
+        }
+
+        for (let i = 0; i < quantity; i++) {
+          const displayName = sensorDef.displayName;
+          const serialNumber = generateSerialNumber();
+          const mqttTopic = generateMQTTTopic(createdRoomId!, internalKey, i + 1);
           
-          const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
-          if (!sensorDef) {
-            console.error(`Sensor definition not found for key: ${internalKey}`);
-            continue;
-          }
+          const { error: sensorError } = await supabase
+            .from('sensor_devices')
+            .insert({
+              room_id: createdRoomId, // UUID
+              sensor_name: displayName, // Display name from registry
+              sensor_type: internalKey, // Internal key for backend logic
+              serial_number: serialNumber,
+              mqtt_topic: mqttTopic,
+              firmware_version: '1.0.0',
+              installation_date: new Date().toISOString(),
+              last_calibration: new Date().toISOString(),
+              status: 'Online', // Database constraint: Online, Offline, Maintenance, Faulty
+              last_seen: new Date().toISOString(),
+              battery_percentage: 100,
+              remarks: '',
+            });
 
-          for (let i = 0; i < quantity; i++) {
-            const displayName = sensorDef.displayName;
-            const serialNumber = generateSerialNumber();
-            const mqttTopic = generateMQTTTopic(roomId, internalKey, i + 1);
-            
-            const { error: sensorError } = await supabase
-              .from('sensor_devices')
-              .insert({
-                room_id: roomId, // UUID
-                sensor_name: displayName, // Display name from registry
-                sensor_type: internalKey, // Internal key for backend logic
-                serial_number: serialNumber,
-                mqtt_topic: mqttTopic,
-                firmware_version: '1.0.0',
-                installation_date: new Date().toISOString(),
-                last_calibration: new Date().toISOString(),
-                status: 'Online', // Database constraint: Online, Offline, Maintenance, Faulty
-                last_seen: new Date().toISOString(),
-                battery_percentage: 100,
-                remarks: '',
-              });
-
-            if (sensorError) throw sensorError;
-          }
+          if (sensorError) throw sensorError;
         }
       }
 
       const totalSensorsCreated = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
-      console.log(`✓ Created ${totalSensorsCreated} sensor devices for ${createdRoomIds.length} rooms`);
+      console.log(`✓ Created ${totalSensorsCreated} sensor devices for facility room`);
 
       // Mark onboarding as complete
       completeStep('profile');
@@ -488,7 +446,7 @@ const OwnerSetup: React.FC = () => {
       setSelectedFacilityId(null);
       
       // Navigate to dashboard
-      navigate('/');
+      navigate('/owner/dashboard');
     } catch (err) {
       console.error('Error configuring sensors:', err);
       setError('Failed to configure sensors. Please try again.');
@@ -498,10 +456,8 @@ const OwnerSetup: React.FC = () => {
   };
 
   const handleBack = () => {
-    if (currentStep === 'rooms') {
+    if (currentStep === 'sensors') {
       setCurrentStep('site');
-    } else if (currentStep === 'sensors') {
-      setCurrentStep('rooms');
     }
   };
 
@@ -566,28 +522,22 @@ const OwnerSetup: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Address
+            Storage Capacity (tons) *
           </label>
           <input
-            type="text"
-            value={setupData.address}
-            onChange={(e) => setSetupData(prev => ({ ...prev, address: e.target.value }))}
-            placeholder="Street address (optional)"
+            type="number"
+            min="1"
+            max="1000"
+            step="1"
+            value={setupData.storageCapacityTons}
+            onChange={(e) => setSetupData(prev => ({ ...prev, storageCapacityTons: parseInt(e.target.value) || 1 }))}
+            placeholder="1"
             className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            required
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            City
-          </label>
-          <input
-            type="text"
-            value={setupData.city}
-            onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
-            placeholder="City (optional)"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Maximum storage capacity in tons (1 ton = 1000 kg)
+          </p>
         </div>
 
         <div>
@@ -635,117 +585,11 @@ const OwnerSetup: React.FC = () => {
         className="w-full"
         loading={loading}
         onClick={handleCreateSite}
-        disabled={!setupData.state || !setupData.district || !setupData.siteName}
+        disabled={!setupData.state || !setupData.district || !setupData.siteName || setupData.storageCapacityTons < 1}
       >
-        Continue to Room Setup
+        Continue to Sensor Setup
         <ChevronRight className="h-4 w-4 ml-2" />
       </Button>
-    </div>
-  );
-
-  const renderRoomsStep = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Configure Rooms
-        </h2>
-        <p className="text-gray-500 dark:text-gray-400">
-          How many rooms does your cold storage contain?
-        </p>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Number of Rooms *
-        </label>
-        <input
-          type="number"
-          min="1"
-          max="50"
-          value={setupData.roomCount}
-          onChange={(e) => setSetupData(prev => ({ ...prev, roomCount: parseInt(e.target.value) || 1 }))}
-          className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-          required
-        />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Rooms will be automatically generated with unique display names (Room 1, Room 2, etc.)
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Inventory Capacity per Room (kg) *
-        </label>
-        <input
-          type="number"
-          min="100"
-          max="100000"
-          step="100"
-          placeholder="5000"
-          value={setupData.roomInventoryCapacity || ''}
-          onChange={(e) => {
-            const value = e.target.value;
-            setSetupData(prev => ({ 
-              ...prev, 
-              roomInventoryCapacity: value === '' ? 0 : parseInt(value) 
-            }));
-          }}
-          className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-        {validationError && (
-          <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationError}</p>
-        )}
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Maximum inventory capacity for each room in kilograms (min: 100, max: 100,000)
-        </p>
-      </div>
-
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Warehouse className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
-              Room Generation Details
-            </p>
-            <ul className="text-xs text-blue-800 dark:text-blue-200 mt-2 space-y-1">
-              <li>• Each room will get a unique database ID</li>
-              <li>• Display names will be "Room 1", "Room 2", etc.</li>
-              <li>• Rooms will be linked to your facility</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          className="flex-1"
-          onClick={handleBack}
-          disabled={loading}
-        >
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          className="flex-1"
-          loading={loading}
-          onClick={handleCreateRooms}
-          disabled={setupData.roomCount < 1}
-        >
-          Continue to Sensor Setup
-          <ChevronRight className="h-4 w-4 ml-2" />
-        </Button>
-      </div>
     </div>
   );
 
@@ -767,7 +611,7 @@ const OwnerSetup: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {SENSOR_REGISTRY.map((sensor) => {
           const Icon = ICON_MAP[sensor.defaultIcon] || Thermometer;
           const quantity = setupData.sensorQuantities[sensor.internalKey] || 0;
@@ -835,23 +679,6 @@ const OwnerSetup: React.FC = () => {
         })}
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Thermometer className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
-              Sensor Configuration Details
-            </p>
-            <p className="text-xs text-blue-800 dark:text-blue-200 mt-2">
-              Sensors will be created with specified quantities for all {setupData.roomCount} rooms.
-            </p>
-            <p className="text-xs text-blue-800 dark:text-blue-200 mt-1">
-              Total sensors per room: {Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0)}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="flex gap-3">
         <Button
           type="button"
@@ -888,14 +715,12 @@ const OwnerSetup: React.FC = () => {
             </div>
             <CardTitle className="text-3xl">Owner Setup Wizard</CardTitle>
             <p className="text-gray-500 dark:text-gray-400 mt-2">
-              {currentStep === 'site' && 'Step 1 of 3: Create Site'}
-              {currentStep === 'rooms' && 'Step 2 of 3: Configure Rooms'}
-              {currentStep === 'sensors' && 'Step 3 of 3: Configure Sensors'}
+              {currentStep === 'site' && 'Step 1 of 2: Create Site'}
+              {currentStep === 'sensors' && 'Step 2 of 2: Configure Sensors'}
             </p>
           </CardHeader>
           <CardContent>
             {currentStep === 'site' && renderSiteStep()}
-            {currentStep === 'rooms' && renderRoomsStep()}
             {currentStep === 'sensors' && renderSensorsStep()}
           </CardContent>
         </Card>

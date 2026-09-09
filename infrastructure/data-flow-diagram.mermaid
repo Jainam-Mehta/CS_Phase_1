@@ -1,0 +1,46 @@
+%% ColdSense Data Flow Diagram
+%% Render at: https://mermaid.live
+
+sequenceDiagram
+    participant User as 👤 User
+    participant Frontend as ⚛️ React Frontend
+    participant Auth as 🔐 Supabase Auth
+    participant Backend as 🚀 FastAPI Backend
+    participant MQTT as 📡 MQTT Broker
+    participant Sensor as 🌡️ IoT Sensor
+    participant DB as 🗄️ PostgreSQL DB
+
+    %% Authentication Flow
+    rect rgb(230, 247, 255)
+        Note over User,Auth: Authentication Flow
+        User->>Frontend: 1. Login/Signup
+        Frontend->>Auth: 2. Authenticate
+        Auth-->>Frontend: 3. JWT Token
+        Frontend->>Frontend: 4. Store Token
+    end
+
+    %% Sensor Data Flow
+    rect rgb(255, 248, 230)
+        Note over Sensor,DB: Sensor Data Flow
+        Sensor->>MQTT: 5. Publish Data<br/>(temp, humidity)
+        MQTT->>Backend: 6. Subscribe & Receive
+        Backend->>Backend: 7. Validate & Parse
+        Backend->>DB: 8. Insert sensor_readings
+        DB-->>Backend: 9. Confirm Insert
+        DB->>Frontend: 10. Real-time Update
+        Frontend->>User: 11. Dashboard Refresh
+    end
+
+    %% Dashboard Query Flow
+    rect rgb(240, 255, 240)
+        Note over User,DB: Dashboard Query Flow
+        User->>Frontend: 12. Open Dashboard
+        Frontend->>Backend: 13. GET /api/sensors<br/>(with JWT)
+        Backend->>Backend: 14. Validate Token
+        Backend->>DB: 15. Query Data
+        DB-->>Backend: 16. Return Results
+        Backend->>Backend: 17. Aggregate Data
+        Backend-->>Frontend: 18. JSON Response
+        Frontend->>Frontend: 19. Render Charts
+        Frontend-->>User: 20. Display Dashboard
+    end

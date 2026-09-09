@@ -23,7 +23,7 @@ const CarbonCredits: React.FC = () => {
 
   useEffect(() => {
     fetchCarbonCredits();
-  }, [user]);
+  }, [user?.id]);
 
   const fetchCarbonCredits = async () => {
     // Carbon credits table currently does not exist in live database schema, returning dummy zero state

@@ -3,8 +3,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Package, Calendar, Clock, AlertTriangle, CheckCircle, PackageOpen, LayoutDashboard, Plus, X, Loader2, Thermometer, Droplets } from 'lucide-react';
-import { getProductOptimality, evaluateCondition } from '../../lib/optimalityEngine';
+import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
 
 const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
@@ -12,7 +11,6 @@ const FarmerInventory: React.FC = () => {
   
   const [profileId, setProfileId] = useState<string | null>(null);
   const [batches, setBatches] = useState<any[]>([]);
-  const [roomCondition, setRoomCondition] = useState<{temperature: number, humidity: number} | null>(null);
   const [roomNameMap, setRoomNameMap] = useState<Record<string, string>>({});
   
   const [loading, setLoading] = useState(true);
@@ -29,17 +27,17 @@ const FarmerInventory: React.FC = () => {
   const [targetProduct, setTargetProduct] = useState('');
   const [qty, setQty] = useState('');
   const [harvestDate, setHarvestDate] = useState(new Date().toISOString().split('T')[0]);
-  const [notes, setNotes] = useState('');
 
-  const fetchInventory = async (currentRoom: string, pId: string) => {
+  const fetchInventory = async (pId: string) => {
        try {
-           // NEW SCHEMA: Query batch_room_allocations -> batches -> products
+           // Query batch_room_allocations -> batches -> products for all approved rooms
            const { data: allocationData } = await supabase
              .from('batch_room_allocations')
              .select(`
                quantity_kg,
                assigned_at,
                removed_at,
+               room_id,
                batches!inner(
                  id,
                  batch_code,
@@ -55,7 +53,6 @@ const FarmerInventory: React.FC = () => {
                  products(name)
                )
              `)
-             .eq('room_id', currentRoom)
              .eq('batches.farmer_id', pId)
              .is('removed_at', null)
              .order('assigned_at', { ascending: false });
@@ -66,7 +63,7 @@ const FarmerInventory: React.FC = () => {
              const productObj = Array.isArray(batchObj?.products) ? batchObj.products[0] : batchObj?.products;
              return {
                ...batchObj,
-               room_id: currentRoom,
+               room_id: allocation.room_id,
                quantity_kg: allocation.quantity_kg,
                assigned_at: allocation.assigned_at,
                product: productObj?.name || 'Unknown Product'
@@ -74,17 +71,6 @@ const FarmerInventory: React.FC = () => {
            }) || [];
 
            setBatches(transformedBatches);
-
-           // Also fetch ambient room telemetry for UI diagnostics mapped structurally!
-           const { data: cond } = await supabase
-             .from('cold_storage_conditions')
-             .select('temperature, humidity')
-             .eq('room_id', currentRoom)
-             .order('recorded_at', { ascending: false })
-             .limit(1)
-             .maybeSingle();
-
-           setRoomCondition(cond || { temperature: 2.5, humidity: 85 }); // Realistic dummy fallback if no real hardware is attached yet.
        } catch (error) {
            console.error("FarmerInventory fetch failed:", error);
        }
@@ -99,7 +85,6 @@ const FarmerInventory: React.FC = () => {
            setProfileId(profile.id);
 
            // 1. Fetch Approved Rooms from farmer_room_access -> cold_storage_rooms
-           // This is the canonical room source for the application
            const { data: accessLogs } = await supabase
              .from('farmer_room_access')
              .select(`room_id, cold_storage_rooms(room_name, facilities(facility_name))`)
@@ -118,7 +103,7 @@ const FarmerInventory: React.FC = () => {
               setRoomNameMap(globalRoomMap);
            }
 
-           // 2. Fetch Farmer Selected Products exclusively restricting UI bounds securely.
+           // 2. Fetch Farmer Selected Products
            const { data: fProds } = await supabase
              .from('farmer_products')
              .select('products(name)')
@@ -135,15 +120,10 @@ const FarmerInventory: React.FC = () => {
                });
            }
            
-           // Fallback to basic array if the join structure drops (due to test data)
            setFarmerProducts(extractedNames.length > 0 ? Array.from(new Set(extractedNames)) : ['Apple', 'Potato', 'Onion']);
 
-           if (activeRoomId) {
-               await fetchInventory(activeRoomId, profile.id);
-           } else {
-               setBatches([]);
-               setRoomCondition(null);
-           }
+           // Fetch all inventory across all rooms
+           await fetchInventory(profile.id);
        } catch (err) {
            console.error("Failed initialization:", err);
        } finally {
@@ -153,7 +133,7 @@ const FarmerInventory: React.FC = () => {
 
   useEffect(() => {
     initialize();
-  }, [user?.id, activeRoomId]);
+  }, [user?.id]);
 
   useEffect(() => {
      if (activeRoomId) setTargetRoom(activeRoomId);
@@ -170,9 +150,8 @@ const FarmerInventory: React.FC = () => {
 
       setSubmitting(true);
       try {
-         // Use the room ID directly from the dropdown (no additional verification needed)
-         // The dropdown is populated from farmer_room_access -> cold_storage_rooms join
-         // which is the canonical room source for this application
+         // Convert crates to kg (1 crate = 25 kg)
+         const quantityInKg = parseFloat(qty) * 25;
          
          // Get product_id from product name
          const { data: productData } = await supabase
@@ -201,10 +180,10 @@ const FarmerInventory: React.FC = () => {
              product_id: productData.id,
              harvest_date: harvestDateObj.toISOString(),
              expiry_date: expiryDateObj.toISOString(),
-             initial_quantity_kg: parseFloat(qty),
-             remaining_quantity_kg: parseFloat(qty),
+             initial_quantity_kg: quantityInKg,
+             remaining_quantity_kg: quantityInKg,
              quality_grade: 'A', // Default grade
-             remarks: notes || null,
+             remarks: null,
          };
 
          const { data: batchData, error: batchError } = await supabase
@@ -219,7 +198,7 @@ const FarmerInventory: React.FC = () => {
          const allocationPayload = {
              batch_id: batchData.id,
              room_id: targetRoom,
-             quantity_kg: parseFloat(qty),
+             quantity_kg: quantityInKg,
              assigned_at: new Date().toISOString(),
              removed_at: null,
          };
@@ -230,24 +209,18 @@ const FarmerInventory: React.FC = () => {
 
          if (allocationError) throw allocationError;
          
-         console.log('=== END ROOM VERIFICATION DEBUG ===');
-         
          setIsModalOpen(false);
          setTargetProduct('');
          setQty('');
-         setNotes('');
          
-         if (activeRoomId !== targetRoom) {
-             setActiveRoomId(targetRoom);
-         } else if (profileId) {
-             await fetchInventory(targetRoom, profileId);
+         // Refresh inventory list
+         if (profileId) {
+             await initialize();
          }
 
       } catch (err: any) {
-          console.error('=== INVENTORY CREATION ERROR ===');
-          console.error(err);
-          console.error('=== END ERROR ===');
-          setSubmitError(err.message || 'Failed adding inventory to network.');
+          console.error('Inventory creation error:', err);
+          setSubmitError(err.message || 'Failed to add inventory.');
       } finally {
           setSubmitting(false);
       }
@@ -264,7 +237,6 @@ const FarmerInventory: React.FC = () => {
              <PackageOpen className="w-8 h-8 text-primary-500" />
              <div>
                <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Inventory Management</h1>
-               <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time telemetry and management controls for stored perishables.</p>
              </div>
          </div>
          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 shadow-xl shadow-primary-500/20 transform hover:-translate-y-0.5 transition-all">
@@ -272,113 +244,65 @@ const FarmerInventory: React.FC = () => {
          </button>
       </div>
       
-      {!activeRoomId ? (
-          <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-16 text-center shadow-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur">
-              <LayoutDashboard className="w-16 h-16 text-slate-400 mx-auto mb-4 opacity-50" />
-              <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200">No Target Displayed</h2>
-              <p className="text-slate-500 max-w-sm mx-auto mt-2 mb-8">
-                 Select an active storage room on your Dashboard, or inject structural dependencies seamlessly right now remotely by generating inventory.
-              </p>
-          </div>
-      ) : batches.length === 0 ? (
-          <Card className="border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur shadow-sm text-center p-16">
-             <PackageOpen className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-             <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300">No Inventory Found</h3>
-             <p className="text-slate-500 text-sm mt-2 mb-6">You haven't stored any products in this room yet.</p>
-             <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg hover:bg-slate-800 dark:hover:bg-slate-100 shadow-sm transition-all">
-                 <Plus className="w-4 h-4"/> Add Inventory
-             </button>
-          </Card>
-      ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             {batches.map((b) => {
-                 const optimal = getProductOptimality(b.product);
-                 const storedDate = new Date(b.created_at);
-                 const now = new Date();
-                 const durationDays = Math.floor((now.getTime() - storedDate.getTime()) / (1000 * 3600 * 24));
-                 const remainingDays = optimal.shelfLife - durationDays;
-                 const freshnessPct = Math.max(0, Math.min(100, (remainingDays / optimal.shelfLife) * 100));
-
-                 const temp = roomCondition?.temperature ?? optimal.minTemp;
-                 const hum = roomCondition?.humidity ?? optimal.minHum;
-                 
-                 const tempStatus = evaluateCondition(temp, optimal.minTemp, optimal.maxTemp);
-                 const humStatus = evaluateCondition(hum, optimal.minHum, optimal.maxHum);
-                 
-                 let healthStatus = 'Excellent';
-                 let ProgressColor = 'bg-emerald-500';
-                 let bgCard = 'border-slate-200 dark:border-slate-700 hover:border-emerald-300';
-                 let Icon = CheckCircle;
-                 let IconColor = 'text-emerald-500';
-
-                 if (remainingDays < 0 || tempStatus.status === 'Too High') {
-                     healthStatus = 'Critical';
-                     ProgressColor = 'bg-red-500';
-                     bgCard = 'border-red-200 dark:border-red-900/40 ring-1 ring-red-500/20 bg-red-50/50 dark:bg-red-900/10';
-                     Icon = AlertTriangle;
-                     IconColor = 'text-red-500';
-                 } else if (remainingDays < optimal.shelfLife * 0.2 || !tempStatus.isOptimal || !humStatus.isOptimal) {
-                     healthStatus = 'Warning';
-                     ProgressColor = 'bg-orange-500';
-                     bgCard = 'border-orange-200 dark:border-orange-900/50 bg-orange-50/30';
-                     Icon = Clock;
-                     IconColor = 'text-orange-500';
-                 } else if (remainingDays < optimal.shelfLife * 0.5) {
-                     healthStatus = 'Good';
-                 }
-
-                 return (
-                    <Card key={b.id} className={`transition-all shadow-sm ${bgCard} overflow-hidden group`}>
-                       <CardContent className="p-6">
-                           <div className="flex justify-between items-start mb-4">
-                              <div>
-                                  <h3 className="text-xl font-bold flex items-center gap-2">
-                                      {b.product || 'Unknown Product'} 
-                                      <span className="text-slate-400 text-sm font-medium ml-2">({b.initial_quantity_kg} kg)</span>
-                                  </h3>
-                                  <p className="text-xs text-slate-500 capitalize">{roomNameMap[b.room_id] || 'Storage Facility Room'}</p>
-                              </div>
-                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-white dark:bg-slate-800 shadow-sm ${IconColor}`}>
-                                 <Icon className="w-4 h-4" /> {healthStatus}
-                              </span>
-                           </div>
-                           
-                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Calendar className="w-3 h-3"/> Stored</p>
-                                 <p className="font-bold text-sm text-slate-900 dark:text-white">{storedDate.toLocaleDateString()}</p>
-                              </div>
-                              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Clock className="w-3 h-3"/> Shelf Life</p>
-                                 <p className="font-bold text-sm text-slate-900 dark:text-white">{remainingDays < 0 ? 0 : remainingDays} / {optimal.shelfLife}d</p>
-                              </div>
-                              <div className={`bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border ${tempStatus.isOptimal ? 'border-slate-100 dark:border-slate-800' : 'border-red-200 dark:border-red-900/50'}`}>
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Thermometer className="w-3 h-3"/> Temp °C</p>
-                                 <p className="font-bold text-sm text-slate-900 dark:text-white">{temp}°C <span className="text-slate-400 text-xs font-medium ml-1">({optimal.minTemp}-{optimal.maxTemp})</span></p>
-                              </div>
-                              <div className={`bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border ${humStatus.isOptimal ? 'border-slate-100 dark:border-slate-800' : 'border-orange-200 dark:border-orange-900/50'}`}>
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Droplets className="w-3 h-3"/> Humidity %</p>
-                                 <p className="font-bold text-sm text-slate-900 dark:text-white">{hum}% <span className="text-slate-400 text-xs font-medium ml-1">({optimal.minHum}-{optimal.maxHum})</span></p>
-                              </div>
-                           </div>
-
-                           <div className="space-y-2">
-                               <div className="flex justify-between text-sm font-bold">
-                                   <span className="text-slate-600 dark:text-slate-400">Freshness Integrity</span>
-                                   <span className={freshnessPct < 20 ? 'text-red-600' : 'text-slate-900 dark:text-white'}>
-                                       {freshnessPct.toFixed(1)}% {freshnessPct < 20 && '(Spoilage Imminent)'}
-                                   </span>
-                               </div>
-                               <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                   <div className={`h-full rounded-full ${ProgressColor} transition-all duration-1000`} style={{ width: `${freshnessPct}%` }} />
-                               </div>
-                           </div>
-                       </CardContent>
-                    </Card>
-                 );
-             })}
-          </div>
-      )}
+      {/* LIVE INVENTORY TRACKING TABLE */}
+      <Card className="shadow-sm border-slate-200 overflow-hidden">
+         <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+            <div className="flex items-center gap-2">
+               <Package className="w-5 h-5 text-indigo-500" />
+               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Live Inventory Tracking</h2>
+            </div>
+         </div>
+         <CardContent className="p-0">
+            {batches.length > 0 ? (
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse">
+                      <thead>
+                         <tr className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                            <th className="py-4 px-6">Product</th>
+                            <th className="py-4 px-6">Batch Code</th>
+                            <th className="py-4 px-6 text-right">Quantity</th>
+                            <th className="py-4 px-6">Facility</th>
+                            <th className="py-4 px-6">Quality</th>
+                            <th className="py-4 px-6">Stored Date</th>
+                            <th className="py-4 px-6">Expiry Date</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {batches.map((b, idx) => {
+                            // Convert kg to crates (1 crate = 25kg)
+                            const crates = Math.round(b.initial_quantity_kg / 25);
+                            const storedDate = new Date(b.assigned_at || b.created_at);
+                            const expiryDate = new Date(b.expiry_date);
+                            
+                            return (
+                               <tr key={b.id || idx} className="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors text-slate-700 dark:text-slate-300 font-medium text-sm">
+                                  <td className="py-4 px-6 font-bold text-slate-900 dark:text-white">{b.product || 'Unknown Product'}</td>
+                                  <td className="py-4 px-6 tracking-wider font-mono text-xs">{b.batch_code || 'N/A'}</td>
+                                  <td className="py-4 px-6 font-bold text-indigo-600 dark:text-indigo-400 text-right">
+                                     {crates} <span className="text-xs font-normal text-slate-400">Crates</span>
+                                  </td>
+                                  <td className="py-4 px-6 text-slate-600 dark:text-slate-400">{roomNameMap[b.room_id] || 'Storage Facility'}</td>
+                                  <td className="py-4 px-6">
+                                      <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-bold rounded text-[10px] uppercase tracking-widest">
+                                         {b.quality_grade || 'A'}
+                                      </span>
+                                  </td>
+                                  <td className="py-4 px-6">{storedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
+                                  <td className="py-4 px-6">{expiryDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
+                               </tr>
+                            );
+                         })}
+                      </tbody>
+                   </table>
+                </div>
+            ) : (
+                <div className="p-12 text-center text-slate-400 font-semibold flex flex-col items-center gap-2">
+                   <Package className="w-10 h-10 text-slate-200" />
+                   <p>No inventory found. Click "Add Inventory" to get started.</p>
+                </div>
+            )}
+         </CardContent>
+      </Card>
 
       {/* ADD INVENTORY MODAL */}
       {isModalOpen && (
@@ -386,7 +310,7 @@ const FarmerInventory: React.FC = () => {
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !submitting && setIsModalOpen(false)}></div>
               <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add Inventory Batch</h2>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add New Product</h2>
                       <button onClick={() => setIsModalOpen(false)} disabled={submitting} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 disabled:opacity-50">
                           <X className="w-5 h-5" />
                       </button>
@@ -402,14 +326,14 @@ const FarmerInventory: React.FC = () => {
 
                       <div className="space-y-5">
                           <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Selected Room</label>
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Facility</label>
                               <select 
                                   required 
                                   value={targetRoom} 
                                   onChange={(e) => setTargetRoom(e.target.value)}
                                   className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                               >
-                                  <option value="" disabled>Choose an approved room...</option>
+                                  <option value="" disabled>Select a facility...</option>
                                   {approvedRooms.map(r => (
                                       <option key={r.id} value={r.id}>{r.name}</option>
                                   ))}
@@ -417,51 +341,52 @@ const FarmerInventory: React.FC = () => {
                           </div>
 
                           <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Registered Product</label>
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Product Type</label>
                               <select 
                                   required 
                                   value={targetProduct} 
                                   onChange={(e) => setTargetProduct(e.target.value)}
                                   className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                               >
-                                  <option value="" disabled>Choose a product...</option>
+                                  <option value="" disabled>Select a product...</option>
                                   {farmerProducts.map(p => (
                                       <option key={p} value={p}>{p}</option>
                                   ))}
                               </select>
-                              <p className="text-xs text-slate-500 mt-2 font-medium">Only products you mapped during profile onboarding are visible.</p>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Quantity (kg)</label>
-                                  <input 
-                                      type="number" min="1" required value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Ex: 500" 
-                                      className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                                  />
-                              </div>
-                              <div>
-                                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Harvest Date</label>
-                                  <input 
-                                      type="date" required max={new Date().toISOString().split('T')[0]} value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)}
-                                      className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                                  />
-                              </div>
                           </div>
 
                           <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Notes (Optional)</label>
-                              <textarea 
-                                  rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Initial state remarks..."
-                                  className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none resize-none"
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Quantity (Crates)</label>
+                              <input 
+                                  type="number" 
+                                  min="1" 
+                                  required 
+                                  value={qty} 
+                                  onChange={(e) => setQty(e.target.value)} 
+                                  placeholder="Enter number of crates" 
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                               />
+                              <p className="text-xs text-slate-500 mt-1.5 font-medium">1 Crate = 25 kg</p>
+                          </div>
+                          
+                          <div>
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Storage Date</label>
+                              <input 
+                                  type="date" 
+                                  required 
+                                  value={harvestDate} 
+                                  onChange={(e) => setHarvestDate(e.target.value)}
+                                  max={new Date().toISOString().split('T')[0]}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                              />
+                              <p className="text-xs text-slate-500 mt-1.5 font-medium">Defaults to today. You can change if adding later.</p>
                           </div>
                       </div>
 
                       <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                           <button type="button" disabled={submitting} onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
                           <button type="submit" disabled={submitting} className="px-5 py-2.5 font-bold text-white bg-primary-600 hover:bg-primary-700 shadow-xl shadow-primary-500/20 flex items-center justify-center min-w-[120px] rounded-lg">
-                              {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Save Inventory'}
+                              {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add Product'}
                           </button>
                       </div>
                   </form>

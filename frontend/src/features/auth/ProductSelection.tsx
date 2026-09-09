@@ -22,11 +22,7 @@ const PRODUCT_CATEGORIES: ProductCategory[] = [
 ];
 
 interface ProductDetails {
-  quantity: number;
-  unit: 'Kg' | 'Ton' | 'Crate' | 'Box';
-  harvestDate: string;
-  storageDuration: number;
-  notes: string;
+  quantity: number | string; // quantity in crates (1 crate = 25 kg)
 }
 
 const ProductSelection: React.FC = () => {
@@ -78,15 +74,11 @@ const ProductSelection: React.FC = () => {
         });
       } else {
         newSet.add(productId);
-        // Initialize default details when selected
+        // Initialize with empty quantity when selected (no default 0)
         setProductDetails(prev => ({
           ...prev,
           [productId]: {
-            quantity: 0,
-            unit: 'Kg',
-            harvestDate: new Date().toISOString().split('T')[0],
-            storageDuration: 30,
-            notes: ''
+            quantity: '' as any, // Empty string instead of 0
           }
         }));
       }
@@ -111,14 +103,11 @@ const ProductSelection: React.FC = () => {
   const getTotalQuantity = () => {
     return Array.from(selectedProducts).reduce((total, productId) => {
       const details = productDetails[productId];
-      if (!details) return total;
+      if (!details || !details.quantity || details.quantity === '') return total;
       
-      let qty = details.quantity;
-      if (details.unit === 'Ton') qty *= 1000;
-      if (details.unit === 'Crate') qty *= 15; // Assuming average crate weight
-      if (details.unit === 'Box') qty *= 10; // Assuming average box weight
-      
-      return total + qty;
+      // Each crate = 25 kg
+      const qty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
+      return total + (qty * 25);
     }, 0);
   };
 
@@ -143,7 +132,7 @@ const ProductSelection: React.FC = () => {
     // Validate that all selected products have quantity > 0
     for (const productId of selectedProducts) {
       const details = productDetails[productId];
-      if (!details || details.quantity <= 0) {
+      if (!details || !details.quantity || details.quantity === '' || (typeof details.quantity === 'number' && details.quantity <= 0)) {
         setError('Please specify quantity for all selected products');
         return;
       }
@@ -200,15 +189,19 @@ const ProductSelection: React.FC = () => {
       // Room allocation will happen later when farmer selects a room
       const batchInserts = Array.from(selectedProducts).map(productId => {
         const details = productDetails[productId];
-        
-        const harvestDate = new Date(details.harvestDate);
+        const product = products.find(p => p.id === productId);
         
         // Generate unique batch_code
         const batchCode = `BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
         
+        // Calculate quantity in kg (1 crate = 25 kg), handle string/number
+        const crateQty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
+        const quantityKg = crateQty * 25;
+        
         // Calculate expiry_date based on product shelf life
+        const harvestDate = new Date();
         const expiryDate = new Date(harvestDate);
-        const shelfLifeDays = details.storageDuration || 30; // Use storageDuration as shelf life
+        const shelfLifeDays = product?.shelf_life_days || 30;
         expiryDate.setDate(expiryDate.getDate() + shelfLifeDays);
 
         return {
@@ -217,8 +210,8 @@ const ProductSelection: React.FC = () => {
           product_id: productId,
           harvest_date: harvestDate.toISOString().split('T')[0],
           expiry_date: expiryDate.toISOString().split('T')[0],
-          initial_quantity_kg: details.unit === 'Ton' ? details.quantity * 1000 : details.quantity,
-          remaining_quantity_kg: details.unit === 'Ton' ? details.quantity * 1000 : details.quantity,
+          initial_quantity_kg: quantityKg,
+          remaining_quantity_kg: quantityKg,
           quality_grade: 'A',
           remarks: null,
         };
@@ -260,9 +253,16 @@ const ProductSelection: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-7xl">
         <Card variant="default" className="w-full">
-          <CardHeader className="text-center">
+          <CardHeader className="text-center relative">
+            {/* Step Indicator */}
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
+                Step 3/3
+              </span>
+            </div>
+            
             <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Sprout className="h-8 w-8 text-white" />
             </div>
@@ -299,7 +299,7 @@ const ProductSelection: React.FC = () => {
                           {category.icon}
                           <h3 className="font-semibold">{category.name}</h3>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
                           {categoryProducts.map((product) => {
                             const isSelected = selectedProducts.has(product.id);
                             const details = productDetails[product.id];
@@ -315,89 +315,28 @@ const ProductSelection: React.FC = () => {
                               >
                                 <button
                                   type="button"
-                                  onClick={() => handleProductToggle(product.id)}
-                                  className="w-full p-4 text-left"
+                                  onClick={(e) => {
+                                    // Only toggle if clicking outside of input fields
+                                    if (!(e.target instanceof HTMLInputElement)) {
+                                      handleProductToggle(product.id);
+                                    }
+                                  }}
+                                  className="w-full p-3 text-left"
                                 >
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-1">
                                       {product.name}
                                     </span>
                                     {isSelected && (
-                                      <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                      <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                                     )}
                                   </div>
-                                  
-                                  {isSelected && details && (
-                                    <div className="mt-4 space-y-3 pt-3 border-t border-gray-200 dark:border-slate-600">
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                          <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Quantity</label>
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            value={details.quantity}
-                                            onChange={(e) => handleDetailChange(product.id, 'quantity', parseInt(e.target.value) || 0)}
-                                            className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                            required
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Unit</label>
-                                          <select
-                                            value={details.unit}
-                                            onChange={(e) => handleDetailChange(product.id, 'unit', e.target.value as any)}
-                                            className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                          >
-                                            <option value="Kg">Kg</option>
-                                            <option value="Ton">Ton</option>
-                                            <option value="Crate">Crate</option>
-                                            <option value="Box">Box</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                      
-                                      <div>
-                                        <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Harvest Date</label>
-                                        <input
-                                          type="date"
-                                          value={details.harvestDate}
-                                          onChange={(e) => handleDetailChange(product.id, 'harvestDate', e.target.value)}
-                                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                          required
-                                        />
-                                      </div>
-                                      
-                                      <div>
-                                        <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Storage Duration (days)</label>
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          max={product.shelf_life_days}
-                                          value={details.storageDuration}
-                                          onChange={(e) => handleDetailChange(product.id, 'storageDuration', parseInt(e.target.value) || 0)}
-                                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                          required
-                                        />
-                                      </div>
-                                      
-                                      <div>
-                                        <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Notes (optional)</label>
-                                        <textarea
-                                          value={details.notes}
-                                          onChange={(e) => handleDetailChange(product.id, 'notes', e.target.value)}
-                                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                          rows={2}
-                                          placeholder="Any additional notes..."
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
                                   
                                   {!isSelected && (
                                     <div className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
                                       <div className="flex items-center gap-1">
                                         <Thermometer className="h-3 w-3" />
-                                        <span>{product.optimal_temp}°C ({product.min_temp}-{product.max_temp}°C)</span>
+                                        <span>{product.optimal_temp}°C</span>
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <Droplets className="h-3 w-3" />
@@ -405,11 +344,34 @@ const ProductSelection: React.FC = () => {
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <Clock className="h-3 w-3" />
-                                        <span>{product.shelf_life_days} days shelf life</span>
+                                        <span>{product.shelf_life_days} days</span>
                                       </div>
                                     </div>
                                   )}
                                 </button>
+                                
+                                {isSelected && details && (
+                                  <div className="px-3 pb-3 space-y-2 border-t border-gray-200 dark:border-slate-600 pt-2">
+                                    <div>
+                                      <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">
+                                        Quantity (Crates)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={details.quantity}
+                                        onChange={(e) => handleDetailChange(product.id, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value))}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
+                                        placeholder="Enter quantity"
+                                        required
+                                      />
+                                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        1 crate = 25 kg
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -429,7 +391,14 @@ const ProductSelection: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-blue-700 dark:text-blue-300">Total Quantity</p>
-                          <p className="font-semibold text-blue-900 dark:text-blue-100">{getTotalQuantity()} kg</p>
+                          <p className="font-semibold text-blue-900 dark:text-blue-100">
+                            {Array.from(selectedProducts).reduce((total, productId) => {
+                              const details = productDetails[productId];
+                              if (!details || !details.quantity || details.quantity === '') return total;
+                              const qty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
+                              return total + qty;
+                            }, 0)} crates ({getTotalQuantity()} kg)
+                          </p>
                         </div>
                         <div>
                           <p className="text-blue-700 dark:text-blue-300">Avg Shelf Life</p>

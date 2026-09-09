@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 
-from app.services.sensor_service import latest_sensor_reading
+from app.services.sensor_service import get_latest_sensor_reading, get_latest_condition
 from app.services.door_service import get_door_status
 from app.api import auth, sites, products, inventory, orders, finance, energy, alerts, market
 
@@ -19,8 +20,21 @@ router.include_router(market.router, prefix="/market", tags=["market"])
 
 # Legacy sensor endpoints (keep for MQTT compatibility)
 @router.get("/latest-reading")
-def latest():
-    return latest_sensor_reading()
+def latest_reading(
+    room_id: Optional[str] = Query(None, description="Room ID to get latest condition"),
+    room_sensor_id: Optional[str] = Query(None, description="Room sensor ID to get latest reading")
+):
+    """
+    Get latest sensor reading.
+    - If room_id provided: returns latest condition from cold_storage_conditions
+    - If room_sensor_id provided: returns latest reading from sensor_readings  
+    - If neither: returns empty response
+    """
+    if room_id:
+        return get_latest_condition(room_id) or {}
+    elif room_sensor_id:
+        return get_latest_sensor_reading(room_sensor_id) or {}
+    return {"message": "Please provide either room_id or room_sensor_id"}
 
 
 @router.get("/door-status")

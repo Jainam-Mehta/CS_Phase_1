@@ -1,22 +1,30 @@
 import { useEffect } from 'react';
-import { useThemeStore } from '../stores/useThemeStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 
+/**
+ * Applies the active theme class to <html> whenever the persisted
+ * appearance setting changes. Single source of truth: useSettingsStore.
+ */
 export const useTheme = () => {
-  const { theme } = useThemeStore();
+  const { appearance } = useSettingsStore();
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
 
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      root.classList.add(systemTheme);
+    if (appearance === 'dark') {
+      root.classList.add('dark');
+    } else if (appearance === 'light') {
+      root.classList.remove('dark');
     } else {
-      root.classList.add(theme);
+      // 'system'
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (systemDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
     }
-  }, [theme]);
+  }, [appearance]);
 
-  return { theme };
+  return { theme: appearance };
 };

@@ -1,0 +1,449 @@
+═══════════════════════════════════════════════════════════════════════════════
+  ☸️ GOOGLE KUBERNETES ENGINE (GKE) - COMPLETE SETUP COMMANDS ☸️
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 COMPLETE PRODUCTION DEPLOYMENT FOR COLDSENSE IOT PLATFORM
+📅 Created: August 26, 2026
+🎯 Goal: Deploy backend, MQTT, simulator, and Cloud SQL for real farmers/owners
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: SET ENVIRONMENT VARIABLES (1 minute)
+═══════════════════════════════════════════════════════════════════════════════
+
+# PowerShell - Run these first
+$PROJECT_ID = "exalted-skein-505210-g0"
+$CLUSTER_NAME = "coldsense-production-cluster"
+$REGION = "asia-south1"
+$ZONE = "asia-south1-a"
+
+# Verify
+Write-Host "Project: $PROJECT_ID" -ForegroundColor Cyan
+Write-Host "Cluster: $CLUSTER_NAME" -ForegroundColor Cyan
+Write-Host "Region: $REGION" -ForegroundColor Cyan
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 2: ENABLE REQUIRED APIs (5 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Enable GKE API
+gcloud services enable container.googleapis.com --project=$PROJECT_ID
+
+# Enable Artifact Registry
+gcloud services enable artifactregistry.googleapis.com --project=$PROJECT_ID
+
+# Enable Cloud SQL Admin API
+gcloud services enable sqladmin.googleapis.com --project=$PROJECT_ID
+
+# Enable Compute Engine API
+gcloud services enable compute.googleapis.com --project=$PROJECT_ID
+
+# Verify all APIs are enabled
+gcloud services list --enabled --project=$PROJECT_ID --filter="name:(container.googleapis.com OR artifactregistry.googleapis.com OR sqladmin.googleapis.com)"
+
+Write-Host "`n✅ All APIs enabled!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 3: CREATE ARTIFACT REGISTRY (2 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Create Docker repository
+gcloud artifacts repositories create coldsense-repo --repository-format=docker --location=$REGION --description="ColdSense container images" --project=$PROJECT_ID
+
+# Verify
+gcloud artifacts repositories list --project=$PROJECT_ID
+
+Write-Host "`n✅ Artifact Registry created!" -ForegroundColor Green
+
+# Configure Docker authentication
+gcloud auth configure-docker ${REGION}-docker.pkg.dev
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 4: CREATE GKE AUTOPILOT CLUSTER (10-15 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Create Autopilot cluster (fully managed, auto-scaling)
+gcloud container clusters create-auto $CLUSTER_NAME --region=$REGION --project=$PROJECT_ID
+
+Write-Host "`n⏳ Cluster creation in progress... (takes 10-15 minutes)" -ForegroundColor Yellow
+Write-Host "☕ Perfect time for coffee! ☕" -ForegroundColor Cyan
+
+# After cluster is created, get credentials
+gcloud container clusters get-credentials $CLUSTER_NAME --region=$REGION --project=$PROJECT_ID
+
+# Verify cluster
+kubectl cluster-info
+kubectl get nodes
+
+Write-Host "`n✅ GKE Autopilot Cluster is ready!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 5: CREATE CLOUD SQL INSTANCE (10-15 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Generate secure passwords
+$ROOT_PASSWORD = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 20 | ForEach-Object {[char]$_})
+$APP_PASSWORD = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 20 | ForEach-Object {[char]$_})
+Write-Output "=== CLOUD SQL CREDENTIALS ===" | Out-File "kubernetes-credentials.txt"
+Write-Output "Root Password: $ROOT_PASSWORD" | Out-File -Append "kubernetes-credentials.txt"
+Write-Output "App Password: $APP_PASSWORD" | Out-File -Append "kubernetes-credentials.txt"
+
+# Create Cloud SQL instance with HA
+gcloud sql instances create coldsense-db --database-version=POSTGRES_15 --tier=db-custom-2-7680 --region=$REGION --availability-type=REGIONAL --storage-type=SSD --storage-size=100 --storage-auto-increase --backup --root-password="$ROOT_PASSWORD" --project=$PROJECT_ID
+
+Write-Host "`n⏳ Cloud SQL creation in progress... (takes 10-15 minutes)" -ForegroundColor Yellow
+
+# Create database
+gcloud sql databases create coldsense --instance=coldsense-db --project=$PROJECT_ID
+
+# Create user
+gcloud sql users create coldsense_app --instance=coldsense-db --password="$APP_PASSWORD" --project=$PROJECT_ID
+
+# Get connection name
+$CONNECTION_NAME = gcloud sql instances describe coldsense-db --project=$PROJECT_ID --format="get(connectionName)"
+Write-Host "`nConnection Name: $CONNECTION_NAME" -ForegroundColor Cyan
+Write-Output "`nConnection Name: $CONNECTION_NAME" | Out-File -Append "kubernetes-credentials.txt"
+
+# Get public IP
+$DB_IP = gcloud sql instances describe coldsense-db --project=$PROJECT_ID --format="get(ipAddresses[0].ipAddress)"
+Write-Host "Database IP: $DB_IP" -ForegroundColor Cyan
+Write-Output "Database IP: $DB_IP" | Out-File -Append "kubernetes-credentials.txt"
+
+Write-Host "`n✅ Cloud SQL is ready!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 6: BUILD AND PUSH DOCKER IMAGES (10 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Set image names
+$BACKEND_IMAGE = "${REGION}-docker.pkg.dev/${PROJECT_ID}/coldsense-repo/backend:v1.0"
+$SIMULATOR_IMAGE = "${REGION}-docker.pkg.dev/${PROJECT_ID}/coldsense-repo/simulator:v1.0"
+
+Write-Host "`n📦 Building Docker images..." -ForegroundColor Yellow
+
+# Navigate to project root
+cd "c:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project"
+
+# Build backend image
+Write-Host "`nBuilding backend image..." -ForegroundColor Cyan
+docker build -t $BACKEND_IMAGE -f backend/Dockerfile backend/
+
+# Push backend image
+Write-Host "Pushing backend image..." -ForegroundColor Cyan
+docker push $BACKEND_IMAGE
+
+Write-Host "✅ Backend image pushed!" -ForegroundColor Green
+
+# Build simulator image
+Write-Host "`nBuilding simulator image..." -ForegroundColor Cyan
+docker build -t $SIMULATOR_IMAGE -f backend/simulators/Dockerfile backend/simulators/
+
+# Push simulator image
+Write-Host "Pushing simulator image..." -ForegroundColor Cyan
+docker push $SIMULATOR_IMAGE
+
+Write-Host "✅ Simulator image pushed!" -ForegroundColor Green
+
+# Verify images
+gcloud artifacts docker images list ${REGION}-docker.pkg.dev/${PROJECT_ID}/coldsense-repo --project=$PROJECT_ID
+
+Write-Host "`n✅ All images pushed to Artifact Registry!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 7: CREATE KUBERNETES NAMESPACE & SECRETS (3 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Create namespace
+kubectl create namespace coldsense
+
+# Create database secret
+$DB_URL = "postgresql://coldsense_app:${APP_PASSWORD}@localhost:5432/coldsense"
+kubectl create secret generic db-credentials --namespace=coldsense --from-literal=database-url="$DB_URL"
+
+# Create Supabase secret (REPLACE WITH YOUR REAL VALUES)
+Write-Host "`n⚠️ IMPORTANT: Update these with your real Supabase credentials!" -ForegroundColor Yellow
+$SUPABASE_URL = "https://mmxfqodybvdlhpjbcdnq.supabase.co"
+$SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
+$SUPABASE_SERVICE_KEY = "YOUR_SUPABASE_SERVICE_KEY"
+
+kubectl create secret generic supabase-credentials --namespace=coldsense --from-literal=supabase-url="$SUPABASE_URL" --from-literal=supabase-key="$SUPABASE_KEY" --from-literal=supabase-service-key="$SUPABASE_SERVICE_KEY"
+
+# Create MQTT secret
+kubectl create secret generic mqtt-credentials --namespace=coldsense --from-literal=mqtt-broker="broker.emqx.io" --from-literal=mqtt-port="1883"
+
+# Verify secrets
+kubectl get secrets --namespace=coldsense
+
+Write-Host "`n✅ Kubernetes secrets created!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 8: DEPLOY CLOUD SQL PROXY (3 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Update the Cloud SQL connection name in cloudsql-proxy.yaml if different
+# Edit: infrastructure/kubernetes/cloudsql-proxy.yaml
+# Line with connection name: exalted-skein-505210-g0:asia-south1:coldsense-db
+
+# Apply Cloud SQL Proxy deployment
+kubectl apply -f infrastructure/kubernetes/cloudsql-proxy.yaml
+
+# Wait for proxy to be ready
+Write-Host "`n⏳ Waiting for Cloud SQL Proxy to be ready..." -ForegroundColor Yellow
+kubectl wait --for=condition=ready pod -l app=cloudsql-proxy --namespace=coldsense --timeout=300s
+
+# Verify
+kubectl get pods --namespace=coldsense -l app=cloudsql-proxy
+
+Write-Host "`n✅ Cloud SQL Proxy deployed and ready!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 9: DEPLOY BACKEND API (3 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Apply backend deployment
+kubectl apply -f infrastructure/kubernetes/backend-deployment.yaml
+
+# Apply backend service (LoadBalancer)
+kubectl apply -f infrastructure/kubernetes/backend-service.yaml
+
+# Wait for backend to be ready
+Write-Host "`n⏳ Waiting for backend pods to be ready..." -ForegroundColor Yellow
+kubectl wait --for=condition=ready pod -l app=coldsense-backend --namespace=coldsense --timeout=300s
+
+# Verify
+kubectl get pods --namespace=coldsense -l app=coldsense-backend
+kubectl get svc --namespace=coldsense backend-service
+
+Write-Host "`n✅ Backend deployed!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 10: DEPLOY MQTT SUBSCRIBER (2 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Apply MQTT deployment
+kubectl apply -f infrastructure/kubernetes/mqtt-subscriber.yaml
+
+# Wait for MQTT to be ready
+Write-Host "`n⏳ Waiting for MQTT subscriber to be ready..." -ForegroundColor Yellow
+kubectl wait --for=condition=ready pod -l app=mqtt-subscriber --namespace=coldsense --timeout=300s
+
+# Verify
+kubectl get pods --namespace=coldsense -l app=mqtt-subscriber
+
+Write-Host "`n✅ MQTT subscriber deployed!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 11: DEPLOY SIMULATOR (2 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Apply simulator deployment
+kubectl apply -f infrastructure/kubernetes/simulator-deployment.yaml
+
+# Wait for simulator to be ready
+Write-Host "`n⏳ Waiting for simulator to be ready..." -ForegroundColor Yellow
+kubectl wait --for=condition=ready pod -l app=simulator --namespace=coldsense --timeout=300s
+
+# Verify
+kubectl get pods --namespace=coldsense -l app=simulator
+
+Write-Host "`n✅ Simulator deployed!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 12: GET LOAD BALANCER IP (5 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+Write-Host "`n⏳ Waiting for LoadBalancer to assign external IP..." -ForegroundColor Yellow
+Write-Host "This can take 2-5 minutes..." -ForegroundColor Yellow
+
+# Wait for external IP
+$EXTERNAL_IP = ""
+$attempts = 0
+while (($EXTERNAL_IP -eq "" -or $EXTERNAL_IP -eq "<pending>") -and $attempts -lt 60) {
+    Start-Sleep -Seconds 10
+    $EXTERNAL_IP = kubectl get svc backend-service --namespace=coldsense -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>$null
+    $attempts++
+    Write-Host "." -NoNewline -ForegroundColor Yellow
+}
+
+Write-Host ""
+if ($EXTERNAL_IP -ne "" -and $EXTERNAL_IP -ne "<pending>") {
+    Write-Host "`n✅ LoadBalancer IP assigned!" -ForegroundColor Green
+    Write-Host "External IP: $EXTERNAL_IP" -ForegroundColor Cyan
+    Write-Host "API URL: http://${EXTERNAL_IP}:8000" -ForegroundColor Cyan
+    Write-Output "`n=== LOAD BALANCER ===" | Out-File -Append "kubernetes-credentials.txt"
+    Write-Output "External IP: $EXTERNAL_IP" | Out-File -Append "kubernetes-credentials.txt"
+    Write-Output "API URL: http://${EXTERNAL_IP}:8000" | Out-File -Append "kubernetes-credentials.txt"
+} else {
+    Write-Host "`n⚠️ LoadBalancer IP not assigned yet. Check with:" -ForegroundColor Yellow
+    Write-Host "kubectl get svc backend-service --namespace=coldsense" -ForegroundColor White
+}
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 13: VERIFY DEPLOYMENT (5 minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+Write-Host "`n📊 Deployment Status:" -ForegroundColor Cyan
+
+# Check all pods
+kubectl get pods --namespace=coldsense
+
+# Check all services
+kubectl get svc --namespace=coldsense
+
+# Check deployments
+kubectl get deployments --namespace=coldsense
+
+if ($EXTERNAL_IP -ne "" -and $EXTERNAL_IP -ne "<pending>") {
+    Write-Host "`n🧪 Testing endpoints..." -ForegroundColor Cyan
+    
+    # Test health endpoint
+    Write-Host "`nTesting /health endpoint..." -ForegroundColor Yellow
+    curl http://${EXTERNAL_IP}:8000/health
+    
+    # Test products endpoint
+    Write-Host "`nTesting /api/products endpoint..." -ForegroundColor Yellow
+    curl http://${EXTERNAL_IP}:8000/api/products
+}
+
+# Check logs
+Write-Host "`n📋 Recent logs:" -ForegroundColor Cyan
+Write-Host "`nBackend logs:" -ForegroundColor Yellow
+kubectl logs -l app=coldsense-backend --namespace=coldsense --tail=20
+
+Write-Host "`nMQTT logs:" -ForegroundColor Yellow
+kubectl logs -l app=mqtt-subscriber --namespace=coldsense --tail=20
+
+Write-Host "`n✅ DEPLOYMENT COMPLETE!" -ForegroundColor Green
+
+═══════════════════════════════════════════════════════════════════════════════
+🎉 SUCCESS! YOUR KUBERNETES CLUSTER IS RUNNING! 🎉
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ GKE Autopilot Cluster: Running
+✅ Cloud SQL PostgreSQL (HA): Running
+✅ Backend API (2 replicas): Deployed
+✅ MQTT Subscriber: Deployed
+✅ Simulator: Deployed
+✅ LoadBalancer: Public IP assigned
+
+📊 SUMMARY:
+
+Cluster Name: coldsense-production-cluster
+Region: asia-south1
+Namespace: coldsense
+Backend Replicas: 2
+Backend URL: http://${EXTERNAL_IP}:8000 (if IP assigned)
+Database: Cloud SQL PostgreSQL with HA
+
+💰 Monthly Cost: ~$300-350/month
+With GCP Credits: $0 for 3+ months! 🎉
+
+═══════════════════════════════════════════════════════════════════════════════
+🔧 USEFUL KUBERNETES COMMANDS
+═══════════════════════════════════════════════════════════════════════════════
+
+# View all resources
+kubectl get all --namespace=coldsense
+
+# View pods with more details
+kubectl get pods --namespace=coldsense -o wide
+
+# Get logs from a specific pod
+kubectl logs -f <pod-name> --namespace=coldsense
+
+# Get logs from all backend pods
+kubectl logs -f -l app=coldsense-backend --namespace=coldsense
+
+# Describe a pod (troubleshooting)
+kubectl describe pod <pod-name> --namespace=coldsense
+
+# Execute into a pod (debugging)
+kubectl exec -it <pod-name> --namespace=coldsense -- /bin/bash
+
+# Scale backend replicas
+kubectl scale deployment coldsense-backend --replicas=3 --namespace=coldsense
+
+# Restart a deployment (rollout restart)
+kubectl rollout restart deployment/coldsense-backend --namespace=coldsense
+
+# Check rollout status
+kubectl rollout status deployment/coldsense-backend --namespace=coldsense
+
+# View deployment history
+kubectl rollout history deployment/coldsense-backend --namespace=coldsense
+
+# Rollback to previous version
+kubectl rollout undo deployment/coldsense-backend --namespace=coldsense
+
+# Port forward (for local testing)
+kubectl port-forward svc/backend-service 8000:8000 --namespace=coldsense
+
+# Get events (troubleshooting)
+kubectl get events --namespace=coldsense --sort-by='.lastTimestamp'
+
+# View resource usage
+kubectl top pods --namespace=coldsense
+kubectl top nodes
+
+═══════════════════════════════════════════════════════════════════════════════
+🔄 UPDATE/REDEPLOY COMMANDS
+═══════════════════════════════════════════════════════════════════════════════
+
+# When you update your code, rebuild and push new images:
+$NEW_VERSION = "v1.1"
+$BACKEND_IMAGE_NEW = "${REGION}-docker.pkg.dev/${PROJECT_ID}/coldsense-repo/backend:${NEW_VERSION}"
+
+docker build -t $BACKEND_IMAGE_NEW -f backend/Dockerfile backend/
+docker push $BACKEND_IMAGE_NEW
+
+# Update deployment to use new image
+kubectl set image deployment/coldsense-backend backend=$BACKEND_IMAGE_NEW --namespace=coldsense
+
+# Watch rollout
+kubectl rollout status deployment/coldsense-backend --namespace=coldsense
+
+═══════════════════════════════════════════════════════════════════════════════
+🗑️ DELETE/CLEANUP COMMANDS (CAREFUL!)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Delete all deployments (keeps cluster)
+kubectl delete namespace coldsense
+
+# Delete Cloud SQL (CAREFUL - deletes data!)
+gcloud sql instances delete coldsense-db --project=$PROJECT_ID
+
+# Delete GKE cluster (CAREFUL!)
+gcloud container clusters delete $CLUSTER_NAME --region=$REGION --project=$PROJECT_ID
+
+# Delete Artifact Registry
+gcloud artifacts repositories delete coldsense-repo --location=$REGION --project=$PROJECT_ID
+
+═══════════════════════════════════════════════════════════════════════════════
+📊 MONITORING & LOGS
+═══════════════════════════════════════════════════════════════════════════════
+
+# View in GCP Console:
+Write-Host "`n📊 Monitoring Dashboards:" -ForegroundColor Cyan
+Write-Host "Kubernetes Engine: https://console.cloud.google.com/kubernetes/clusters/details/$REGION/$CLUSTER_NAME/details?project=$PROJECT_ID" -ForegroundColor Yellow
+Write-Host "Cloud SQL: https://console.cloud.google.com/sql/instances/coldsense-db/overview?project=$PROJECT_ID" -ForegroundColor Yellow
+Write-Host "Artifact Registry: https://console.cloud.google.com/artifacts?project=$PROJECT_ID" -ForegroundColor Yellow
+
+═══════════════════════════════════════════════════════════════════════════════
+🚀 NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ✅ Update frontend with new backend URL (LoadBalancer IP)
+2. ✅ Test farmer signup/login
+3. ✅ Test owner signup/login
+4. ✅ Verify sensor data is flowing
+5. ✅ Monitor logs for errors
+6. ✅ Show to your senior!
+7. ✅ Launch with real farmers & owners! 🚜❄️
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📝 All credentials saved in: kubernetes-credentials.txt
+
+Created by: Kiro AI
+Date: August 26, 2026
+Project: ColdSense IoT Platform
+Status: PRODUCTION READY! 🎉

@@ -3,7 +3,7 @@
  * Reusable line chart component for displaying time-series data
  */
 
-import React from 'react';
+import React, { useId } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './Card';
 
 interface LineChartProps {
@@ -42,9 +42,10 @@ const LineChart: React.FC<LineChartProps> = ({
   const actualMaxValue = maxValue !== undefined ? maxValue : (binary ? 2 : Math.max(...data, 100));
   const range = actualMaxValue - actualMinValue || 1;
 
-  // Generate unique IDs for gradients and filters
-  const gradientId = `${color}Gradient-${Math.random().toString(36).substr(2, 9)}`;
-  const glowId = `${color}Glow-${Math.random().toString(36).substr(2, 9)}`;
+  // Stable IDs via React.useId() — never Math.random() in render
+  const uid = useId().replace(/:/g, '');
+  const gradientId = `${color}Gradient-${uid}`;
+  const glowId = `${color}Glow-${uid}`;
 
   // Calculate chart dimensions based on data length
   const dataLength = data.length;

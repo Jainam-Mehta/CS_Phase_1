@@ -145,6 +145,13 @@ const StakeholderProfileSetup: React.FC = () => {
       return;
     }
 
+    // Phone number validation (must be exactly 10 digits)
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(formData.phoneNumber)) {
+      setError('Phone number must be exactly 10 digits');
+      return;
+    }
+
     if (!acceptTerms) {
       setError('Please accept the Terms & Conditions');
       return;
@@ -196,11 +203,8 @@ const StakeholderProfileSetup: React.FC = () => {
         sites: [],
       });
 
-      // Complete onboarding step (skip for stakeholders)
-      // completeStep('profile_setup');
-
-      // Navigate to investment preferences
-      navigate('/stakeholder-investment-preferences');
+      // Navigate directly to stakeholder map dashboard (skip investment preferences)
+      navigate('/stakeholder/map');
     } catch (err: any) {
       console.error('Profile creation error:', err);
       setError(err.message || 'Failed to create profile. Please try again.');
@@ -225,26 +229,91 @@ const StakeholderProfileSetup: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 p-4">
-      <div className="w-full max-w-2xl">
-        <Card variant="default" className="w-full">
-          <CardHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <Briefcase className="h-8 w-8 text-purple-600" />
-              <CardTitle className="text-2xl">Stakeholder Profile Setup</CardTitle>
+      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+        {/* Illustration Section */}
+        <div className="hidden lg:flex flex-col items-center justify-center">
+          <svg viewBox="0 0 400 400" className="w-full h-full max-w-md">
+            <defs>
+              <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#667EEA" />
+                <stop offset="100%" stopColor="#764BA2" />
+              </linearGradient>
+              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#48BB78" />
+                <stop offset="100%" stopColor="#38A169" />
+              </linearGradient>
+            </defs>
+            
+            {/* Background */}
+            <rect x="0" y="0" width="400" height="400" fill="url(#skyGradient)" />
+            
+            {/* Globe/Map background */}
+            <circle cx="200" cy="200" r="150" fill="rgba(255,255,255,0.1)" />
+            <circle cx="200" cy="200" r="120" fill="rgba(255,255,255,0.1)" />
+            
+            {/* Investment Chart Bars */}
+            <g transform="translate(100, 250)">
+              <rect x="0" y="-80" width="40" height="80" fill="url(#chartGradient)" rx="5" />
+              <rect x="60" y="-120" width="40" height="120" fill="url(#chartGradient)" rx="5" />
+              <rect x="120" y="-100" width="40" height="100" fill="url(#chartGradient)" rx="5" />
+              <rect x="180" y="-140" width="40" height="140" fill="url(#chartGradient)" rx="5" />
+            </g>
+            
+            {/* Trend Arrow */}
+            <g transform="translate(150, 120)">
+              <path d="M 0,50 L 30,30 L 60,40 L 90,10" 
+                    stroke="#FFD700" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <polygon points="90,10 80,5 85,15" fill="#FFD700" />
+            </g>
+            
+            {/* Rupee Signs */}
+            <g fill="#FFD700" opacity="0.8">
+              <text x="80" y="100" fontSize="30" fontWeight="bold">₹</text>
+              <text x="280" y="140" fontSize="25" fontWeight="bold">₹</text>
+              <text x="320" y="240" fontSize="20" fontWeight="bold">₹</text>
+            </g>
+            
+            {/* Investment Icons - Briefcase */}
+            <g transform="translate(200, 200)">
+              <rect x="-30" y="-20" width="60" height="40" fill="rgba(255,255,255,0.3)" rx="5" />
+              <rect x="-15" y="-30" width="30" height="15" fill="rgba(255,255,255,0.3)" rx="3" />
+              <line x1="-20" y1="-5" x2="20" y2="-5" stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
+            </g>
+          </svg>
+          
+          <div className="text-center mt-6">
+            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Investor!</h2>
+            <p className="text-white/80">Start investing in cold storage opportunities</p>
+          </div>
+        </div>
+
+        {/* Form Card */}
+        <Card variant="default" className="w-full max-w-lg">
+          <CardHeader className="text-center relative">
+            {/* Step Indicator */}
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm font-medium rounded-full">
+                Step 2/2
+              </span>
             </div>
-            <p className="text-gray-600 dark:text-gray-400">
-              Complete your profile to start investing in cold storage facilities
+            
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="h-8 w-8 text-white" />
+            </div>
+            <CardTitle className="text-3xl">Stakeholder Profile Setup</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">
+              Complete your profile to start viewing cold storage opportunities
             </p>
           </CardHeader>
           <CardContent>
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+              
               {/* Name Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -256,7 +325,7 @@ const StakeholderProfileSetup: React.FC = () => {
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     placeholder="Enter your first name"
-                    className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                   />
                 </div>
@@ -269,7 +338,7 @@ const StakeholderProfileSetup: React.FC = () => {
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     placeholder="Enter your last name"
-                    className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                   />
                 </div>
@@ -287,46 +356,51 @@ const StakeholderProfileSetup: React.FC = () => {
                     value={formData.phoneNumber}
                     onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                     placeholder="Enter your phone number"
-                    className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                   />
                 </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">10 digits only</p>
               </div>
 
-              {/* Date of Birth (Optional) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Date of Birth (Optional)
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.dateOfBirth ? formData.dateOfBirth.split('-').reverse().join('/') : ''}
-                    onChange={(e) => handleDateChange(e.target.value)}
-                    placeholder="DD/MM/YYYY"
-                    className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Date of Birth */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Date of Birth
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={formData.dateOfBirth ? formData.dateOfBirth.split('-').reverse().join('/') : ''}
+                      onChange={(e) => handleDateChange(e.target.value)}
+                      placeholder="DD/MM/YYYY"
+                      className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: DD/MM/YYYY</p>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: DD/MM/YYYY</p>
-              </div>
 
-              {/* Gender (Optional) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Gender (Optional)
-                </label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                  className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
-                </select>
+                {/* Gender */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Gender
+                  </label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Select gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
               </div>
 
               {/* Location - State */}
@@ -339,7 +413,7 @@ const StakeholderProfileSetup: React.FC = () => {
                   <select
                     value={selectedStateId || ''}
                     onChange={(e) => setSelectedStateId(e.target.value || null)}
-                    className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                   >
                     <option value="">Select state</option>
@@ -363,7 +437,7 @@ const StakeholderProfileSetup: React.FC = () => {
                     value={selectedDistrictId || ''}
                     onChange={(e) => setSelectedDistrictId(e.target.value || null)}
                     disabled={!selectedStateId}
-                    className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     required
                   >
                     <option value="">Select district</option>
@@ -376,10 +450,10 @@ const StakeholderProfileSetup: React.FC = () => {
                 </div>
               </div>
 
-              {/* Location - Locality (Optional) */}
+              {/* Location - Locality */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Locality (Optional)
+                  Locality
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -387,7 +461,7 @@ const StakeholderProfileSetup: React.FC = () => {
                     value={selectedLocalityId || ''}
                     onChange={(e) => setSelectedLocalityId(e.target.value || null)}
                     disabled={!selectedDistrictId}
-                    className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">Select locality</option>
                     {localities.map((locality) => (
@@ -421,17 +495,7 @@ const StakeholderProfileSetup: React.FC = () => {
                 className="w-full"
                 disabled={loading}
               >
-                {loading ? 'Creating Profile...' : 'Continue to Investment Preferences'}
-              </Button>
-
-              {/* Back Button */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/signup')}
-                className="w-full"
-              >
-                Back to Signup
+                {loading ? 'Creating Profile...' : 'Continue to Dashboard'}
               </Button>
             </form>
           </CardContent>

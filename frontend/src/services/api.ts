@@ -1,9 +1,11 @@
 /**
  * Base API configuration and utilities
- * Provides consistent fetch wrapper with timeout handling
+ * Provides consistent fetch wrapper with timeout and JWT authentication handling
  */
 
-const API_BASE_URL = 'http://localhost:8000';
+import { supabase } from '../lib/supabase';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 
 /**
@@ -47,7 +49,7 @@ async function handleResponse(response: Response): Promise<any> {
 }
 
 /**
- * Generic API request handler
+ * Generic API request handler with automatic Supabase JWT Bearer header forwarding
  * @param {string} endpoint - API endpoint path
  * @param {RequestInit} options - Fetch options
  * @param {number} timeout - Request timeout in milliseconds
@@ -56,9 +58,21 @@ async function handleResponse(response: Response): Promise<any> {
 async function apiRequest(endpoint: string, options: RequestInit = {}, timeout: number = DEFAULT_TIMEOUT): Promise<any> {
   const url = `${API_BASE_URL}${endpoint}`;
   
+  // Attach active Supabase session token if present
+  let authHeader: Record<string, string> = {};
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+      authHeader = { Authorization: `Bearer ${data.session.access_token}` };
+    }
+  } catch (e) {
+    // Non-fatal if session check fails
+  }
+
   const defaultOptions: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...options.headers,
     },
     ...options,

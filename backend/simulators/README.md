@@ -5,13 +5,14 @@ A realistic IoT sensor data simulator for ColdSense AI project demonstration pur
 ## Features
 
 - **Realistic Sensor Data**: Generates smooth, realistic transitions for temperature, humidity, energy, and more
+- **Market Price Generation**: Generates daily market prices for all products across major Indian states
 - **Real Agricultural Data**: Uses actual recommended storage conditions for products (Apple, Dragon Fruit, Mango, etc.)
 - **Product Optimality**: Calculates storage optimality percentages based on current conditions
 - **Historical Data**: Generates 24 hours of historical data for graph support
 - **Door Analytics**: Tracks door opens, duration, and last open time
 - **Energy Analytics**: Generates hourly, daily, and weekly energy consumption
 - **Inventory Health**: Calculates freshness, shelf life remaining, and spoilage risk
-- **Automatic Updates**: Runs every 60 seconds indefinitely
+- **Automatic Updates**: Sensor data every 60 seconds, market prices daily at 6 AM IST
 - **Zero External Dependencies**: No MQTT, AWS, or Docker required
 
 ## Project Structure
@@ -20,6 +21,7 @@ A realistic IoT sensor data simulator for ColdSense AI project demonstration pur
 backend/simulators/
 ├── simulator.py              # Main simulator entry point
 ├── sensor_generator.py      # Generates realistic sensor readings
+├── market_price_generator.py # Generates daily market prices (NEW)
 ├── product_optimality.py   # Calculates product storage optimality
 ├── energy_generator.py      # Generates energy consumption data
 ├── door_generator.py        # Generates door event analytics
@@ -43,6 +45,7 @@ backend/simulators/
   - `batches`
   - `products`
   - `facilities`
+  - `market_prices` (NEW - for market price simulation)
 
 ### Setup Steps
 
@@ -88,9 +91,11 @@ python simulator.py
 
 The simulator will:
 1. Load all rooms, facilities, batches, and products from Supabase
-2. Generate 24 hours of historical data
-3. Start updating sensor data every 60 seconds
-4. Continue running indefinitely until stopped
+2. Generate 24 hours of historical sensor data
+3. Generate initial market prices for all products across major states
+4. Start updating sensor data every 60 seconds
+5. Update market prices daily at 6:00 AM IST
+6. Continue running indefinitely until stopped
 
 ### Console Output
 
@@ -122,8 +127,19 @@ Updating Room Room 2 (ID: xxx-xxx-xxx)...
 ==================================================
 Update cycle completed at 08:45:04
 ==================================================
-2024-01-15 08:45:04 - INFO - Simulator started. Updates every 60 seconds.
+2024-01-15 08:45:04 - INFO - Simulator started.
+  - Sensor updates: Every 60 seconds
+  - Market prices: Daily at 6:00 AM IST
 Press Ctrl+C to stop.
+==================================================
+Updating market prices at 08:45:05
+==================================================
+Generated 130 price records
+Market prices updated: 130 successful, 0 failed
+  Mango: ₹95-135/kg (avg: ₹115)
+  Apple: ₹82-107/kg (avg: ₹94)
+  Tomato: ₹28-41/kg (avg: ₹34)
+==================================================
 ```
 
 ## Stopping the Simulator
@@ -132,7 +148,39 @@ Press `Ctrl+C` to stop the simulator gracefully.
 
 ## Sensor Data Generated
 
-### Per Room Update
+### Market Prices (Daily at 6 AM IST)
+
+For each product:
+- **Product Name**: From products table
+- **Price per KG**: Realistic price with daily variance (₹/kg)
+- **State**: Major agricultural states in India
+- **City**: 1-2 major cities per state
+- **Market Name**: Realistic market names (APMC, Wholesale, etc.)
+- **Recorded At**: Timestamp of price update
+- **Source**: 'simulator' identifier
+
+**Supported Products with Base Prices:**
+- Avocado: ₹180 (±25)
+- Mango: ₹115 (±20)
+- Apple: ₹92 (±15)
+- Tomato: ₹33 (±8)
+- Onion: ₹38 (±12)
+- Potato: ₹27 (±5)
+- Banana: ₹48 (±10)
+- Dragon Fruit: ₹245 (±40)
+- Grapes: ₹75 (±15)
+- Orange: ₹55 (±12)
+- Carrot: ₹42 (±8)
+- Capsicum: ₹65 (±15)
+- Milk: ₹48 (±3)
+
+**Coverage:**
+- 10 major states (Maharashtra, Karnataka, Punjab, etc.)
+- 1-2 cities per state
+- Multiple markets per city
+- ~130+ price records per day (13 products × 10 states)
+
+### Per Room Update (Every 60 seconds)
 
 Each room generates:
 - **Internal Temperature**: 1.0-15.0°C (smooth transitions)
@@ -182,6 +230,17 @@ The simulator uses real agricultural storage conditions for:
 ## Dashboard Compatibility
 
 The simulator updates the exact fields consumed by your frontend:
+
+### market_prices Table (NEW)
+- `product_id` - UUID reference to products table
+- `product_name` - Product name for quick reference
+- `price_per_kg` - Current market price in ₹/kg
+- `state` - State where price was recorded
+- `city` - City where price was recorded
+- `market_name` - Name of the market
+- `recorded_at` - Timestamp of price recording
+- `source` - Data source identifier ('simulator')
+- `created_at` - Record creation timestamp
 
 ### cold_storage_conditions Table
 - `room_id`

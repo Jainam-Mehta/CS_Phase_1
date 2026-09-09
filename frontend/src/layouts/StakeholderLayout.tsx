@@ -11,6 +11,7 @@ import {
   Search,
   X,
   Map as MapIcon,
+  LogOut,
 } from 'lucide-react';
 
 const stakeholderNavigation = [
@@ -26,7 +27,12 @@ const StakeholderLayout: React.FC = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const navigation = [...stakeholderNavigation, ...settingsNavigation];
 
@@ -139,6 +145,13 @@ const StakeholderLayout: React.FC = () => {
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Stakeholder</p>
               </div>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Log out"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
             </div>
           </div>
         )}

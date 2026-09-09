@@ -257,10 +257,6 @@ const StakeholderProfile: React.FC = () => {
                   <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Facilities Invested In</span>
                   <span className="font-bold text-slate-900 dark:text-white">{stats.facilitiesInvested}</span>
                </div>
-               <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Rooms Invested</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{stats.totalRooms}</span>
-               </div>
                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
                   <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1"><IndianRupee className="w-4 h-4"/> Total Investment Value</span>
                   <span className="font-bold text-emerald-800 dark:text-emerald-300">₹{stats.totalValue.toLocaleString()}</span>

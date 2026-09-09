@@ -28,7 +28,7 @@ const FarmerAlerts: React.FC = () => {
      
      const generateRealisticAlerts = async () => {
          setLoading(true);
-         // 1. Fetch conditions telemetry 
+         // 1. Fetch latest conditions from cold_storage_conditions
          const { data: cond } = await supabase
             .from('cold_storage_conditions')
             .select('temperature, humidity, recorded_at')
@@ -37,8 +37,39 @@ const FarmerAlerts: React.FC = () => {
             .limit(1)
             .maybeSingle();
 
+         // 2. Fetch unread DB alerts for this room + farmer
+         let profileId: string | null = null;
+         if (user?.id) {
+           const { data: prof } = await supabase
+             .from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+           profileId = prof?.id ?? null;
+         }
+
+         const { data: dbAlerts } = profileId
+           ? await supabase
+               .from('alerts')
+               .select('id, alert_type, severity, title, description, created_at')
+               .eq('room_id', activeRoomId)
+               .eq('farmer_id', profileId)
+               .eq('is_read', false)
+               .order('created_at', { ascending: false })
+               .limit(10)
+           : { data: [] };
+
          const generated: AlertItem[] = [];
-         
+
+         // Convert DB alerts to display format
+         for (const al of dbAlerts || []) {
+           generated.push({
+             id: al.id,
+             level: al.severity === 'critical' ? 'Critical' : al.severity === 'warning' ? 'Warning' : 'Info',
+             title: al.title || al.alert_type,
+             message: al.description || '',
+             time: new Date(al.created_at).toLocaleTimeString(),
+           });
+         }
+
+         // Evaluate conditions if available
          if (cond) {
              const optimal = getProductOptimality(activeProductId);
              const tempStatus = evaluateCondition(cond.temperature, optimal.minTemp, optimal.maxTemp);
@@ -62,33 +93,19 @@ const FarmerAlerts: React.FC = () => {
                       time: new Date(cond.recorded_at).toLocaleTimeString()
                   });
              }
-             if (tempStatus.isOptimal && humStatus.isOptimal) {
-                  generated.push({
-                      id: 'optimal_state',
-                      level: 'Info',
-                      title: 'System Stability Retained',
-                      message: 'Storage conditions are securely holding inside target limits preserving perishables natively.',
-                      time: new Date().toLocaleTimeString()
-                  });
-             }
-         } else {
-             // Add demo alerts for presentation
+         }
+
+         // If nothing found, add informational state
+         if (generated.length === 0) {
              generated.push({
-                 id: 'door_resolved',
+                 id: 'optimal_state',
                  level: 'Info',
-                 title: 'Door Left Open - Resolved',
-                 message: 'Door was left open for 15 minutes on July 26. Issue was detected and resolved automatically. Acknowledged by facility manager.',
-                 time: '11 days ago'
-             });
-             generated.push({
-                 id: 'product_expiry',
-                 level: 'Warning',
-                 title: 'Product Expiring Soon',
-                 message: 'Apple batch BATCH-1785979188796-EWK370 expires in 14 days. Recommend planning redistribution or sales.',
-                 time: 'Ongoing'
+                 title: 'All Systems Clear',
+                 message: 'No active alerts. Storage conditions are within target limits.',
+                 time: new Date().toLocaleTimeString()
              });
          }
-         
+
          setAlerts(generated);
          setLoading(false);
      };
@@ -120,7 +137,6 @@ const FarmerAlerts: React.FC = () => {
          <Bell className="w-8 h-8 text-blue-500" />
          <div>
            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Active Alerts Tracking</h1>
-           <p className="text-slate-500 dark:text-slate-400 mt-1">Isolating critical anomalies affecting {activeProductId} stability cleanly.</p>
          </div>
       </div>
       

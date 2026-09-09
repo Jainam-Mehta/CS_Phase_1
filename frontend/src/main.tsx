@@ -7,9 +7,33 @@ import { ErrorBoundary } from './components/common/ErrorBoundary'
 import ThemeProvider from './components/theme/ThemeProvider'
 import './styles/globals.css'
 
-// Prevent theme flash by immediately evaluating global storage values before DOM compilation
-const savedTheme = localStorage.getItem('theme') || 'system';
-if (savedTheme === 'dark' || (savedTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+// Prevent theme flash by reading appearance from the persisted settings store.
+// useSettingsStore persists to 'coldsense-settings'; the appearance field lives there.
+// Fall back to reading the legacy 'theme' key so existing sessions aren't broken.
+// Default to 'light' theme when no preference is stored.
+const resolveInitialTheme = (): 'dark' | 'light' => {
+  try {
+    const settings = localStorage.getItem('coldsense-settings');
+    if (settings) {
+      const parsed = JSON.parse(settings);
+      const appearance: string = parsed?.state?.appearance ?? 'light';
+      if (appearance === 'dark') return 'dark';
+      if (appearance === 'light') return 'light';
+      // 'system' — fall through to media query
+    } else {
+      // Legacy key written by old toggleTheme in OwnerLayout
+      const legacy = localStorage.getItem('theme');
+      if (legacy === 'dark') return 'dark';
+      if (legacy === 'light') return 'light';
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+  // Default to light theme instead of following system preference
+  return 'light';
+};
+
+if (resolveInitialTheme() === 'dark') {
   document.documentElement.classList.add('dark');
 } else {
   document.documentElement.classList.remove('dark');

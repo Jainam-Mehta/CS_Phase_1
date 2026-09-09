@@ -1,0 +1,251 @@
+=======================================================
+COLDSENSE - QUICK DEPLOYMENT COMMANDS (Copy & Paste)
+=======================================================
+
+🔹 PHASE 1: AUTHENTICATION
+---------------------------------------------------------
+gcloud auth login
+gcloud config set project exalted-skein-505210-g0
+gcloud config set compute/region asia-south1
+gcloud config set compute/zone asia-south1-a
+gcloud services enable compute.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
+
+
+🔹 PHASE 2: CREATE VM
+---------------------------------------------------------
+gcloud compute instances create coldsense-backend-vm --zone=asia-south1-a --machine-type=e2-medium --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud --boot-disk-size=20GB --boot-disk-type=pd-balanced --tags=http-server,https-server --metadata=startup-script='#!/bin/bash
+apt-get update
+apt-get install -y docker.io docker-compose git
+systemctl enable docker
+systemctl start docker
+usermod -aG docker $USER
+'
+
+gcloud compute firewall-rules create allow-http --allow tcp:80 --target-tags http-server --description="Allow HTTP traffic to backend"
+
+gcloud compute firewall-rules create allow-backend --allow tcp:8000 --target-tags http-server --description="Allow access to FastAPI backend"
+
+gcloud compute firewall-rules create allow-mqtt --allow tcp:1883 --target-tags http-server --description="Allow MQTT traffic"
+
+gcloud compute addresses create coldsense-backend-ip --region=asia-south1
+
+gcloud compute addresses describe coldsense-backend-ip --region=asia-south1 --format="value(address)"
+
+gcloud compute instances stop coldsense-backend-vm --zone=asia-south1-a
+
+gcloud compute instances delete-access-config coldsense-backend-vm --zone=asia-south1-a --access-config-name="external-nat"
+
+gcloud compute instances add-access-config coldsense-backend-vm --zone=asia-south1-a --access-config-name="external-nat" --address=coldsense-backend-ip
+
+gcloud compute instances start coldsense-backend-vm --zone=asia-south1-a
+
+
+🔹 PHASE 3: DEPLOY TO VM (SSH INTO VM FIRST)
+---------------------------------------------------------
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a
+
+# === NOW INSIDE VM - Run these commands: ===
+
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+sudo chmod +x /usr/local/bin/docker-compose
+
+docker --version
+
+mkdir -p ~/coldsense
+
+cd ~/coldsense
+
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: coldsense-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - coldsense-network
+
+  backend:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/backend:latest
+    container_name: coldsense-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=coldsense/sensors
+      - SUPABASE_URL=https://vzoypfctadgyflzwodmp.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+      - LOG_LEVEL=INFO
+    depends_on:
+      - mosquitto
+    networks:
+      - coldsense-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  simulator:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/simulator:latest
+    container_name: coldsense-simulator
+    restart: unless-stopped
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - SUPABASE_URL=https://vzoypfctadgyflzwodmp.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+    depends_on:
+      - mosquitto
+      - backend
+    networks:
+      - coldsense-network
+
+networks:
+  coldsense-network:
+    driver: bridge
+EOF
+
+mkdir -p mosquitto/config mosquitto/data mosquitto/log
+
+cat > mosquitto/config/mosquitto.conf << 'EOF'
+listener 1883
+allow_anonymous true
+persistence true
+persistence_location /mosquitto/data/
+log_dest file /mosquitto/log/mosquitto.log
+log_dest stdout
+log_type all
+EOF
+
+gcloud auth configure-docker asia-south1-docker.pkg.dev
+
+exit
+
+
+🔹 PHASE 4: BUILD & PUSH IMAGES (BACK TO LOCAL)
+---------------------------------------------------------
+gcloud artifacts repositories create coldsense --repository-format=docker --location=asia-south1 --description="ColdSense Docker images"
+
+gcloud auth configure-docker asia-south1-docker.pkg.dev
+
+cd "c:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\backend"
+
+docker build -t asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/backend:latest .
+
+cd simulators
+
+docker build -t asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/simulator:latest .
+
+docker push asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/backend:latest
+
+docker push asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense/simulator:latest
+
+
+🔹 PHASE 5: START SERVICES ON VM
+---------------------------------------------------------
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a
+
+# === NOW INSIDE VM ===
+
+cd ~/coldsense
+
+docker-compose pull
+
+docker-compose up -d
+
+docker-compose ps
+
+docker-compose logs -f
+
+# Press Ctrl+C to stop following logs
+
+curl http://localhost:8000/health
+
+exit
+
+
+🔹 PHASE 6: VERIFY EXTERNAL ACCESS
+---------------------------------------------------------
+$EXTERNAL_IP = gcloud compute addresses describe coldsense-backend-ip --region=asia-south1 --format="value(address)"
+
+Write-Host "External IP: $EXTERNAL_IP" -ForegroundColor Green
+
+curl "http://${EXTERNAL_IP}:8000/health"
+
+Start-Process "http://${EXTERNAL_IP}:8000/docs"
+
+
+🔹 PHASE 7: UPDATE FRONTEND
+---------------------------------------------------------
+cd "c:\Users\Jainam Mehta\OneDrive\Desktop\CS_Project\frontend"
+
+$EXTERNAL_IP = gcloud compute addresses describe coldsense-backend-ip --region=asia-south1 --format="value(address)"
+
+@"
+VITE_API_URL=http://${EXTERNAL_IP}:8000
+"@ | Out-File -FilePath .env.local -Encoding utf8
+
+npm run dev
+
+
+=======================================================
+🎯 USEFUL MANAGEMENT COMMANDS
+=======================================================
+
+📊 View Logs:
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a --command "cd ~/coldsense && docker-compose logs -f"
+
+🔄 Restart Services:
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a --command "cd ~/coldsense && docker-compose restart"
+
+⏹️  Stop Services:
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a --command "cd ~/coldsense && docker-compose down"
+
+▶️  Start Services:
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a --command "cd ~/coldsense && docker-compose up -d"
+
+💾 Stop VM (save money):
+gcloud compute instances stop coldsense-backend-vm --zone=asia-south1-a
+
+▶️  Start VM:
+gcloud compute instances start coldsense-backend-vm --zone=asia-south1-a
+
+📍 Get External IP:
+gcloud compute addresses describe coldsense-backend-ip --region=asia-south1 --format="value(address)"
+
+🔍 SSH into VM:
+gcloud compute ssh coldsense-backend-vm --zone=asia-south1-a
+
+
+=======================================================
+🧹 CLEANUP (DELETE EVERYTHING)
+=======================================================
+
+gcloud compute instances delete coldsense-backend-vm --zone=asia-south1-a --quiet
+
+gcloud compute addresses delete coldsense-backend-ip --region=asia-south1 --quiet
+
+gcloud compute firewall-rules delete allow-http --quiet
+
+gcloud compute firewall-rules delete allow-backend --quiet
+
+gcloud compute firewall-rules delete allow-mqtt --quiet
+
+gcloud artifacts repositories delete coldsense --location=asia-south1 --quiet
+
+
+=======================================================
+✅ SUCCESS - YOUR BACKEND IS LIVE!
+=======================================================

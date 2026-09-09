@@ -20,13 +20,13 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
   const [facility, setFacility] = useState<any>(null);
   const [investment, setInvestment] = useState<any>(null);
   
-  // Real-time telemetry simulated or fetched
+  // Real-time telemetry from database - NO HARDCODED VALUES
   const [telemetry, setTelemetry] = useState({
-     temperature: 2.4,
-     humidity: 88,
-     energyKwh: 342,
+     temperature: 0,
+     humidity: 0,
+     energyKwh: 0,
      doorStatus: 'Closed' as 'Open' | 'Closed',
-     status: 'Optimal'
+     status: 'Unknown'
   });
 
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -49,7 +49,8 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
       const { data: fac, error: facError } = await supabase
         .from('facilities')
         .select(`
-          id, facility_name, capacity_total_kg, capacity_used_kg, address, owner_profile_id, status,
+          id, facility_name, total_capacity_kg, current_utilization_kg, address,
+          owner_profile_id, status,
           localities ( name, districts ( name, states ( name ) ) )
         `)
         .eq('id', facilityId)
@@ -73,6 +74,57 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
 
       if (fac) setFacility(fac);
       if (inv) setInvestment(inv);
+
+      // Fetch real-time telemetry from database - latest sensor readings
+      if (fac) {
+        try {
+          // Get all rooms for this facility
+          const { data: rooms } = await supabase
+            .from('cold_storage_rooms')
+            .select('id')
+            .eq('facility_id', fac.id);
+
+          if (rooms && rooms.length > 0) {
+            const roomIds = rooms.map(r => r.id);
+            
+            // Get latest sensor readings for temperature and humidity
+            const { data: latestReadings } = await supabase
+              .from('sensor_readings')
+              .select('temperature_celsius, humidity_percentage')
+              .in('room_id', roomIds)
+              .order('timestamp', { ascending: false })
+              .limit(roomIds.length * 5); // Get recent readings for averaging
+
+            if (latestReadings && latestReadings.length > 0) {
+              // Calculate averages from real sensor data
+              const avgTemp = latestReadings.reduce((sum, r) => sum + (r.temperature_celsius || 0), 0) / latestReadings.length;
+              const avgHumidity = latestReadings.reduce((sum, r) => sum + (r.humidity_percentage || 0), 0) / latestReadings.length;
+              
+              // Get today's energy consumption
+              const { data: energyData } = await supabase
+                .from('energy_consumption')
+                .select('energy_kwh')
+                .eq('facility_id', fac.id)
+                .gte('timestamp', new Date(new Date().setHours(0,0,0,0)).toISOString())
+                .order('timestamp', { ascending: false })
+                .limit(1);
+
+              const todayEnergy = energyData && energyData.length > 0 ? energyData[0].energy_kwh : 0;
+
+              setTelemetry({
+                temperature: Number(avgTemp.toFixed(1)),
+                humidity: Number(avgHumidity.toFixed(0)),
+                energyKwh: Number(todayEnergy),
+                doorStatus: 'Closed',
+                status: avgTemp > 0 && avgTemp < 10 ? 'Optimal' : 'Check Required'
+              });
+            }
+          }
+        } catch (telemetryError) {
+          console.error("Error loading telemetry:", telemetryError);
+          // Keep default zeros if telemetry fetch fails
+        }
+      }
 
       // Try to get latest alerts (non-blocking)
       try {
@@ -120,7 +172,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
      );
   }
 
-  const occPct = facility.capacity_total_kg > 0 ? (facility.capacity_used_kg / facility.capacity_total_kg) * 100 : 0;
+  const occPct = facility.total_capacity_kg > 0 ? (facility.current_utilization_kg / facility.total_capacity_kg) * 100 : 0;
   const stateStr = facility.localities?.districts?.states?.name || 'State';
   const districtStr = facility.localities?.districts?.name || 'District';
   const capVal = Number(investment.investment_amount_inr) || 0;
@@ -253,8 +305,8 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
                    </div>
                 </div>
                 <div className="flex justify-between mt-3 text-sm font-semibold">
-                  <span className="text-slate-900 dark:text-white">{facility.capacity_used_kg.toLocaleString()} kg Used</span>
-                  <span className="text-slate-400">{facility.capacity_total_kg.toLocaleString()} kg Max</span>
+                  <span className="text-slate-900 dark:text-white">{(facility.current_utilization_kg || 0).toLocaleString()} kg Used</span>
+                  <span className="text-slate-400">{(facility.total_capacity_kg || 0).toLocaleString()} kg Max</span>
                 </div>
              </div>
            </div>

@@ -40,7 +40,7 @@ const defaultSettings = {
   marketUpdates: true,
   weeklyReports: true,
   aiRecommendations: true,
-  appearance: 'system' as const,
+  appearance: 'light' as const,
   language: 'english' as const,
 };
 

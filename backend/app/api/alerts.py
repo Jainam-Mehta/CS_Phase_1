@@ -1,173 +1,192 @@
 """
-Alerts API
-Generate alerts for door >10min warning, >20min critical, and other system alerts
+Alerts API — ColdSense Backend
+
+Uses the real `alerts` schema:
+  id, room_id, farmer_id, alert_type, severity, title, description,
+  is_read, status, updated_at, created_at
+
+The `door_readings` table does not exist — door alert generation now
+reads from `door_events` (room_id, event_type, occurred_at, duration_seconds).
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database.supabase import supabase
 
 router = APIRouter()
 
+
+# ── Pydantic models ────────────────────────────────────────────────────────────
+
 class AlertResponse(BaseModel):
     id: str
-    site_id: str
-    alert_type: str
-    severity: str
-    title: str
-    message: str
-    sensor_id: Optional[str]
-    status: str
-    duration_minutes: Optional[int]
-    created_at: str
+    room_id: str
+    farmer_id: Optional[str] = None
+    alert_type: Optional[str] = None
+    severity: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    is_read: Optional[bool] = False
+    status: Optional[str] = "Unresolved"
+    created_at: Optional[str] = None
+
 
 class AlertCreate(BaseModel):
-    site_id: str
+    room_id: str
+    farmer_id: Optional[str] = None
     alert_type: str
-    severity: str
+    severity: str          # 'critical' | 'warning' | 'info'
     title: str
-    message: str
-    sensor_id: Optional[str] = None
-    duration_minutes: Optional[int] = None
+    description: Optional[str] = None
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=List[AlertResponse])
 async def get_all_alerts():
-    """
-    Get all alerts
-    """
     try:
-        response = supabase.table("alerts").select("*").order("created_at", desc=True).execute()
-        return response.data
+        resp = supabase.table("alerts").select("*").order("created_at", desc=True).execute()
+        return resp.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch alerts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch alerts: {e}")
 
-@router.get("/site/{site_id}", response_model=List[AlertResponse])
-async def get_site_alerts(site_id: str):
-    """
-    Get alerts for a specific site
-    """
-    try:
-        response = supabase.table("alerts").select("*").eq("site_id", site_id).order("created_at", desc=True).execute()
-        return response.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch site alerts: {str(e)}")
 
-@router.get("/active/{site_id}", response_model=List[AlertResponse])
-async def get_active_alerts(site_id: str):
-    """
-    Get active (open) alerts for a specific site
-    """
+@router.get("/room/{room_id}", response_model=List[AlertResponse])
+async def get_room_alerts(room_id: str):
     try:
-        response = supabase.table("alerts").select("*").eq("site_id", site_id).eq("status", "open").order("created_at", desc=True).execute()
-        return response.data
+        resp = (
+            supabase.table("alerts")
+            .select("*")
+            .eq("room_id", room_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch active alerts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch room alerts: {e}")
+
+
+@router.get("/unread/{room_id}", response_model=List[AlertResponse])
+async def get_unread_alerts(room_id: str):
+    """Return unread alerts for a room (what the farmer dashboard shows)."""
+    try:
+        resp = (
+            supabase.table("alerts")
+            .select("*")
+            .eq("room_id", room_id)
+            .eq("is_read", False)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch unread alerts: {e}")
+
 
 @router.post("/", response_model=AlertResponse)
 async def create_alert(alert: AlertCreate):
-    """
-    Create a new alert
-    """
     try:
-        alert_data = alert.dict()
-        alert_data["created_at"] = datetime.now().isoformat()
-        
-        response = supabase.table("alerts").insert(alert_data).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=500, detail="Failed to create alert")
-        
-        return response.data[0]
+        data = alert.model_dump() if hasattr(alert, "model_dump") else alert.dict()
+        data["created_at"] = datetime.now(timezone.utc).isoformat()
+        data["is_read"] = False
+        data["status"] = "Unresolved"
+
+        resp = supabase.table("alerts").insert(data).execute()
+        if not resp.data:
+            raise HTTPException(status_code=500, detail="Insert returned no data")
+        return resp.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create alert: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create alert: {e}")
+
 
 @router.put("/{alert_id}/acknowledge")
 async def acknowledge_alert(alert_id: str):
-    """
-    Acknowledge an alert
-    """
     try:
-        response = supabase.table("alerts").update({
-            "status": "acknowledged",
-            "updated_at": datetime.now().isoformat()
-        }).eq("id", alert_id).execute()
-        
-        if not response.data:
+        resp = (
+            supabase.table("alerts")
+            .update({"is_read": True, "status": "Acknowledged", "updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", alert_id)
+            .execute()
+        )
+        if not resp.data:
             raise HTTPException(status_code=404, detail="Alert not found")
-        
-        return {"message": "Alert acknowledged successfully"}
+        return {"message": "Alert acknowledged"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to acknowledge alert: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to acknowledge alert: {e}")
+
 
 @router.put("/{alert_id}/resolve")
 async def resolve_alert(alert_id: str):
-    """
-    Resolve an alert
-    """
     try:
-        response = supabase.table("alerts").update({
-            "status": "resolved",
-            "updated_at": datetime.now().isoformat()
-        }).eq("id", alert_id).execute()
-        
-        if not response.data:
+        resp = (
+            supabase.table("alerts")
+            .update({"status": "Resolved", "updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", alert_id)
+            .execute()
+        )
+        if not resp.data:
             raise HTTPException(status_code=404, detail="Alert not found")
-        
-        return {"message": "Alert resolved successfully"}
+        return {"message": "Alert resolved"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to resolve alert: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve alert: {e}")
 
-@router.post("/check-door-alerts/{site_id}")
-async def check_door_alerts(site_id: str):
+
+@router.post("/check-door-alerts/{room_id}")
+async def check_door_alerts(room_id: str):
     """
-    Check door duration and generate alerts if needed
-    >10 min: warning
-    >20 min: critical
+    Check today's door events for this room and generate alerts if thresholds are exceeded.
+    Reads from `door_events` (the real table) — NOT the nonexistent `door_readings`.
     """
     try:
-        # Get latest door reading
-        door_response = supabase.table("door_readings").select("*").eq("site_id", site_id).order("recorded_at", desc=True).limit(1).execute()
-        
-        if not door_response.data:
-            return {"message": "No door readings found"}
-        
-        door_reading = door_response.data[0]
-        
-        # Check if door is open
-        if door_reading["final_status"] == "open":
-            duration = door_reading["duration_open_today"]
-            
-            # Check thresholds
-            if duration > 20:
-                # Critical alert
-                await create_alert(AlertCreate(
-                    site_id=site_id,
-                    alert_type="door_critical",
-                    severity="critical",
-                    title="Door Open Critical",
-                    message=f"Door has been open for {duration} minutes. Immediate action required.",
-                    sensor_id="door_sensor",
-                    duration_minutes=duration
-                ))
-            elif duration > 10:
-                # Warning alert
-                await create_alert(AlertCreate(
-                    site_id=site_id,
-                    alert_type="door_warning",
-                    severity="warning",
-                    title="Door Open Warning",
-                    message=f"Door has been open for {duration} minutes. Please close the door.",
-                    sensor_id="door_sensor",
-                    duration_minutes=duration
-                ))
-        
-        return {"message": "Door alerts checked successfully"}
+        today = datetime.now(timezone.utc).date().isoformat()
+
+        # Get today's door events for this room
+        resp = (
+            supabase.table("door_events")
+            .select("event_type, duration_seconds, occurred_at")
+            .eq("room_id", room_id)
+            .gte("occurred_at", f"{today}T00:00:00+00:00")
+            .order("occurred_at", desc=True)
+            .execute()
+        )
+
+        events = resp.data or []
+        total_seconds = sum(
+            (e.get("duration_seconds") or 0)
+            for e in events
+            if e.get("event_type", "").lower() in ("open", "opened")
+        )
+        total_minutes = total_seconds / 60
+
+        if total_minutes > 20:
+            await create_alert(AlertCreate(
+                room_id=room_id,
+                alert_type="door_critical",
+                severity="critical",
+                title="Door Open — Critical",
+                description=f"Door has been open for {total_minutes:.1f} minutes today. Immediate action required.",
+            ))
+        elif total_minutes > 10:
+            await create_alert(AlertCreate(
+                room_id=room_id,
+                alert_type="door_warning",
+                severity="warning",
+                title="Door Open — Warning",
+                description=f"Door has been open for {total_minutes:.1f} minutes today. Please close the door.",
+            ))
+
+        return {"message": "Door alerts checked", "total_open_minutes": round(total_minutes, 2)}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check door alerts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to check door alerts: {e}")

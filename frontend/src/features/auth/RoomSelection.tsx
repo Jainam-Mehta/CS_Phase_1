@@ -15,10 +15,11 @@ const RoomSelection: React.FC = () => {
   const { user } = useAuthStore();
   const { loading: onboardingLoading, step, completeStep } = useOnboarding();
   const [rooms, setRooms] = useState<any[]>([]);
-  const [selectedRooms, setSelectedRooms] = useState<Set<number>>(new Set());
+  // Room IDs are UUIDs (strings) from Supabase — never numbers
+  const [selectedRooms, setSelectedRooms] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [localityId, setLocalityId] = useState<number | null>(null);
+  const [localityId, setLocalityId] = useState<string | null>(null);
   const isExtensionMode = searchParams.get('mode') === 'extension';
 
   useEffect(() => {
@@ -60,7 +61,7 @@ const RoomSelection: React.FC = () => {
     }
   };
 
-  const loadRooms = async (localityId: number) => {
+  const loadRooms = async (localityId: string) => {
     try {
       const { data, error } = await supabase
         .from('cold_storage_rooms')
@@ -88,7 +89,7 @@ const RoomSelection: React.FC = () => {
     }
   };
 
-  const loadRoomsByDistrict = async (districtId: number) => {
+  const loadRoomsByDistrict = async (districtId: string) => {
     try {
       const { data, error } = await supabase
         .from('cold_storage_rooms')
@@ -116,7 +117,7 @@ const RoomSelection: React.FC = () => {
     }
   };
 
-  const handleRoomToggle = (roomId: number) => {
+  const handleRoomToggle = (roomId: string) => {
     setSelectedRooms(prev => {
       const newSet = new Set(prev);
       if (newSet.has(roomId)) {
@@ -217,9 +218,16 @@ const RoomSelection: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-7xl">
         <Card variant="default" className="w-full">
-          <CardHeader className="text-center">
+          <CardHeader className="text-center relative">
+            {/* Step Indicator */}
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
+                Step 2/3
+              </span>
+            </div>
+            
             <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Warehouse className="h-8 w-8 text-white" />
             </div>
@@ -245,33 +253,33 @@ const RoomSelection: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {rooms.map((room) => (
                     <button
                       key={room.id}
                       type="button"
                       onClick={() => handleRoomToggle(room.id)}
-                      className={`p-6 rounded-lg border-2 transition-all text-left ${
+                      className={`p-4 rounded-lg border-2 transition-all text-left ${
                         selectedRooms.has(room.id)
                           ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                           : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'
                       }`}
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Warehouse className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-1">
+                          <Warehouse className="h-4 w-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                          <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-1">
                             {room.room_name || room.room_code || 'Storage Room'}
                           </span>
                         </div>
                         {selectedRooms.has(room.id) && (
-                          <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                         )}
                       </div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 line-clamp-1">
                         {room.facilities?.facility_name || 'Unknown Facility'}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
                         {room.facilities?.profiles 
                           ? `${room.facilities.profiles.first_name} ${room.facilities.profiles.last_name}`
                           : 'Unknown Owner'}

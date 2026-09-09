@@ -15,6 +15,7 @@ from product_optimality import ProductOptimalityCalculator
 from energy_generator import EnergyGenerator
 from door_generator import DoorGenerator
 from weather_generator import WeatherGenerator
+from market_price_generator import MarketPriceGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +46,7 @@ class ColdSenseSimulator:
         self.energy_generator = EnergyGenerator()
         self.door_generator = DoorGenerator()
         self.weather_generator = WeatherGenerator()
+        self.market_generator = MarketPriceGenerator()
         
         # Cache for database data
         self.rooms_cache: List[Dict[str, Any]] = []
@@ -271,6 +273,79 @@ class ColdSenseSimulator:
         logger.info(f"Update cycle completed at {datetime.now().strftime('%H:%M:%S')}")
         logger.info("=" * 50)
     
+    def update_market_prices(self):
+        """Update market prices for all products (runs once daily)"""
+        logger.info("=" * 50)
+        logger.info(f"Updating market prices at {datetime.now().strftime('%H:%M:%S')}")
+        logger.info("=" * 50)
+        
+        try:
+            # Get all unique products from database
+            unique_products = list(set([p['name'] for p in self.products_cache]))
+            
+            if not unique_products:
+                logger.warning("No products found in database")
+                return
+            
+            # Generate prices for all products across major states
+            price_records = self.market_generator.generate_prices_for_all_states(unique_products)
+            
+            logger.info(f"Generated {len(price_records)} price records")
+            
+            # Insert prices into database via backend API
+            # We need to map product names to product IDs first
+            product_name_to_id = {p['name']: p['id'] for p in self.products_cache}
+            
+            successful_inserts = 0
+            failed_inserts = 0
+            
+            for record in price_records:
+                product_name = record['product_name']
+                product_id = product_name_to_id.get(product_name)
+                
+                if not product_id:
+                    logger.debug(f"Product {product_name} not found in database, skipping")
+                    failed_inserts += 1
+                    continue
+                
+                # Prepare data for market_prices table
+                market_price_data = {
+                    'product_id': product_id,
+                    'state': record['state'],
+                    'city': record['city'],
+                    'market_name': record['market_name'],
+                    'price_per_kg': record['price_per_kg'],
+                    'recorded_at': record['recorded_at'],
+                    'source': record['source'],
+                    'created_at': datetime.now().isoformat()
+                }
+                
+                try:
+                    # Insert into market_prices table
+                    self._supabase_request(
+                        'market_prices',
+                        method='POST',
+                        data=market_price_data
+                    )
+                    successful_inserts += 1
+                except Exception as e:
+                    # Log error but continue with other records
+                    logger.debug(f"Error inserting price for {product_name}: {e}")
+                    failed_inserts += 1
+            
+            logger.info(f"Market prices updated: {successful_inserts} successful, {failed_inserts} failed")
+            
+            # Log a sample of prices
+            sample_products = unique_products[:3]
+            for product in sample_products:
+                summary = self.market_generator.get_daily_price_summary(product)
+                logger.info(f"  {product}: ₹{summary['min']}-{summary['max']}/kg (avg: ₹{summary['avg']})")
+            
+        except Exception as e:
+            logger.error(f"Error updating market prices: {e}")
+        
+        logger.info("=" * 50)
+    
     def generate_historical_data(self):
         """Generate 24 hours of historical data for all rooms"""
         logger.info("Generating 24 hours of historical data...")
@@ -321,13 +396,27 @@ class ColdSenseSimulator:
             id='update_all_rooms'
         )
         
+        # Schedule market price updates (once daily at 6 AM IST)
+        self.scheduler.add_job(
+            self.update_market_prices,
+            'cron',
+            hour=6,
+            minute=0,
+            id='update_market_prices'
+        )
+        
         # Start scheduler
         self.scheduler.start()
         
-        # Run initial update
+        # Run initial update for sensors
         self.update_all_rooms()
         
-        logger.info(f"Simulator started. Updates every {Config.UPDATE_INTERVAL_SECONDS} seconds.")
+        # Run initial market price update
+        self.update_market_prices()
+        
+        logger.info(f"Simulator started.")
+        logger.info(f"  - Sensor updates: Every {Config.UPDATE_INTERVAL_SECONDS} seconds")
+        logger.info(f"  - Market prices: Daily at 6:00 AM IST")
         logger.info("Press Ctrl+C to stop.")
     
     def stop(self):

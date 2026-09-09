@@ -219,38 +219,22 @@ const StorageSelection: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!selectedState || !selectedDistrict || !selectedSite) {
-      setError('Please select state, district, and site');
+    if (!selectedState || !selectedDistrict) {
+      setError('Please select state and district');
       return;
     }
 
     setLoading(true);
 
     try {
-      // Get the selected site object
-      const site = sites.find((s: any) => s.facility_name === selectedSite);
-      if (!site) {
-        throw new Error('Selected site not found');
-      }
-
-      // Update user with storage access (pending approval)
-      const currentUser = user;
-      if (currentUser) {
-        setUser({
-          ...currentUser,
-          sites: [{
-            id: site.id,
-            name: site.facility_name,
-            location: selectedDistrict,
-            category: 'Pending Approval',
-            is_primary: true,
-          }],
-        });
-      }
-
-      // Save to localStorage for onboarding state
+      // Save state and district selection to localStorage for room filtering
       const storageRequest = {
-        sites: [site],
+        state: selectedState,
+        district: selectedDistrict,
+        stateId: selectedStateId,
+        districtId: selectedDistrictId,
+        sites: [],
+        rooms: [],
         products: [],
       };
       localStorage.setItem('storageAccessRequest', JSON.stringify(storageRequest));
@@ -263,7 +247,7 @@ const StorageSelection: React.FC = () => {
       // Navigate to room selection forwarding extension flags if they exist
       navigate(`/room-selection${window.location.search}`);
     } catch (err) {
-      console.error('Error submitting site selection:', err);
+      console.error('Error submitting location selection:', err);
       setError('Failed to submit request. Please try again.');
     } finally {
       setLoading(false);
@@ -284,7 +268,14 @@ const StorageSelection: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
       <div className="w-full max-w-4xl">
         <Card variant="default" className="w-full">
-          <CardHeader className="text-center">
+          <CardHeader className="text-center relative">
+            {/* Step Indicator */}
+            <div className="absolute top-4 right-4">
+              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
+                Step 1/3
+              </span>
+            </div>
+            
             <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Warehouse className="h-8 w-8 text-white" />
             </div>
@@ -335,31 +326,14 @@ const StorageSelection: React.FC = () => {
                 )}
               </div>
 
-              {/* Site Selection */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Site
-                </label>
-                <SearchableSelect
-                  placeholder="Select site"
-                  options={getSites()}
-                  value={selectedSite}
-                  onChange={handleSiteSelect}
-                  disabled={!selectedDistrict}
-                />
-                {selectedDistrict && sites.length === 0 && (
-                  <p className="text-xs text-gray-500">No sites available in this district</p>
-                )}
-              </div>
-
               <Button
                 type="submit"
                 variant="primary"
                 loading={loading}
-                disabled={!selectedState || !selectedDistrict || !selectedSite}
+                disabled={!selectedState || !selectedDistrict}
                 className="w-full"
               >
-                Continue to Room Selection
+                Next
               </Button>
             </form>
           </CardContent>

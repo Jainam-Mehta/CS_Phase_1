@@ -1,228 +1,193 @@
 """
-Inventory API
-Manage farmer inventory with persistence in database
+Inventory API — ColdSense Backend
+
+Real tables:
+  batches              (id, batch_code, farmer_id, product_id, harvest_date,
+                        expiry_date, initial_quantity_kg, remaining_quantity_kg,
+                        quality_grade, remarks)
+  batch_room_allocations (batch_id, room_id, quantity_kg, assigned_at, removed_at)
+  products             (id, name, shelf_life_days, storage_temp_min/max, ...)
+  farmer_room_access   (farmer_id, room_id, status)
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, date, timedelta
+from datetime import datetime, timezone, date, timedelta
 
 from app.database.supabase import supabase
 
 router = APIRouter()
 
-class InventoryResponse(BaseModel):
+
+class BatchResponse(BaseModel):
     id: str
-    user_id: str
-    site_id: str
+    batch_code: str
+    farmer_id: str
     product_id: str
-    quantity: float
-    unit: str
-    batch_number: str
-    storage_date: date
-    expiry_date: date
-    temperature: Optional[float]
-    status: str
-    shelf_life_remaining: int
-    selling_price: float
-    spoilage_percentage: float
+    harvest_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    initial_quantity_kg: float
+    remaining_quantity_kg: float
+    quality_grade: Optional[str] = None
+    product_name: Optional[str] = None
 
-class InventoryCreate(BaseModel):
-    user_id: str
-    site_id: str
+
+class BatchCreate(BaseModel):
+    farmer_id: str
     product_id: str
-    quantity: float
-    unit: Optional[str] = "kg"
-    temperature: Optional[float] = None
-    selling_price: Optional[float] = None
+    room_id: str
+    quantity_kg: float
+    harvest_date: Optional[date] = None
+    quality_grade: Optional[str] = "GOOD"
+    remarks: Optional[str] = None
 
-class InventoryUpdate(BaseModel):
-    quantity: Optional[float] = None
-    temperature: Optional[float] = None
-    status: Optional[str] = None
-    selling_price: Optional[float] = None
-    spoilage_percentage: Optional[float] = None
 
-@router.get("/", response_model=List[InventoryResponse])
-async def get_all_inventory():
-    """
-    Get all inventory items
-    """
+@router.get("/room/{room_id}", response_model=List[BatchResponse])
+async def get_room_inventory(room_id: str):
+    """Return all active (not removed) batch allocations for a room."""
     try:
-        response = supabase.table("inventory").select("*").execute()
-        return response.data
+        resp = (
+            supabase.table("batch_room_allocations")
+            .select("""
+                quantity_kg, assigned_at,
+                batches!inner(
+                  id, batch_code, farmer_id, product_id,
+                  harvest_date, expiry_date,
+                  initial_quantity_kg, remaining_quantity_kg,
+                  quality_grade, remarks,
+                  products(name)
+                )
+            """)
+            .eq("room_id", room_id)
+            .is_("removed_at", "null")
+            .execute()
+        )
+
+        result = []
+        for alloc in (resp.data or []):
+            b = alloc["batches"]
+            prod = b.get("products") or {}
+            if isinstance(prod, list):
+                prod = prod[0] if prod else {}
+            result.append({
+                "id": b["id"],
+                "batch_code": b["batch_code"],
+                "farmer_id": b["farmer_id"],
+                "product_id": b["product_id"],
+                "harvest_date": b.get("harvest_date"),
+                "expiry_date": b.get("expiry_date"),
+                "initial_quantity_kg": float(b.get("initial_quantity_kg") or 0),
+                "remaining_quantity_kg": float(alloc.get("quantity_kg") or b.get("remaining_quantity_kg") or 0),
+                "quality_grade": b.get("quality_grade"),
+                "product_name": prod.get("name"),
+            })
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch inventory: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch room inventory: {e}")
 
-@router.get("/user/{user_id}", response_model=List[InventoryResponse])
-async def get_user_inventory(user_id: str):
-    """
-    Get inventory for a specific user
-    """
+
+@router.get("/farmer/{profile_id}", response_model=List[BatchResponse])
+async def get_farmer_inventory(profile_id: str):
+    """Return all active batch allocations for a farmer across all rooms."""
     try:
-        response = supabase.table("inventory").select("*").eq("user_id", user_id).execute()
-        return response.data
+        resp = (
+            supabase.table("batch_room_allocations")
+            .select("""
+                quantity_kg, room_id,
+                batches!inner(
+                  id, batch_code, farmer_id, product_id,
+                  harvest_date, expiry_date,
+                  initial_quantity_kg, remaining_quantity_kg, quality_grade,
+                  products(name)
+                )
+            """)
+            .eq("batches.farmer_id", profile_id)
+            .is_("removed_at", "null")
+            .execute()
+        )
+
+        result = []
+        for alloc in (resp.data or []):
+            b = alloc["batches"]
+            prod = b.get("products") or {}
+            if isinstance(prod, list):
+                prod = prod[0] if prod else {}
+            result.append({
+                "id": b["id"],
+                "batch_code": b["batch_code"],
+                "farmer_id": b["farmer_id"],
+                "product_id": b["product_id"],
+                "harvest_date": b.get("harvest_date"),
+                "expiry_date": b.get("expiry_date"),
+                "initial_quantity_kg": float(b.get("initial_quantity_kg") or 0),
+                "remaining_quantity_kg": float(alloc.get("quantity_kg") or b.get("remaining_quantity_kg") or 0),
+                "quality_grade": b.get("quality_grade"),
+                "product_name": prod.get("name"),
+            })
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch user inventory: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch farmer inventory: {e}")
 
-@router.get("/site/{site_id}", response_model=List[InventoryResponse])
-async def get_site_inventory(site_id: str):
-    """
-    Get inventory for a specific site
-    """
-    try:
-        response = supabase.table("inventory").select("*, products(*)").eq("site_id", site_id).execute()
-        
-        # Enrich with product data
-        enriched_inventory = []
-        for item in response.data:
-            item_data = item.copy()
-            if "products" in item:
-                item_data["product_name"] = item["products"]["name"]
-                item_data["product_category"] = item["products"]["category"]
-            enriched_inventory.append(item_data)
-        
-        return enriched_inventory
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch site inventory: {str(e)}")
 
-@router.post("/", response_model=InventoryResponse)
-async def create_inventory(inventory: InventoryCreate):
-    """
-    Create a new inventory item
-    Automatically calculates shelf life, expiry date, and status
-    """
+@router.post("/batch/", response_model=BatchResponse)
+async def create_batch(data: BatchCreate):
+    """Create a batch and allocate it to a room in one step."""
     try:
-        # Get product details for shelf life and price
-        product_response = supabase.table("products").select("*").eq("id", inventory.product_id).execute()
-        
-        if not product_response.data:
-            raise HTTPException(status_code=404, detail="Product not found")
-        
-        product = product_response.data[0]
-        
-        # Calculate dates
-        storage_date = date.today()
-        expiry_date = storage_date + timedelta(days=product["shelf_life_days"])
-        shelf_life_remaining = product["shelf_life_days"]
-        
-        # Use product selling price if not provided
-        selling_price = inventory.selling_price or product["selling_price"]
-        
-        # Generate batch number
-        batch_number = f"BATCH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Determine status based on shelf life
-        status = "good"
-        if shelf_life_remaining <= 1:
-            status = "critical"
-        elif shelf_life_remaining <= 5:
-            status = "warning"
-        
-        inventory_data = {
-            "user_id": inventory.user_id,
-            "site_id": inventory.site_id,
-            "product_id": inventory.product_id,
-            "quantity": inventory.quantity,
-            "unit": inventory.unit,
-            "batch_number": batch_number,
-            "storage_date": storage_date.isoformat(),
-            "expiry_date": expiry_date.isoformat(),
-            "temperature": inventory.temperature,
-            "status": status,
-            "shelf_life_remaining": shelf_life_remaining,
-            "selling_price": selling_price,
-            "spoilage_percentage": 0.0
+        # Get product shelf life for expiry calculation
+        prod_resp = (
+            supabase.table("products")
+            .select("name, shelf_life_days")
+            .eq("id", data.product_id)
+            .maybeSingle()
+            .execute()
+        )
+        product = prod_resp.data or {}
+        shelf_life = int(product.get("shelf_life_days") or 30)
+        harvest = data.harvest_date or date.today()
+        expiry = harvest + timedelta(days=shelf_life)
+
+        batch_code = f"BTH-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        batch_payload = {
+            "batch_code": batch_code,
+            "farmer_id": data.farmer_id,
+            "product_id": data.product_id,
+            "harvest_date": str(harvest),
+            "expiry_date": str(expiry),
+            "initial_quantity_kg": data.quantity_kg,
+            "remaining_quantity_kg": data.quantity_kg,
+            "quality_grade": data.quality_grade or "GOOD",
+            "remarks": data.remarks,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        
-        response = supabase.table("inventory").insert(inventory_data).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=500, detail="Failed to create inventory item")
-        
-        return response.data[0]
+
+        batch_resp = supabase.table("batches").insert(batch_payload).execute()
+        if not batch_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to create batch")
+        batch = batch_resp.data[0]
+
+        # Allocate to room
+        alloc_payload = {
+            "batch_id": batch["id"],
+            "room_id": data.room_id,
+            "quantity_kg": data.quantity_kg,
+            "assigned_at": datetime.now(timezone.utc).isoformat(),
+        }
+        supabase.table("batch_room_allocations").insert(alloc_payload).execute()
+
+        return {
+            "id": batch["id"],
+            "batch_code": batch["batch_code"],
+            "farmer_id": batch["farmer_id"],
+            "product_id": batch["product_id"],
+            "harvest_date": batch.get("harvest_date"),
+            "expiry_date": batch.get("expiry_date"),
+            "initial_quantity_kg": float(batch.get("initial_quantity_kg") or 0),
+            "remaining_quantity_kg": float(batch.get("remaining_quantity_kg") or 0),
+            "quality_grade": batch.get("quality_grade"),
+            "product_name": product.get("name"),
+        }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create inventory: {str(e)}")
-
-@router.put("/{inventory_id}", response_model=InventoryResponse)
-async def update_inventory(inventory_id: str, inventory: InventoryUpdate):
-    """
-    Update an existing inventory item
-    """
-    try:
-        update_data = {k: v for k, v in inventory.dict().items() if v is not None}
-        update_data["updated_at"] = datetime.now().isoformat()
-        
-        response = supabase.table("inventory").update(update_data).eq("id", inventory_id).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        return response.data[0]
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update inventory: {str(e)}")
-
-@router.delete("/{inventory_id}")
-async def delete_inventory(inventory_id: str):
-    """
-    Delete an inventory item
-    """
-    try:
-        response = supabase.table("inventory").delete().eq("id", inventory_id).execute()
-        
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        return {"message": "Inventory item deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete inventory: {str(e)}")
-
-@router.post("/update-shelf-life")
-async def update_shelf_life():
-    """
-    Daily job to update shelf life remaining for all inventory items
-    Should be called once per day
-    """
-    try:
-        # Get all inventory items
-        response = supabase.table("inventory").select("*").execute()
-        
-        updated_count = 0
-        
-        for item in response.data:
-            # Calculate days since storage
-            storage_date = datetime.strptime(item["storage_date"], "%Y-%m-%d").date()
-            days_stored = (date.today() - storage_date).days
-            
-            # Get product shelf life
-            product_response = supabase.table("products").select("shelf_life_days").eq("id", item["product_id"]).execute()
-            if product_response.data:
-                total_shelf_life = product_response.data[0]["shelf_life_days"]
-                remaining = max(0, total_shelf_life - days_stored)
-                
-                # Update status based on remaining days
-                status = "good"
-                if remaining <= 1:
-                    status = "critical"
-                elif remaining <= 5:
-                    status = "warning"
-                
-                # Update inventory item
-                supabase.table("inventory").update({
-                    "shelf_life_remaining": remaining,
-                    "status": status,
-                    "updated_at": datetime.now().isoformat()
-                }).eq("id", item["id"]).execute()
-                
-                updated_count += 1
-        
-        return {"message": f"Updated shelf life for {updated_count} inventory items"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update shelf life: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create batch: {e}")
