@@ -274,11 +274,6 @@ const OwnerLayout: React.FC = () => {
             </div>
           </div>
           
-          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm text-sm font-medium">
-            <Download className="w-4 h-4" />
-            Download Report
-          </button>
-
           <div className="flex items-center gap-4 border-l border-gray-200 dark:border-slate-800 pl-4 ml-4">
             {/* Theme Toggle */}
             <button

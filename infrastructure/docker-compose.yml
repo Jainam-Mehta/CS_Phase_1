@@ -1,6 +1,21 @@
 version: '3.8'
 
 services:
+  # MQTT Broker (Eclipse Mosquitto)
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: coldsense-mqtt-broker
+    restart: always
+    ports:
+      - "1883:1883"  # MQTT
+      - "9001:9001"  # WebSockets
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - coldsense-network
+    command: mosquitto -c /mosquitto-no-auth.conf
+
   # PostgreSQL Database (Self-Managed)
   postgres:
     image: postgres:15-alpine
@@ -11,9 +26,9 @@ services:
       POSTGRES_PASSWORD: coldsense_secure_password_2026
       POSTGRES_DB: coldsense
       POSTGRES_INITDB_ARGS: "-E UTF8"
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ports:
       - "5432:5432"
     networks:
@@ -26,9 +41,7 @@ services:
 
   # Backend API
   backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/backend:latest
     container_name: coldsense-backend
     restart: always
     environment:
@@ -36,12 +49,12 @@ services:
       DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
       
       # Supabase Auth (keep for authentication)
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_KEY: ${SUPABASE_KEY}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      SUPABASE_URL: https://vzoypfctadgyflzwodmp.supabase.co
+      SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-your_service_key}
       
-      # MQTT
-      MQTT_BROKER: broker.emqx.io
+      # MQTT (use local broker)
+      MQTT_BROKER: mqtt-broker
       MQTT_PORT: 1883
       
       # App settings
@@ -63,40 +76,44 @@ services:
 
   # MQTT Subscriber
   mqtt-subscriber:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/backend:latest
     container_name: coldsense-mqtt
     restart: always
     command: python -m app.mqtt.subscriber
     environment:
       DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
-      MQTT_BROKER: broker.emqx.io
+      MQTT_BROKER: mqtt-broker
       MQTT_PORT: 1883
       LOG_LEVEL: INFO
     depends_on:
       postgres:
         condition: service_healthy
+      mqtt-broker:
+        condition: service_started
     networks:
       - coldsense-network
 
   # Simulator (generates fake sensor data)
   simulator:
-    build:
-      context: ../backend/simulators
-      dockerfile: Dockerfile
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/simulator:latest
     container_name: coldsense-simulator
     restart: always
     environment:
-      MQTT_BROKER: broker.emqx.io
+      MQTT_BROKER: mqtt-broker
       MQTT_PORT: 1883
       SIMULATION_INTERVAL: 60
       NUM_FACILITIES: 10
+    depends_on:
+      - mqtt-broker
     networks:
       - coldsense-network
 
 volumes:
   postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_logs:
     driver: local
 
 networks:

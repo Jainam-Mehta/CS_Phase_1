@@ -31,8 +31,7 @@ class SiteResponse(BaseModel):
 
 class SiteCreate(BaseModel):
     name: str
-    location: stroke = ""
-    location: str
+    location: str = ""
     category: str = "Cold Storage"
     capacity: float = 50000.0
     temperature: Optional[float] = 4.0

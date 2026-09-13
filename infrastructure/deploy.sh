@@ -1,132 +1,174 @@
 #!/bin/bash
-
+# =============================================================================
 # ColdSense GCP Deployment Script
-# This script deploys the ColdSense backend to GKE
+# VM: coldsense-production-vm | IP: 35.200.228.62 | Zone: asia-south1-c
+# Run this from your LOCAL machine (Windows: use Git Bash or WSL)
+# =============================================================================
 
-set -e  # Exit on error
+set -e  # Exit on any error
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+VM_NAME="coldsense-production-vm"
+ZONE="asia-south1-c"
+VM_IP="35.200.228.62"
+PROJECT="exalted-skein-505210-g0"
+REGISTRY="asia-south1-docker.pkg.dev/${PROJECT}/coldsense-repo"
 
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}ColdSense GCP Deployment Script${NC}"
-echo -e "${GREEN}========================================${NC}"
+echo ""
+echo "╔══════════════════════════════════════════════╗"
+echo "║   ColdSense Production Deployment            ║"
+echo "║   VM: ${VM_IP}                        ║"
+echo "╚══════════════════════════════════════════════╝"
 echo ""
 
-# Configuration
-PROJECT_ID="exalted-skein-505210-g0"
-REGION="asia-south1"
-CLUSTER_NAME="coldsense-gke"
-REPOSITORY="coldsense"
+# ── STEP 1: Copy files to VM ──────────────────────────────────────────────────
+echo "📁 Step 1/5: Copying files to VM..."
 
-# Step 1: Check prerequisites
-echo -e "${YELLOW}Step 1: Checking prerequisites...${NC}"
-command -v gcloud >/dev/null 2>&1 || { echo -e "${RED}gcloud CLI not found. Please install it first.${NC}"; exit 1; }
-command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}kubectl not found. Please install it first.${NC}"; exit 1; }
-command -v docker >/dev/null 2>&1 || { echo -e "${RED}Docker not found. Please install it first.${NC}"; exit 1; }
-echo -e "${GREEN}✓ All prerequisites found${NC}"
+gcloud compute scp infrastructure/docker-compose.yml \
+    ${VM_NAME}:~/docker-compose.yml \
+    --zone=${ZONE} \
+    --project=${PROJECT}
+
+# Copy mosquitto config
+gcloud compute scp infrastructure/mosquitto.conf \
+    ${VM_NAME}:~/mosquitto.conf \
+    --zone=${ZONE} \
+    --project=${PROJECT} 2>/dev/null || echo "  ℹ mosquitto.conf not found locally, will create on VM"
+
+echo "  ✓ Files copied"
+
+# ── STEP 2: Setup VM ─────────────────────────────────────────────────────────
 echo ""
+echo "🔧 Step 2/5: Setting up VM (Docker, auth)..."
 
-# Step 2: Set GCP project
-echo -e "${YELLOW}Step 2: Setting GCP project...${NC}"
-gcloud config set project $PROJECT_ID
-echo -e "${GREEN}✓ Project set to $PROJECT_ID${NC}"
-echo ""
+gcloud compute ssh ${VM_NAME} --zone=${ZONE} --project=${PROJECT} --command="
+set -e
 
-# Step 3: Get GKE credentials
-echo -e "${YELLOW}Step 3: Getting GKE cluster credentials...${NC}"
-gcloud container clusters get-credentials $CLUSTER_NAME --region $REGION
-echo -e "${GREEN}✓ Cluster credentials configured${NC}"
-echo ""
-
-# Step 4: Create Artifact Registry repository (if not exists)
-echo -e "${YELLOW}Step 4: Checking Artifact Registry...${NC}"
-if gcloud artifacts repositories describe $REPOSITORY --location=$REGION >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ Artifact Registry repository already exists${NC}"
+# Install Docker if not present
+if ! command -v docker &> /dev/null; then
+    echo '  Installing Docker...'
+    curl -fsSL https://get.docker.com | sudo sh
+    sudo usermod -aG docker \$USER
+    echo '  ✓ Docker installed'
 else
-    echo "Creating Artifact Registry repository..."
-    gcloud artifacts repositories create $REPOSITORY \
-        --repository-format=docker \
-        --location=$REGION \
-        --description="ColdSense Docker images"
-    echo -e "${GREEN}✓ Artifact Registry repository created${NC}"
+    echo '  ✓ Docker already installed'
 fi
-echo ""
 
-# Step 5: Configure Docker authentication
-echo -e "${YELLOW}Step 5: Configuring Docker authentication...${NC}"
-gcloud auth configure-docker ${REGION}-docker.pkg.dev
-echo -e "${GREEN}✓ Docker authentication configured${NC}"
-echo ""
+# Install Docker Compose plugin if not present
+if ! docker compose version &> /dev/null; then
+    echo '  Installing Docker Compose...'
+    sudo apt-get update -qq
+    sudo apt-get install -y docker-compose-plugin
+    echo '  ✓ Docker Compose installed'
+else
+    echo '  ✓ Docker Compose already installed'
+fi
 
-# Step 6: Build and push backend image
-echo -e "${YELLOW}Step 6: Building and pushing backend Docker image...${NC}"
-cd ../backend
-docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:latest
-echo -e "${GREEN}✓ Backend image built and pushed${NC}"
-cd ../infrastructure
-echo ""
+# Authenticate with GCP Artifact Registry
+echo '  Authenticating with GCP Artifact Registry...'
+gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+echo '  ✓ Docker auth configured'
+"
 
-# Step 7: Create Kubernetes namespace
-echo -e "${YELLOW}Step 7: Creating Kubernetes namespace...${NC}"
-kubectl apply -f kubernetes/namespace.yaml
-echo -e "${GREEN}✓ Namespace created${NC}"
-echo ""
+echo "  ✓ VM setup complete"
 
-# Step 8: Apply secrets
-echo -e "${YELLOW}Step 8: Applying Kubernetes secrets...${NC}"
-kubectl apply -f kubernetes/backend-secrets.yaml
-echo -e "${GREEN}✓ Secrets applied${NC}"
+# ── STEP 3: Create mosquitto config on VM ────────────────────────────────────
 echo ""
+echo "🦟 Step 3/5: Configuring Mosquitto MQTT broker..."
 
-# Step 9: Deploy Mosquitto MQTT broker
-echo -e "${YELLOW}Step 9: Deploying Mosquitto MQTT broker...${NC}"
-kubectl apply -f kubernetes/mosquitto-deployment.yaml
-echo -e "${GREEN}✓ Mosquitto deployed${NC}"
-echo ""
+gcloud compute ssh ${VM_NAME} --zone=${ZONE} --project=${PROJECT} --command="
+# Create mosquitto config that allows anonymous connections (for testing)
+cat > ~/mosquitto.conf << 'EOF'
+listener 1883
+allow_anonymous true
+persistence true
+persistence_location /mosquitto/data/
+log_dest stdout
+log_type all
+EOF
+echo '  ✓ Mosquitto config created'
+"
 
-# Step 10: Wait for Mosquitto to be ready
-echo -e "${YELLOW}Step 10: Waiting for Mosquitto to be ready...${NC}"
-kubectl wait --for=condition=available --timeout=300s deployment/mosquitto -n coldsense
-echo -e "${GREEN}✓ Mosquitto is ready${NC}"
-echo ""
+echo "  ✓ Mosquitto configured"
 
-# Step 11: Deploy backend
-echo -e "${YELLOW}Step 11: Deploying backend...${NC}"
-kubectl apply -f kubernetes/backend-deployment.yaml
-echo -e "${GREEN}✓ Backend deployed${NC}"
+# ── STEP 4: Pull images and start containers ──────────────────────────────────
 echo ""
+echo "🐳 Step 4/5: Pulling Docker images and starting containers..."
 
-# Step 12: Wait for backend to be ready
-echo -e "${YELLOW}Step 12: Waiting for backend to be ready...${NC}"
-kubectl wait --for=condition=available --timeout=300s deployment/coldsense-backend -n coldsense
-echo -e "${GREEN}✓ Backend is ready${NC}"
-echo ""
+gcloud compute ssh ${VM_NAME} --zone=${ZONE} --project=${PROJECT} --command="
+set -e
 
-# Step 13: Get service information
-echo -e "${YELLOW}Step 13: Getting service information...${NC}"
+cd ~
+
+# Pull latest images
+echo '  Pulling backend image...'
+docker pull ${REGISTRY}/backend:latest
+echo '  ✓ Backend image pulled'
+
+echo '  Pulling simulator image...'
+docker pull ${REGISTRY}/simulator:latest
+echo '  ✓ Simulator image pulled'
+
+# Update docker-compose to use mosquitto.conf
+# Mount the local mosquitto.conf into the container
+sed -i 's|command: mosquitto -c /mosquitto-no-auth.conf|command: mosquitto -c /mosquitto/config/mosquitto.conf|' ~/docker-compose.yml
+
+# Add mosquitto config volume mount if not already present
+# (handled by the volume mount below)
+
+# Stop existing containers if running
+docker compose down 2>/dev/null || true
+echo '  ✓ Old containers stopped'
+
+# Start all containers
+docker compose up -d
+echo '  ✓ All containers started'
+
+# Wait for services to be healthy
+echo '  Waiting for services to start (30s)...'
+sleep 30
+
+# Check status
+docker compose ps
+"
+
+echo "  ✓ Containers started"
+
+# ── STEP 5: Health check ──────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Deployment Complete!${NC}"
-echo -e "${GREEN}========================================${NC}"
+echo "🏥 Step 5/5: Running health checks..."
+
+sleep 5
+
+# Check backend health
+HEALTH=$(curl -s --max-time 10 http://${VM_IP}:8000/health || echo "FAILED")
+if echo "$HEALTH" | grep -q "healthy\|ok\|OK"; then
+    echo "  ✓ Backend API is healthy: ${HEALTH}"
+else
+    echo "  ⚠ Backend health check response: ${HEALTH}"
+    echo "  (This might be normal if the backend is still starting)"
+fi
+
+# Check MQTT port
+if nc -z -w5 ${VM_IP} 1883 2>/dev/null; then
+    echo "  ✓ MQTT broker is reachable on port 1883"
+else
+    echo "  ⚠ MQTT port 1883 not yet reachable (may need firewall rule)"
+    echo "    Run: gcloud compute firewall-rules create allow-mqtt --allow tcp:1883 --target-tags coldsense"
+fi
+
 echo ""
-echo "Backend Service:"
-kubectl get service coldsense-backend -n coldsense
-echo ""
-echo "Getting external IP (this may take a few minutes)..."
-echo "Run this command to check the external IP:"
-echo -e "${YELLOW}kubectl get service coldsense-backend -n coldsense -w${NC}"
-echo ""
-echo "Once you have the external IP, you can access the API at:"
-echo -e "${GREEN}http://<EXTERNAL-IP>/docs${NC}"
-echo ""
-echo "To check deployment status:"
-echo -e "${YELLOW}kubectl get pods -n coldsense${NC}"
-echo ""
-echo "To view logs:"
-echo -e "${YELLOW}kubectl logs -f deployment/coldsense-backend -n coldsense${NC}"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  ✅  DEPLOYMENT COMPLETE                                     ║"
+echo "║                                                              ║"
+echo "║  Backend API:   http://${VM_IP}:8000                 ║"
+echo "║  MQTT Broker:   ${VM_IP}:1883                        ║"
+echo "║  Health Check:  http://${VM_IP}:8000/health          ║"
+echo "║  API Docs:      http://${VM_IP}:8000/docs            ║"
+echo "║                                                              ║"
+echo "║  Sensor topic format:                                        ║"
+echo "║  coldsense/{room_id}/{SensorType}/{index}                    ║"
+echo "║  Example:                                                    ║"
+echo "║  coldsense/abc-123/Temperature/1                             ║"
+echo "║  Payload: {\"value\": 4.2, \"unit\": \"°C\"}                      ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""

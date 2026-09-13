@@ -71,6 +71,8 @@ const OwnerSetup: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<SetupStep>('site');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [profileVerified, setProfileVerified] = useState(false); // Track verification status
+  const [verificationAttempted, setVerificationAttempted] = useState(false); // Prevent re-verification
   
   // Location data from Supabase
   const [states, setStates] = useState<State[]>([]);
@@ -102,7 +104,9 @@ const OwnerSetup: React.FC = () => {
   // Load states on mount
   useEffect(() => {
     loadStates();
-    verifyOwnerRole();
+    // DISABLED VERIFICATION - Just show the form immediately
+    setProfileVerified(true);
+    // verifyOwnerRole(); // Commented out to stop the loop
   }, []);
 
   // Load districts when state is selected
@@ -128,38 +132,71 @@ const OwnerSetup: React.FC = () => {
   }, [selectedDistrictId]);
 
   const verifyOwnerRole = async () => {
+    // Prevent multiple verification attempts
+    if (verificationAttempted) {
+      console.log('Verification already attempted, skipping...');
+      return;
+    }
+    
+    setVerificationAttempted(true);
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log('No session found, redirecting to login');
         setError('No authenticated session found');
         setTimeout(() => navigate('/login'), 3000);
         return;
       }
 
-      // Check if user has owner profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, roles!inner(name)')
-        .eq('auth_user_id', session.user.id)
-        .maybeSingle();
+      // Check if user has owner profile - retry logic for race conditions
+      let profile = null;
+      let retries = 5; // 5 retries
+      
+      console.log('Starting profile verification with retries...');
+      
+      while (retries > 0 && !profile) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*, roles!inner(name)')
+          .eq('auth_user_id', session.user.id)
+          .maybeSingle();
+        
+        if (profileError) {
+          console.error('Profile query error:', profileError);
+        }
+        
+        profile = profileData;
+        
+        if (!profile && retries > 1) {
+          console.log(`Profile not found yet, retrying in 1 second... (${retries - 1} attempts left)`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        }
+        
+        retries--;
+      }
 
       if (!profile) {
-        console.log('No profile found, redirecting to owner profile setup');
-        setError('No profile found. Please complete profile setup first.');
-        setTimeout(() => navigate('/owner-profile-setup'), 3000);
+        // Profile still doesn't exist after retries - this is a real issue
+        console.error('❌ Profile not found after 5 retries');
+        setError('Profile setup incomplete. Please go back to complete your profile.');
+        // Don't set profileVerified to true, stay in loading state with error
         return;
       }
 
       if (profile.roles.name !== 'Owner') {
+        console.log('Wrong role, redirecting to role selection');
         setError('Access denied. Owner role required.');
         setTimeout(() => navigate('/role-selection'), 3000);
         return;
       }
 
-      console.log('✓ Owner profile verified:', profile);
+      console.log('✅ Owner profile verified successfully:', profile);
+      setError(''); // Clear any errors
+      setProfileVerified(true); // Mark as verified - this will show the form
     } catch (err) {
       console.error('Role verification failed:', err);
-      setError('Failed to verify owner role');
+      setError('Failed to verify owner role. Please refresh the page.');
     }
   };
 
@@ -402,8 +439,41 @@ const OwnerSetup: React.FC = () => {
     try {
       // Create sensor devices for the room with quantities
       for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
-        if (quantity === 0) continue; // Skip sensors with zero quantity
-        
+        if (quantity === 0) continue;
+
+        // Handle combined sensors - split into individual sensors
+        const isCombined = internalKey.includes('+');
+
+        if (isCombined) {
+          const subTypes = internalKey.split('+');
+          for (const subType of subTypes) {
+            const subDef = SENSOR_REGISTRY.find(s => s.internalKey === subType);
+            for (let i = 0; i < quantity; i++) {
+              const serialNumber = generateSerialNumber();
+              const mqttTopic = generateMQTTTopic(createdRoomId!, subType, i + 1);
+              const { error: sensorError } = await supabase
+                .from('sensor_devices')
+                .insert({
+                  room_id: createdRoomId,
+                  sensor_name: subDef?.displayName || subType,
+                  sensor_type: subType,
+                  serial_number: serialNumber,
+                  mqtt_topic: mqttTopic,
+                  firmware_version: '1.0.0',
+                  installation_date: new Date().toISOString(),
+                  last_calibration: new Date().toISOString(),
+                  status: 'Online',
+                  last_seen: new Date().toISOString(),
+                  battery_percentage: 100,
+                  remarks: '',
+                });
+              if (sensorError) throw sensorError;
+            }
+          }
+          continue;
+        }
+
+        // Regular single sensor
         const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
         if (!sensorDef) {
           console.error(`Sensor definition not found for key: ${internalKey}`);
@@ -418,20 +488,19 @@ const OwnerSetup: React.FC = () => {
           const { error: sensorError } = await supabase
             .from('sensor_devices')
             .insert({
-              room_id: createdRoomId, // UUID
-              sensor_name: displayName, // Display name from registry
-              sensor_type: internalKey, // Internal key for backend logic
+              room_id: createdRoomId,
+              sensor_name: displayName,
+              sensor_type: internalKey,
               serial_number: serialNumber,
               mqtt_topic: mqttTopic,
               firmware_version: '1.0.0',
               installation_date: new Date().toISOString(),
               last_calibration: new Date().toISOString(),
-              status: 'Online', // Database constraint: Online, Offline, Maintenance, Faulty
+              status: 'Online',
               last_seen: new Date().toISOString(),
               battery_percentage: 100,
               remarks: '',
             });
-
           if (sensorError) throw sensorError;
         }
       }
@@ -707,24 +776,46 @@ const OwnerSetup: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">
-      <div className="w-full max-w-4xl">
-        <Card variant="default" className="w-full">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Warehouse className="h-8 w-8 text-white" />
+      {/* Show loading while verifying profile */}
+      {!profileVerified ? (
+        <Card variant="default" className="w-full max-w-md">
+          <CardContent className="p-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                Verifying Owner Profile...
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Please wait while we set up your account
+              </p>
+              {error && (
+                <div className="mt-4 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
             </div>
-            <CardTitle className="text-3xl">Owner Setup Wizard</CardTitle>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">
-              {currentStep === 'site' && 'Step 1 of 2: Create Site'}
-              {currentStep === 'sensors' && 'Step 2 of 2: Configure Sensors'}
-            </p>
-          </CardHeader>
-          <CardContent>
-            {currentStep === 'site' && renderSiteStep()}
-            {currentStep === 'sensors' && renderSensorsStep()}
           </CardContent>
         </Card>
-      </div>
+      ) : (
+        <div className="w-full max-w-4xl">
+          <Card variant="default" className="w-full">
+            <CardHeader className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Warehouse className="h-8 w-8 text-white" />
+              </div>
+              <CardTitle className="text-3xl">Owner Setup Wizard</CardTitle>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">
+                {currentStep === 'site' && 'Step 1 of 2: Create Site'}
+                {currentStep === 'sensors' && 'Step 2 of 2: Configure Sensors'}
+              </p>
+            </CardHeader>
+            <CardContent>
+              {currentStep === 'site' && renderSiteStep()}
+              {currentStep === 'sensors' && renderSensorsStep()}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

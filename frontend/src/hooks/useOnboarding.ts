@@ -119,31 +119,10 @@ export const useOnboarding = () => {
       console.log('✓ Profile found');
       console.log('User role:', profile.roles?.name);
 
-      // Owners: Check if they have a facility, if not, send to owner-setup
+      // Owners: Check if they have a facility, if not, still go to dashboard
+      // They can add a facility from the dashboard
       if (profile.roles?.name === 'Owner') {
-        console.log('Owner role detected, checking for facility...');
-        
-        // Check if owner has created a facility
-        const { data: facilities } = await supabase
-          .from('facilities')
-          .select('id')
-          .eq('owner_profile_id', profile.id)
-          .limit(1);
-        
-        if (!facilities || facilities.length === 0) {
-          console.log('Owner has no facility -> step: site (owner-setup)');
-          setState(prev => ({
-            ...prev,
-            step: 'site', // This will map to /owner-setup
-            loading: false,
-            hasProfile: true,
-            hasSite: false,
-            profile,
-          }));
-          return;
-        }
-        
-        console.log('✓ Owner has facility -> step: dashboard');
+        console.log('Owner role detected -> step: dashboard');
         setState(prev => ({
           ...prev,
           step: 'dashboard',
@@ -333,13 +312,12 @@ export const useOnboarding = () => {
     if (state.step === 'profile') {
       const userRole = user?.role;
       if (userRole === 'owner') {
-        return '/owner-setup'; // Owner goes to facility setup
+        return '/owner-profile-setup'; // Owner goes to profile setup (not facility)
       } else if (userRole === 'stakeholder') {
         return '/stakeholder-profile-setup';
       } else if (userRole === 'farmer') {
         return '/farmer-profile-setup';
       }
-      // Default to farmer profile setup if role is unknown
       return '/farmer-profile-setup';
     }
 

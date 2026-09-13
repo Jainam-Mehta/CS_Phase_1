@@ -262,7 +262,7 @@ const FarmerInventory: React.FC = () => {
                             <th className="py-4 px-6">Batch Code</th>
                             <th className="py-4 px-6 text-right">Quantity</th>
                             <th className="py-4 px-6">Facility</th>
-                            <th className="py-4 px-6">Quality</th>
+                            {/* <th className="py-4 px-6">Quality</th> */}
                             <th className="py-4 px-6">Stored Date</th>
                             <th className="py-4 px-6">Expiry Date</th>
                          </tr>
@@ -282,11 +282,13 @@ const FarmerInventory: React.FC = () => {
                                      {crates} <span className="text-xs font-normal text-slate-400">Crates</span>
                                   </td>
                                   <td className="py-4 px-6 text-slate-600 dark:text-slate-400">{roomNameMap[b.room_id] || 'Storage Facility'}</td>
+                                  {/* Quality column - Hidden for future use
                                   <td className="py-4 px-6">
                                       <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-bold rounded text-[10px] uppercase tracking-widest">
                                          {b.quality_grade || 'A'}
                                       </span>
                                   </td>
+                                  */}
                                   <td className="py-4 px-6">{storedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
                                   <td className="py-4 px-6">{expiryDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric'})}</td>
                                </tr>

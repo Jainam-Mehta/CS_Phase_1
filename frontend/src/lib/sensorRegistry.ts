@@ -46,49 +46,64 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Environmental Sensors
   {
     displayName: 'Temperature',
-    internalKey: 'temperature',
+    internalKey: 'Temperature',
     defaultIcon: 'thermometer',
     unit: '°C',
     category: 'environmental',
   },
   {
     displayName: 'Humidity',
-    internalKey: 'humidity',
+    internalKey: 'Humidity',
     defaultIcon: 'droplets',
     unit: '%',
     category: 'environmental',
   },
+  // Combined sensor - creates both Temperature + Humidity entries in DB
   {
-    displayName: 'Pressure',
-    internalKey: 'pressure',
+    displayName: 'Temperature + Humidity (Internal Combined)',
+    internalKey: 'Temperature+Humidity',
+    defaultIcon: 'thermometer',
+    unit: '°C / %',
+    category: 'environmental',
+  },
+  {
+    displayName: 'Suction Pressure',
+    internalKey: 'SuctionPressure',
     defaultIcon: 'gauge',
-    unit: 'kPa',
+    unit: 'Psi',
+    category: 'environmental',
+  },
+  {
+    displayName: 'Discharge Pressure',
+    internalKey: 'DischargePressure',
+    defaultIcon: 'gauge',
+    unit: 'Psi',
     category: 'environmental',
   },
   {
     displayName: 'Oxygen',
-    internalKey: 'oxygen',
+    internalKey: 'Oxygen',
     defaultIcon: 'wind',
     unit: '%',
     category: 'environmental',
   },
   {
     displayName: 'Carbon Dioxide',
-    internalKey: 'co2',
+    internalKey: 'CO2',
     defaultIcon: 'cloud',
     unit: 'ppm',
     category: 'environmental',
   },
   {
     displayName: 'Ethylene',
-    internalKey: 'ethylene',
+    internalKey: 'Ethylene',
     defaultIcon: 'sprout',
     unit: 'ppm',
     category: 'environmental',
   },
   {
     displayName: 'Ammonia',
-    internalKey: 'ammonia',
+    internalKey: 'Ammonia',
     defaultIcon: 'flask-conical',
     unit: 'ppm',
     category: 'environmental',
@@ -97,14 +112,14 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Safety Sensors
   {
     displayName: 'Water Leakage',
-    internalKey: 'water_leak',
+    internalKey: 'WaterLeakage',
     defaultIcon: 'droplet',
     unit: 'Boolean',
     category: 'safety',
   },
   {
     displayName: 'Smoke',
-    internalKey: 'smoke',
+    internalKey: 'Smoke',
     defaultIcon: 'flame',
     unit: 'Boolean',
     category: 'safety',
@@ -113,28 +128,28 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Energy Sensors
   {
     displayName: 'Solar',
-    internalKey: 'solar',
+    internalKey: 'Solar',
     defaultIcon: 'sun',
     unit: 'W',
     category: 'energy',
   },
   {
     displayName: 'Battery',
-    internalKey: 'battery',
+    internalKey: 'Battery',
     defaultIcon: 'battery',
     unit: '%',
     category: 'energy',
   },
   {
     displayName: 'Grid Power',
-    internalKey: 'grid',
+    internalKey: 'GridPower',
     defaultIcon: 'zap',
     unit: 'W',
     category: 'energy',
   },
   {
     displayName: 'Power Meter',
-    internalKey: 'power_meter',
+    internalKey: 'PowerMeter',
     defaultIcon: 'lightning',
     unit: 'kWh',
     category: 'energy',
@@ -143,21 +158,21 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Security Sensors
   {
     displayName: 'Door',
-    internalKey: 'door',
+    internalKey: 'Door',
     defaultIcon: 'door-open',
     unit: 'Boolean',
     category: 'security',
   },
   {
     displayName: 'Motion',
-    internalKey: 'motion',
+    internalKey: 'Motion',
     defaultIcon: 'move',
     unit: 'Boolean',
     category: 'security',
   },
   {
     displayName: 'Vibration',
-    internalKey: 'vibration',
+    internalKey: 'Vibration',
     defaultIcon: 'activity',
     unit: 'Hz',
     category: 'security',
@@ -166,7 +181,7 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Equipment Sensors
   {
     displayName: 'Compressor',
-    internalKey: 'compressor',
+    internalKey: 'Compressor',
     defaultIcon: 'cog',
     unit: 'Status',
     category: 'equipment',
@@ -175,16 +190,24 @@ export const SENSOR_REGISTRY: SensorDefinition[] = [
   // Ambient Sensors (external conditions)
   {
     displayName: 'Ambient Temperature',
-    internalKey: 'ambient_temperature',
+    internalKey: 'AmbientTemperature',
     defaultIcon: 'thermometer-sun',
     unit: '°C',
     category: 'ambient',
   },
   {
     displayName: 'Ambient Humidity',
-    internalKey: 'ambient_humidity',
+    internalKey: 'AmbientHumidity',
     defaultIcon: 'cloud-sun',
     unit: '%',
+    category: 'ambient',
+  },
+  // Combined ambient sensor - creates both AmbientTemperature + AmbientHumidity entries in DB
+  {
+    displayName: 'Ambient Temp + Humidity (Combined)',
+    internalKey: 'AmbientTemperature+AmbientHumidity',
+    defaultIcon: 'cloud-sun',
+    unit: '°C / %',
     category: 'ambient',
   },
 ];

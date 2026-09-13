@@ -1,17 +1,25 @@
+# ColdSense Terraform Variables
+
 variable "project_id" {
-  description = "GCP project ID"
+  description = "GCP Project ID"
   type        = string
   default     = "exalted-skein-505210-g0"
 }
 
 variable "region" {
-  description = "GCP region"
+  description = "GCP Region"
   type        = string
   default     = "asia-south1"
 }
 
-variable "cluster_name" {
-  description = "GKE cluster name"
+variable "zone" {
+  description = "GCP Zone"
   type        = string
-  default     = "coldsense-gke"
+  default     = "asia-south1-c"
+}
+
+variable "vm_machine_type" {
+  description = "VM machine type"
+  type        = string
+  default     = "e2-medium"  # 2 vCPU, 4GB RAM - $36/month
 }

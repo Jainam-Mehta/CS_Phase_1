@@ -4,6 +4,7 @@ import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import OwnerReport from '../reports/OwnerReport';
 
 // NO DEMO DATA - All data from database
 
@@ -62,16 +63,31 @@ const OwnerDashboard: React.FC = () => {
 
         setDbSensors(sensorData || []);
 
-        // Fetch latest conditions for active room
+        // Fetch latest conditions - get most recent record with both temp and humidity
+        // Query all conditions for these rooms and merge the latest data
         const { data: condData } = await supabase
           .from('cold_storage_conditions')
           .select('*')
           .in('room_id', roomIds)
           .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(100);
 
-        setLatestCondition(condData || null);
+        // Find the most recent record that has temperature AND humidity
+        let latestComplete = null;
+        if (condData && condData.length > 0) {
+          for (const record of condData) {
+            if (record.temperature !== null && record.humidity !== null) {
+              latestComplete = record;
+              break;
+            }
+          }
+          // Fallback: if no complete record, just use the latest one
+          if (!latestComplete) {
+            latestComplete = condData[0];
+          }
+        }
+
+        setLatestCondition(latestComplete || null);
 
         // Fetch Inventory/Allocations (to calculate Total Farmers)
         const { data: invData } = await supabase
@@ -281,12 +297,6 @@ const OwnerDashboard: React.FC = () => {
   const solarEnergy = monthlyEnergy * (solarPercentage / 100);
   const gridEnergy = monthlyEnergy * (gridPercentage / 100);
 
-  // Sensor Presence Helper
-  const hasInstalledSensorType = (type: string) => {
-    if (dbSensors.length === 0) return false; // Strict database checking: false if 0 sensors in DB
-    return dbSensors.some(s => s.sensor_type?.toLowerCase().includes(type.toLowerCase()));
-  };
-
   // Calculate Compressor Health Score Dynamically
   const computeCompressorHealth = () => {
     let score = 100;
@@ -317,19 +327,25 @@ const OwnerDashboard: React.FC = () => {
 
   const compressorHealthInfo = computeCompressorHealth();
 
-  // Sensor existence checks
-  const hasTempSensor = dbSensors.length > 0 ? (hasInstalledSensorType('temp') || hasInstalledSensorType('temperature')) : false;
-  const hasHumSensor = dbSensors.length > 0 ? (hasInstalledSensorType('hum') || hasInstalledSensorType('humidity')) : false;
-  const hasDoorSensor = dbSensors.length > 0 ? hasInstalledSensorType('door') : false;
-  const hasPressureSensor = dbSensors.length > 0 ? hasInstalledSensorType('pressure') : false;
-  const hasAmbientSensor = dbSensors.length > 0 ? (hasInstalledSensorType('ambient') || hasInstalledSensorType('outdoor')) : false;
+  // Sensor existence checks - EXACT MATCH ONLY, NO FALSE POSITIVES
+  const hasTempSensor = dbSensors.some(s => s.sensor_type === 'Temperature');
+  const hasHumSensor = dbSensors.some(s => s.sensor_type === 'Humidity');
+  const hasDoorSensor = dbSensors.some(s => s.sensor_type === 'Door');
+  const hasSuctionPressureSensor = dbSensors.some(s => s.sensor_type === 'SuctionPressure');
+  const hasDischargePressureSensor = dbSensors.some(s => s.sensor_type === 'DischargePressure');
+  const hasAmbientTempSensor = dbSensors.some(s => s.sensor_type === 'AmbientTemperature');
+  const hasAmbientHumSensor = dbSensors.some(s => s.sensor_type === 'AmbientHumidity');
 
-  const isTempInstalled = hasTempSensor || (latestCondition?.temperature !== undefined && latestCondition?.temperature !== null);
-  const isHumInstalled = hasHumSensor || (latestCondition?.humidity !== undefined && latestCondition?.humidity !== null);
-  const isDoorInstalled = hasDoorSensor || (latestCondition?.door_status !== undefined && latestCondition?.door_status !== null);
-  const isAmbientInstalled = hasAmbientSensor || (latestCondition?.ambient_temperature !== undefined && latestCondition?.ambient_temperature !== null);
+  // Sensor installed status - check database first, then fallback to conditions table if data exists
+  const isTempInstalled = hasTempSensor;
+  const isHumInstalled = hasHumSensor;
+  const isDoorInstalled = hasDoorSensor;
+  const isSuctionPressureInstalled = hasSuctionPressureSensor;
+  const isDischargePressureInstalled = hasDischargePressureSensor;
+  const isAmbientTempInstalled = hasAmbientTempSensor;
+  const isAmbientHumInstalled = hasAmbientHumSensor;
 
-  // Dynamic Universal HVAC Sensors Mapping - STRICTLY DATABASE DRIVEN
+  // Dynamic Universal HVAC Sensors Mapping - STRICTLY DATABASE DRIVEN - NO DEMO VALUES
   const hvacSensors = [
     {
       id: 'internal-storage-temp',
@@ -376,13 +392,15 @@ const OwnerDashboard: React.FC = () => {
     {
       id: 'suction-pressure-line',
       label: 'Suction Pressure',
-      value: latestCondition?.suction_pressure ?? (hasPressureSensor ? 145 : null),
+      value: latestCondition?.suction_pressure ?? null,
       unit: 'PSI',
-      status: 'optimal' as const,
+      status: latestCondition?.suction_pressure === undefined || latestCondition?.suction_pressure === null
+        ? 'unknown'
+        : 'optimal',
       x: 58,
       y: 22.5,
       iconType: 'pressure' as const,
-      isInstalled: hasPressureSensor,
+      isInstalled: isSuctionPressureInstalled,
       category: 'mechanical' as const,
       thresholds: { min: 120, max: 160 },
     },
@@ -401,13 +419,15 @@ const OwnerDashboard: React.FC = () => {
     {
       id: 'discharge-pressure-line',
       label: 'Discharge Pressure',
-      value: latestCondition?.discharge_pressure ?? (hasPressureSensor ? 210 : null),
+      value: latestCondition?.discharge_pressure ?? null,
       unit: 'PSI',
-      status: 'optimal' as const,
+      status: latestCondition?.discharge_pressure === undefined || latestCondition?.discharge_pressure === null
+        ? 'unknown'
+        : 'optimal',
       x: 88,
       y: 35,
       iconType: 'pressure' as const,
-      isInstalled: hasPressureSensor,
+      isInstalled: isDischargePressureInstalled,
       category: 'mechanical' as const,
       thresholds: { min: 180, max: 240 },
     },
@@ -416,11 +436,13 @@ const OwnerDashboard: React.FC = () => {
       label: 'Outdoor Temp',
       value: latestCondition?.ambient_temperature ?? null,
       unit: '°C',
-      status: 'optimal' as const,
+      status: latestCondition?.ambient_temperature === undefined || latestCondition?.ambient_temperature === null
+        ? 'unknown'
+        : 'optimal',
       x: 18,
       y: 91.5,
       iconType: 'ambientTemp' as const,
-      isInstalled: isAmbientInstalled,
+      isInstalled: isAmbientTempInstalled,
       category: 'ambient' as const,
     },
     {
@@ -428,11 +450,13 @@ const OwnerDashboard: React.FC = () => {
       label: 'Outdoor Humidity',
       value: latestCondition?.ambient_humidity ?? null,
       unit: '%',
-      status: 'optimal' as const,
+      status: latestCondition?.ambient_humidity === undefined || latestCondition?.ambient_humidity === null
+        ? 'unknown'
+        : 'optimal',
       x: 31,
       y: 91.5,
       iconType: 'ambientHum' as const,
-      isInstalled: isAmbientInstalled,
+      isInstalled: isAmbientHumInstalled,
       category: 'ambient' as const,
     },
   ];
@@ -451,11 +475,14 @@ const OwnerDashboard: React.FC = () => {
   return (
     <div className="p-8 max-w-[1400px] mx-auto overflow-hidden">
       {/* 1. Page Title */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          System Overview
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time industrial cold storage analytics</p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+            System Overview
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time industrial cold storage analytics</p>
+        </div>
+        <OwnerReport />
       </div>
       
       {/* 2. HVAC System Map on Top */}

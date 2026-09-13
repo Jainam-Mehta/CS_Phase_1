@@ -17,9 +17,14 @@ interface Sensor {
 }
 
 const AVAILABLE_SENSOR_TYPES = [
-  { value: 'Temperature', label: 'Temperature Sensor', unit: '°C', icon: 'Thermometer' },
-  { value: 'Humidity', label: 'Humidity Sensor', unit: '%', icon: 'Droplets' },
-  { value: 'Pressure', label: 'Pressure Sensor', unit: 'Psi', icon: 'Gauge' },
+  { value: 'Temperature+Humidity', label: 'Temperature+Humidity Sensor (Internal Combined)', unit: '', icon: 'Thermometer', isCombined: true, types: ['Temperature', 'Humidity'] },
+  { value: 'AmbientTemperature+AmbientHumidity', label: 'Temperature+Humidity Sensor (Ambient Combined)', unit: '', icon: 'Sun', isCombined: true, types: ['AmbientTemperature', 'AmbientHumidity'] },
+  { value: 'Temperature', label: 'Temperature Sensor (Internal)', unit: '°C', icon: 'Thermometer' },
+  { value: 'Humidity', label: 'Humidity Sensor (Internal)', unit: '%', icon: 'Droplets' },
+  { value: 'AmbientTemperature', label: 'Ambient Temperature Sensor', unit: '°C', icon: 'Sun' },
+  { value: 'AmbientHumidity', label: 'Ambient Humidity Sensor', unit: '%', icon: 'CloudSun' },
+  { value: 'SuctionPressure', label: 'Suction Pressure Sensor', unit: 'Psi', icon: 'Gauge' },
+  { value: 'DischargePressure', label: 'Discharge Pressure Sensor', unit: 'Psi', icon: 'Gauge' },
   { value: 'Battery', label: 'Battery Monitor', unit: '%', icon: 'Battery' },
   { value: 'Door', label: 'Door Sensor', unit: '', icon: 'MapPin' },
   { value: 'CO2', label: 'CO2 Sensor', unit: 'ppm', icon: 'Wind' },
@@ -137,51 +142,145 @@ const OwnerMonitoring: React.FC = () => {
     e.preventDefault();
     try {
       // Get the first room for this facility
-      const { data: roomData } = await supabase
+      const { data: roomData, error: roomError } = await supabase
         .from('cold_storage_rooms')
         .select('id')
         .eq('facility_id', selectedFacilityId)
         .limit(1)
         .single();
 
-      if (!roomData) {
-        alert('No room found for this facility');
+      if (roomError) {
+        console.error('Room query error:', roomError);
+        alert(`Database error: ${roomError.message}`);
         return;
       }
 
-      // Count existing sensors of this type to determine starting number
-      const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
-      const startNumber = existingOfType.length + 1;
-
-      // Create sensors based on quantity
-      const sensorsToAdd = [];
-      for (let i = 0; i < addSensorForm.quantity; i++) {
-        const sensorNumber = startNumber + i;
-        const sensorType = AVAILABLE_SENSOR_TYPES.find(t => t.value === addSensorForm.sensor_type);
-        
-        sensorsToAdd.push({
-          room_id: roomData.id,
-          sensor_type: addSensorForm.sensor_type,
-          sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
-          sensor_code: `${addSensorForm.sensor_type.toUpperCase()}_${String(sensorNumber).padStart(3, '0')}`,
-          status: 'active',
-          battery_percentage: 100,
-          last_reading_unit: sensorType?.unit || ''
-        });
+      if (!roomData) {
+        alert('No room found for this facility. Please create a room first.');
+        return;
       }
 
-      const { error } = await supabase
+      // Check if this is a combined sensor
+      const selectedSensorType = AVAILABLE_SENSOR_TYPES.find(t => t.value === addSensorForm.sensor_type);
+      const isCombinedSensor = selectedSensorType?.isCombined;
+
+      const sensorsToAdd = [];
+
+      if (isCombinedSensor) {
+        // Handle both internal and ambient combined sensors
+        if (addSensorForm.sensor_type === 'Temperature+Humidity') {
+          // Create both Temperature and Humidity sensors for each quantity
+          for (let i = 0; i < addSensorForm.quantity; i++) {
+            const existingTemp = dbSensors.filter(s => s.sensor_type === 'Temperature');
+            const existingHumidity = dbSensors.filter(s => s.sensor_type === 'Humidity');
+            const tempNumber = existingTemp.length + 1 + i;
+            const humidityNumber = existingHumidity.length + 1 + i;
+
+            // Add Temperature sensor
+            sensorsToAdd.push({
+              room_id: roomData.id,
+              sensor_type: 'Temperature',
+              sensor_name: `Temperature ${tempNumber}`,
+              sensor_code: `TEMP_${String(tempNumber).padStart(3, '0')}`,
+              status: 'Online',
+              battery_percentage: 100,
+              last_reading_unit: '°C',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+            // Add Humidity sensor
+            sensorsToAdd.push({
+              room_id: roomData.id,
+              sensor_type: 'Humidity',
+              sensor_name: `Humidity ${humidityNumber}`,
+              sensor_code: `HUM_${String(humidityNumber).padStart(3, '0')}`,
+              status: 'Online',
+              battery_percentage: 100,
+              last_reading_unit: '%',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        } else if (addSensorForm.sensor_type === 'AmbientTemperature+AmbientHumidity') {
+          // Create both Ambient Temperature and Ambient Humidity sensors for each quantity
+          for (let i = 0; i < addSensorForm.quantity; i++) {
+            const existingAmbTemp = dbSensors.filter(s => s.sensor_type === 'AmbientTemperature');
+            const existingAmbHum = dbSensors.filter(s => s.sensor_type === 'AmbientHumidity');
+            const ambTempNumber = existingAmbTemp.length + 1 + i;
+            const ambHumNumber = existingAmbHum.length + 1 + i;
+
+            // Add Ambient Temperature sensor
+            sensorsToAdd.push({
+              room_id: roomData.id,
+              sensor_type: 'AmbientTemperature',
+              sensor_name: `Ambient Temperature ${ambTempNumber}`,
+              sensor_code: `AMB_TEMP_${String(ambTempNumber).padStart(3, '0')}`,
+              status: 'Online',
+              battery_percentage: 100,
+              last_reading_unit: '°C',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+            // Add Ambient Humidity sensor
+            sensorsToAdd.push({
+              room_id: roomData.id,
+              sensor_type: 'AmbientHumidity',
+              sensor_name: `Ambient Humidity ${ambHumNumber}`,
+              sensor_code: `AMB_HUM_${String(ambHumNumber).padStart(3, '0')}`,
+              status: 'Online',
+              battery_percentage: 100,
+              last_reading_unit: '%',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      } else {
+        // Regular single-type sensor
+        const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
+        const startNumber = existingOfType.length + 1;
+
+        for (let i = 0; i < addSensorForm.quantity; i++) {
+          const sensorNumber = startNumber + i;
+          
+          sensorsToAdd.push({
+            room_id: roomData.id,
+            sensor_type: addSensorForm.sensor_type,
+            sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
+            sensor_code: `${addSensorForm.sensor_type.toUpperCase().replace(/\+/g, '_')}_${String(sensorNumber).padStart(3, '0')}`,
+            status: 'Online',
+            battery_percentage: 100,
+            last_reading_unit: selectedSensorType?.unit || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
+
+      console.log('Inserting sensors:', sensorsToAdd);
+
+      const { data: insertedData, error: insertError } = await supabase
         .from('sensor_devices')
-        .insert(sensorsToAdd);
+        .insert(sensorsToAdd)
+        .select();
 
-      if (error) throw error;
+      if (insertError) {
+        console.error('Insert error details:', insertError);
+        throw insertError;
+      }
 
+      console.log('Sensors added successfully:', insertedData);
+      
       setShowAddSensorModal(false);
       setAddSensorForm({ sensor_type: '', quantity: 1 });
-      loadMonitoringData(); // Reload data
-    } catch (error) {
+      await loadMonitoringData(); // Reload data
+      
+      alert(`Successfully added ${sensorsToAdd.length} sensor(s)!`);
+    } catch (error: any) {
       console.error('Error adding sensors:', error);
-      alert('Failed to add sensors. Please try again.');
+      alert(`Failed to add sensors: ${error.message || 'Please try again.'}`);
     }
   };
 
@@ -206,9 +305,8 @@ const OwnerMonitoring: React.FC = () => {
 
   const isSensorActive = (s: any) => {
     const st = s.status?.toLowerCase();
-    // A sensor is ONLY active if database status is active/online AND a real reading has passed through it
-    const hasPassedReading = s.last_reading_value != null || (s.last_seen != null && s.last_seen !== '');
-    return (st === 'active' || st === 'online') && hasPassedReading;
+    // A sensor is active if database status is 'online'
+    return (st === 'online');
   };
 
   const activeSensors = dbSensors.filter(isSensorActive).length;
@@ -319,7 +417,22 @@ const OwnerMonitoring: React.FC = () => {
 
                   const isActive = isSensorActive(sensor);
                   const isMaintenance = sensor.status?.toLowerCase() === 'maintenance';
-                  const displayStatus = isActive ? 'Active' : isMaintenance ? 'Maintenance' : 'Offline';
+                  const isFaulty = sensor.status?.toLowerCase() === 'faulty';
+                  
+                  // Map database status to display text
+                  let displayStatus = 'Offline';
+                  let statusColor = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+                  
+                  if (isActive) {
+                    displayStatus = 'Active';
+                    statusColor = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+                  } else if (isMaintenance) {
+                    displayStatus = 'Maintenance';
+                    statusColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+                  } else if (isFaulty) {
+                    displayStatus = 'Faulty';
+                    statusColor = 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
+                  }
                   
                   return (
                     <tr key={sensor.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -334,10 +447,7 @@ const OwnerMonitoring: React.FC = () => {
                         {getReadingDisplay()}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                          ${isActive ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                          : isMaintenance ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                           {displayStatus}
                         </span>
                       </td>
@@ -420,17 +530,66 @@ const OwnerMonitoring: React.FC = () => {
               {addSensorForm.sensor_type && (
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
-                    <strong>Preview:</strong> Will create {addSensorForm.quantity} sensor{addSensorForm.quantity > 1 ? 's' : ''} named:
-                    <br />
-                    {Array.from({ length: Math.min(addSensorForm.quantity, 3) }, (_, i) => {
-                      const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
-                      return (
-                        <span key={i} className="block ml-2 mt-1">
-                          • {addSensorForm.sensor_type} {existingOfType.length + i + 1}
-                        </span>
-                      );
-                    })}
-                    {addSensorForm.quantity > 3 && <span className="block ml-2 mt-1">• ... and {addSensorForm.quantity - 3} more</span>}
+                    {(() => {
+                      const selectedType = AVAILABLE_SENSOR_TYPES.find(t => t.value === addSensorForm.sensor_type);
+                      const isCombined = selectedType?.isCombined;
+                      
+                      if (isCombined) {
+                        const totalSensors = addSensorForm.quantity * 2;
+                        
+                        if (addSensorForm.sensor_type === 'Temperature+Humidity') {
+                          return (
+                            <>
+                              <strong>Preview:</strong> Will create {totalSensors} internal sensors ({addSensorForm.quantity} Temperature + {addSensorForm.quantity} Humidity):
+                              <br />
+                              {Array.from({ length: Math.min(addSensorForm.quantity, 2) }, (_, i) => {
+                                const existingTemp = dbSensors.filter(s => s.sensor_type === 'Temperature');
+                                const existingHumidity = dbSensors.filter(s => s.sensor_type === 'Humidity');
+                                return (
+                                  <span key={i} className="block ml-2 mt-1">
+                                    • Temperature {existingTemp.length + i + 1} & Humidity {existingHumidity.length + i + 1}
+                                  </span>
+                                );
+                              })}
+                              {addSensorForm.quantity > 2 && <span className="block ml-2 mt-1">• ... and {(addSensorForm.quantity - 2) * 2} more sensors</span>}
+                            </>
+                          );
+                        } else if (addSensorForm.sensor_type === 'AmbientTemperature+AmbientHumidity') {
+                          return (
+                            <>
+                              <strong>Preview:</strong> Will create {totalSensors} ambient sensors ({addSensorForm.quantity} Ambient Temp + {addSensorForm.quantity} Ambient Humidity):
+                              <br />
+                              {Array.from({ length: Math.min(addSensorForm.quantity, 2) }, (_, i) => {
+                                const existingAmbTemp = dbSensors.filter(s => s.sensor_type === 'AmbientTemperature');
+                                const existingAmbHum = dbSensors.filter(s => s.sensor_type === 'AmbientHumidity');
+                                return (
+                                  <span key={i} className="block ml-2 mt-1">
+                                    • Ambient Temperature {existingAmbTemp.length + i + 1} & Ambient Humidity {existingAmbHum.length + i + 1}
+                                  </span>
+                                );
+                              })}
+                              {addSensorForm.quantity > 2 && <span className="block ml-2 mt-1">• ... and {(addSensorForm.quantity - 2) * 2} more sensors</span>}
+                            </>
+                          );
+                        }
+                      } else {
+                        return (
+                          <>
+                            <strong>Preview:</strong> Will create {addSensorForm.quantity} sensor{addSensorForm.quantity > 1 ? 's' : ''} named:
+                            <br />
+                            {Array.from({ length: Math.min(addSensorForm.quantity, 3) }, (_, i) => {
+                              const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
+                              return (
+                                <span key={i} className="block ml-2 mt-1">
+                                  • {addSensorForm.sensor_type} {existingOfType.length + i + 1}
+                                </span>
+                              );
+                            })}
+                            {addSensorForm.quantity > 3 && <span className="block ml-2 mt-1">• ... and {addSensorForm.quantity - 3} more</span>}
+                          </>
+                        );
+                      }
+                    })()}
                   </p>
                 </div>
               )}

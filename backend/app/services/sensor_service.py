@@ -58,7 +58,7 @@ def save_sensor_reading(reading: dict) -> dict | None:
 
 def save_cold_storage_condition(condition: dict) -> dict | None:
     """
-    Upsert (insert) a row into `cold_storage_conditions`.
+    Upsert a row into `cold_storage_conditions` — merges with the most recent row for the room.
 
     Required fields:
         room_id  uuid  — FK to cold_storage_rooms.id
@@ -71,8 +71,9 @@ def save_cold_storage_condition(condition: dict) -> dict | None:
         logger.warning("save_cold_storage_condition: missing room_id, skipping")
         return None
 
+    room_id = condition["room_id"]
     data = {
-        "room_id": condition["room_id"],
+        "room_id": room_id,
         "recorded_at": condition.get("recorded_at", datetime.now(timezone.utc).isoformat()),
     }
 
@@ -85,8 +86,37 @@ def save_cold_storage_condition(condition: dict) -> dict | None:
             data[field] = condition[field]
 
     try:
+        # Try to upsert: get the most recent row for this room and update it
+        # If no row exists in the last 60 seconds, create a new one
+        latest = (
+            supabase.table("cold_storage_conditions")
+            .select("id, recorded_at")
+            .eq("room_id", room_id)
+            .order("recorded_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if latest.data:
+            latest_row = latest.data[0]
+            latest_time = datetime.fromisoformat(latest_row["recorded_at"].replace('Z', '+00:00'))
+            current_time = datetime.now(timezone.utc)
+            time_diff = (current_time - latest_time).total_seconds()
+            
+            # If the latest row is less than 60 seconds old, merge into it
+            if time_diff < 60:
+                resp = supabase.table("cold_storage_conditions") \
+                    .update(data) \
+                    .eq("id", latest_row["id"]) \
+                    .execute()
+                if resp.data:
+                    logger.info("✓ Merged condition into existing row for room_id=%s (age=%ds)", room_id, int(time_diff))
+                    return resp.data[0]
+            
+        # If no recent row found, insert a new one
         resp = supabase.table("cold_storage_conditions").insert(data).execute()
         if resp.data:
+            logger.info("✓ Created new condition row for room_id=%s", room_id)
             return resp.data[0]
         logger.error("save_cold_storage_condition: empty response from Supabase")
     except Exception as e:
