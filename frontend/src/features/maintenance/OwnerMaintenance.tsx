@@ -126,8 +126,33 @@ const OwnerMaintenance: React.FC = () => {
         .eq('facility_id', selectedFacilityId);
       
       if (existingRecords && existingRecords.length > 0) {
-        // Use existing records
-        setMaintenanceRecords(existingRecords);
+        // Use existing records and calculate their status
+        const recordsWithStatus = existingRecords.map((record: any) => {
+          const lastServiceDate = new Date(record.last_service_date);
+          const nextDueDate = new Date(record.next_due_date);
+          const now = new Date();
+          
+          // Calculate days remaining (can be negative)
+          const daysRemaining = Math.floor((nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          
+          // Determine status based on days remaining
+          let status: 'healthy' | 'due' | 'overdue' | 'in_progress' | 'completed' = 'healthy';
+          if (daysRemaining < 0) {
+            status = 'in_progress'; // Overdue - mark as in progress
+          } else if (daysRemaining <= 7) {
+            status = 'due'; // Due within 7 days
+          } else {
+            status = 'healthy';
+          }
+          
+          return {
+            ...record,
+            status,
+            daysRemaining // Track this for sorting/filtering
+          };
+        });
+        
+        setMaintenanceRecords(recordsWithStatus);
       } else {
         // Initialize new maintenance records based on facility creation date
         const demoRecords: MaintenanceRecord[] = FACILITY_MAINTENANCE_ITEMS.map(item => {
@@ -145,15 +170,14 @@ const OwnerMaintenance: React.FC = () => {
             nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
           }
           
-          const daysSinceService = Math.floor((Date.now() - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24));
+          const now = new Date();
+          const daysRemaining = Math.floor((nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
           
-          let status: 'healthy' | 'due' | 'overdue' | 'critical' = 'healthy';
-          if (daysSinceService >= item.criticalThreshold) {
-            status = 'critical';
-          } else if (daysSinceService >= item.urgentThreshold) {
-            status = 'overdue';
-          } else if (daysSinceService >= item.urgentThreshold - 15) {
-            status = 'due';
+          let status: 'healthy' | 'due' | 'overdue' | 'in_progress' | 'completed' = 'healthy';
+          if (daysRemaining < 0) {
+            status = 'in_progress'; // Overdue - mark as in progress
+          } else if (daysRemaining <= 7) {
+            status = 'due'; // Due within 7 days
           }
           
           return {
@@ -197,6 +221,10 @@ const OwnerMaintenance: React.FC = () => {
 
   const getDaysSinceService = (lastServiceDate: string) => {
     return Math.floor((Date.now() - new Date(lastServiceDate).getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const getDaysRemaining = (nextDueDate: string) => {
+    return Math.floor((new Date(nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   };
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
@@ -283,7 +311,7 @@ const OwnerMaintenance: React.FC = () => {
   }
 
   const criticalItems = maintenanceRecords.filter(r => r.status === 'critical');
-  const overdueItems = maintenanceRecords.filter(r => r.status === 'overdue');
+  const inProgressItems = maintenanceRecords.filter(r => r.status === 'in_progress');
   const dueItems = maintenanceRecords.filter(r => r.status === 'due');
   const healthyItems = maintenanceRecords.filter(r => r.status === 'healthy');
 
@@ -313,8 +341,8 @@ const OwnerMaintenance: React.FC = () => {
             <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Critical</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{criticalItems.length}</p>
+            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">In Progress</h3>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{inProgressItems.length}</p>
           </div>
         </div>
 
@@ -323,7 +351,7 @@ const OwnerMaintenance: React.FC = () => {
             <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Overdue</h3>
+            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Due Soon</h3>
             <p className="text-3xl font-bold text-slate-900 dark:text-white">{overdueItems.length}</p>
           </div>
         </div>
@@ -377,22 +405,22 @@ const OwnerMaintenance: React.FC = () => {
                   if (!item) return null;
                   
                   const Icon = item.icon;
-                  const daysSince = getDaysSinceService(record.last_service_date);
+                  const daysRemaining = getDaysRemaining(record.next_due_date);
                   
                   return (
                     <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`p-2 rounded-lg ${
-                            record.status === 'critical' ? 'bg-red-50 dark:bg-red-900/30' :
-                            record.status === 'overdue' ? 'bg-orange-50 dark:bg-orange-900/30' :
-                            record.status === 'due' ? 'bg-blue-50 dark:bg-blue-900/30' :
+                            record.status === 'in_progress' ? 'bg-red-50 dark:bg-red-900/30' :
+                            record.status === 'due' ? 'bg-orange-50 dark:bg-orange-900/30' :
+                            record.status === 'critical' ? 'bg-purple-50 dark:bg-purple-900/30' :
                             'bg-emerald-50 dark:bg-emerald-900/30'
                           }`}>
                             <Icon className={`w-5 h-5 ${
-                              record.status === 'critical' ? 'text-red-600 dark:text-red-400' :
-                              record.status === 'overdue' ? 'text-orange-600 dark:text-orange-400' :
-                              record.status === 'due' ? 'text-blue-600 dark:text-blue-400' :
+                              record.status === 'in_progress' ? 'text-red-600 dark:text-red-400' :
+                              record.status === 'due' ? 'text-orange-600 dark:text-orange-400' :
+                              record.status === 'critical' ? 'text-purple-600 dark:text-purple-400' :
                               'text-emerald-600 dark:text-emerald-400'
                             }`} />
                           </div>
@@ -407,28 +435,30 @@ const OwnerMaintenance: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                         {formatDate(record.last_service_date)}
-                        <span className="block text-xs text-slate-500 mt-0.5">{daysSince} days ago</span>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                         {formatDate(record.next_due_date)}
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          {daysRemaining > 0 ? `${daysRemaining} days left` : 'In progress'}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
-                        {record.status === 'critical' && (
+                        {record.status === 'in_progress' && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            Critical
-                          </span>
-                        )}
-                        {record.status === 'overdue' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            Urgent
+                            In Progress
                           </span>
                         )}
                         {record.status === 'due' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
                             <Calendar className="w-3.5 h-3.5" />
                             Due Soon
+                          </span>
+                        )}
+                        {record.status === 'critical' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Critical
                           </span>
                         )}
                         {record.status === 'healthy' && (
