@@ -17,6 +17,7 @@ const OwnerDashboard: React.FC = () => {
   const [rooms, setRooms] = useState<any[]>([]);
   const [dbSensors, setDbSensors] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
+  const [stakeholders, setStakeholders] = useState<any[]>([]);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleTimeString());
   const [latestCondition, setLatestCondition] = useState<any>(null);
   
@@ -96,6 +97,26 @@ const OwnerDashboard: React.FC = () => {
           .in('room_id', roomIds);
           
         setInventory(invData || []);
+        
+        // Fetch Stakeholders invested in this facility (via owner's company)
+        const { data: ownerProfile } = await supabase
+          .from('profiles')
+          .select('owner_company_id')
+          .eq('auth_user_id', user?.id)
+          .single();
+        
+        let stakeholdersList: any[] = [];
+        if (ownerProfile?.owner_company_id) {
+          const { data: stakeholderInvestments } = await supabase
+            .from('stakeholder_investments')
+            .select('stakeholder_id')
+            .eq('owner_company_id', ownerProfile.owner_company_id)
+            .eq('active', true);
+          
+          stakeholdersList = stakeholderInvestments?.map(s => s.stakeholder_id) || [];
+        }
+        
+        setStakeholders(stakeholdersList);
         
         // Fetch real chart data from database
         // 1. Revenue history - last 4 weeks from farmer_payments
@@ -246,8 +267,8 @@ const OwnerDashboard: React.FC = () => {
     ? new Set(inventory.filter((i) => i.batches?.farmer_id).map((i) => i.batches.farmer_id)).size
     : 0;
   
-  // Stakeholders count (for now same as farmers, can be expanded later for third-party stakeholders)
-  const totalStakeholders = uniqueFarmers;
+  // Stakeholders count from actual database query
+  const totalStakeholders = stakeholders.length;
 
   // Storage from real data
   const totalCapacity = rooms.length > 0 
