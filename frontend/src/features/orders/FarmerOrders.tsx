@@ -101,9 +101,14 @@ const FarmerOrders: React.FC = () => {
 
            const mappedSales = (salesData || []).map((s: any) => {
                const batchInfo = farmerBatches?.find((b: any) => b.id === s.batch_id);
-               const prodName = Array.isArray(batchInfo?.products) 
-                   ? batchInfo?.products[0]?.name 
-                   : (batchInfo?.products?.name || 'Produce');
+               let prodName = 'Produce';
+               if (batchInfo?.products) {
+                   if (Array.isArray(batchInfo.products)) {
+                       prodName = (batchInfo.products[0] as any)?.name || 'Produce';
+                   } else {
+                       prodName = (batchInfo.products as any)?.name || 'Produce';
+                   }
+               }
                const qtyKg = Number(s.quantity_kg) || 0;
                const price = Number(s.selling_price) || 0;
                return {
