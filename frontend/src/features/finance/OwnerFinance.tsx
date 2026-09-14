@@ -219,12 +219,12 @@ const OwnerFinance: React.FC = () => {
         totalExpenses: finalTotalExpenses,
         totalProfit: finalProfit,
         profitMargin,
-        farmerRevenue: farmerList,
+        farmerRevenue: farmerRevenueList,
         expenses: finalExpensesList,
         monthlyTrend: monthlyTrendData,
-        totalCrates: farmerList.reduce((sum, f) => sum + f.crates, 0),
-        totalFarmers: farmerList.length,
-        avgPricePerCrate: (totalRev / Math.max(1, farmerList.reduce((sum, f) => sum + f.crates, 0))).toFixed(2),
+        totalCrates: farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0),
+        totalFarmers: farmerRevenueList.length,
+        avgPricePerCrate: (totalRev / Math.max(1, farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0))).toFixed(2),
       });
     } catch (error) {
       console.error('Error loading finance data:', error);
