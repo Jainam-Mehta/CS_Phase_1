@@ -280,10 +280,6 @@ const OwnerFinance: React.FC = () => {
             <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
               {formatCurrency(financeData?.totalRevenue)}
             </p>
-            <div className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
-              <ArrowUpRight className="w-4 h-4" />
-              <span>12.5% from last month</span>
-            </div>
           </CardContent>
         </Card>
 
@@ -299,10 +295,6 @@ const OwnerFinance: React.FC = () => {
             <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
               {formatCurrency(financeData?.totalExpenses)}
             </p>
-            <div className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
-              <ArrowUpRight className="w-4 h-4" />
-              <span>5.3% from last month</span>
-            </div>
           </CardContent>
         </Card>
 

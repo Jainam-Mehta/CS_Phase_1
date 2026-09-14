@@ -241,13 +241,13 @@ const OwnerDashboard: React.FC = () => {
   const activeSensors = dbSensors.filter(isSensorActive).length;
   const inactiveSensors = totalSensors - activeSensors;
 
-  // Farmers AND Stakeholders count from real data
+  // Farmers count from real data
   const uniqueFarmers = inventory.length > 0 
     ? new Set(inventory.filter((i) => i.batches?.farmer_id).map((i) => i.batches.farmer_id)).size
     : 0;
   
-  // TODO: Add actual stakeholders count from database
-  const totalStakeholders = uniqueFarmers; // For now, stakeholders = farmers
+  // Stakeholders count (for now same as farmers, can be expanded later for third-party stakeholders)
+  const totalStakeholders = uniqueFarmers;
 
   // Storage from real data
   const totalCapacity = rooms.length > 0 
@@ -514,12 +514,12 @@ const OwnerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Rooms & Stakeholders */}
+        {/* Card 2: Farmers & Stakeholders */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
-          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Rooms & Stakeholders</h3>
+          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Farmers & Stakeholders</h3>
           <div className="mt-auto space-y-1">
-            <div className="text-3xl font-bold text-slate-900 dark:text-white">{rooms.length} <span className="text-sm font-medium text-slate-500">Rooms</span></div>
-            <div className="text-sm text-slate-600 dark:text-slate-400">{uniqueFarmers} Farmers · {totalStakeholders} Stakeholders</div>
+            <div className="text-3xl font-bold text-slate-900 dark:text-white">{uniqueFarmers} <span className="text-sm font-medium text-slate-500">Farmers</span></div>
+            <div className="text-sm text-slate-600 dark:text-slate-400">{totalStakeholders} Stakeholders</div>
           </div>
         </div>
 
