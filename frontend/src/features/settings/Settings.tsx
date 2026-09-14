@@ -106,7 +106,7 @@ const SettingsPage: React.FC = () => {
       // Get all facilities owned by this owner
       const { data: facilitiesData, error: facilityError } = await supabase
         .from('facilities')
-        .select('id, facility_name, location')
+        .select('id, facility_name, location, created_at')
         .eq('owner_id', profile.id)
         .order('facility_name');
       
@@ -125,6 +125,7 @@ const SettingsPage: React.FC = () => {
             .select('id')
             .eq('facility_id', facility.id);
           
+          // If no rooms, show facility anyway (empty farmers list)
           if (!rooms || rooms.length === 0) {
             return { ...facility, farmers: [] };
           }
