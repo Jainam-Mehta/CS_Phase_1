@@ -77,9 +77,15 @@ const FarmerOrders: React.FC = () => {
 
   const fetchOrders = async (pId: string) => {
        try {
-           // TODO: Fetch from actual orders table when implemented
-           // For now, showing placeholder data structure
-           setOrders([]);
+           // Fetch orders from database
+           const { data: ordersData, error } = await supabase
+               .from('orders')
+               .select('*')
+               .eq('farmer_id', pId)
+               .order('created_at', { ascending: false });
+           
+           if (error) throw error;
+           setOrders(ordersData || []);
        } catch (error) {
            console.error("Fetch orders error:", error);
        }
@@ -119,23 +125,28 @@ const FarmerOrders: React.FC = () => {
           const pricePerKg = priceMode === 'market' ? marketPrice : parseFloat(manualPrice);
           const totalAmount = quantityKg * pricePerKg;
           
-          // TODO: Insert into orders table when implemented
-          // For now, just log the order data
-          console.log('Order Data:', {
-              farmerId: profileId,
-              batchId: selectedBatchId,
-              batch_code: selectedBatch?.batch_code,
-              product_name: selectedBatch?.product_name,
-              quantity_crates: parseFloat(quantityCrates),
-              quantity_kg: quantityKg,
-              dispatch_date: dispatchDate,
-              buyer_name: buyerName,
-              price_mode: priceMode,
-              price_per_kg: pricePerKg,
-              total_amount: totalAmount,
-              remarks: orderRemarks,
-              created_at: new Date().toISOString()
-          });
+          // Insert into orders table
+          const { data, error } = await supabase
+              .from('orders')
+              .insert([{
+                  farmer_id: profileId,
+                  batch_id: selectedBatchId,
+                  batch_code: selectedBatch?.batch_code,
+                  product_name: selectedBatch?.product_name,
+                  quantity_crates: parseFloat(quantityCrates),
+                  quantity_kg: quantityKg,
+                  dispatch_date: dispatchDate,
+                  buyer_name: buyerName,
+                  price_mode: priceMode,
+                  price_per_kg: pricePerKg,
+                  total_amount: totalAmount,
+                  remarks: orderRemarks,
+                  status: 'Pending',
+                  created_at: new Date().toISOString()
+              }])
+              .select();
+          
+          if (error) throw error;
           
           // Reset form
           setIsModalOpen(false);
