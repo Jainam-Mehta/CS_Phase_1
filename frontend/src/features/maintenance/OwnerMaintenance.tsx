@@ -352,7 +352,7 @@ const OwnerMaintenance: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Due Soon</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{overdueItems.length}</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{dueItems.length}</p>
           </div>
         </div>
 
