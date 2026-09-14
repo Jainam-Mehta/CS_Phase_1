@@ -77,17 +77,37 @@ async def get_farmer_finance_summary(profile_id: str):
         expenses = 0.0
         energy_cost = 0.0
         if room_ids:
-            exp_resp = (
-                supabase.table("expenses")
-                .select("amount, category")
-                .in_("room_id", room_ids)
-                .execute()
-            )
-            for exp in (exp_resp.data or []):
-                amt = float(exp.get("amount") or 0)
-                expenses += amt
-                if exp.get("category") == "energy":
-                    energy_cost += amt
+            for rid in room_ids:
+                # Fetch all active allocations in room to compute farmer's volume share
+                alloc_resp = (
+                    supabase.table("batch_room_allocations")
+                    .select("quantity_kg, batches(farmer_id)")
+                    .eq("room_id", rid)
+                    .is_("removed_at", None)
+                    .execute()
+                )
+                allocations = alloc_resp.data or []
+                total_room_kg = sum(float(a.get("quantity_kg") or 0) for a in allocations)
+                farmer_room_kg = sum(
+                    float(a.get("quantity_kg") or 0)
+                    for a in allocations
+                    if (a.get("batches") or {}).get("farmer_id") == profile_id
+                )
+
+                # Ratio: farmer's share of room volume (defaults to 1.0 if sole user or no volume)
+                ratio = (farmer_room_kg / total_room_kg) if total_room_kg > 0 and farmer_room_kg > 0 else 1.0
+
+                exp_resp = (
+                    supabase.table("expenses")
+                    .select("amount, category")
+                    .eq("room_id", rid)
+                    .execute()
+                )
+                for exp in (exp_resp.data or []):
+                    amt = float(exp.get("amount") or 0) * ratio
+                    expenses += amt
+                    if exp.get("category") == "energy":
+                        energy_cost += amt
 
         profit = revenue - expenses
         profit_margin = (profit / revenue * 100) if revenue > 0 else 0.0

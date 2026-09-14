@@ -3,7 +3,7 @@ from typing import Optional
 
 from app.services.sensor_service import get_latest_sensor_reading, get_latest_condition
 from app.services.door_service import get_door_status
-from app.api import auth, sites, products, inventory, orders, finance, energy, alerts, market
+from app.api import auth, sites, products, inventory, orders, finance, energy, alerts, market, sensor, storage
 
 router = APIRouter()
 
@@ -17,6 +17,8 @@ router.include_router(finance.router, prefix="/finance", tags=["finance"])
 router.include_router(energy.router, prefix="/energy", tags=["energy"])
 router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 router.include_router(market.router, prefix="/market", tags=["market"])
+router.include_router(sensor.router, prefix="/sensors", tags=["sensors"])
+router.include_router(storage.router, prefix="/storage", tags=["storage"])
 
 # Legacy sensor endpoints (keep for MQTT compatibility)
 @router.get("/latest-reading")

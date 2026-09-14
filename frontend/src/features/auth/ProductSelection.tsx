@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import { Apple, Carrot, Grape, Milk, Check, AlertCircle, Sprout, Thermometer, Droplets, Clock, Package } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Product } from '../../lib/supabase';
+import { convertCratesToKg } from '../../utils/units';
 
 interface ProductCategory {
   name: string;
@@ -105,9 +106,9 @@ const ProductSelection: React.FC = () => {
       const details = productDetails[productId];
       if (!details || !details.quantity || details.quantity === '') return total;
       
-      // Each crate = 25 kg
+      // Convert crates to kg using centralized helper
       const qty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
-      return total + (qty * 25);
+      return total + convertCratesToKg(qty);
     }, 0);
   };
 
@@ -194,9 +195,9 @@ const ProductSelection: React.FC = () => {
         // Generate unique batch_code
         const batchCode = `BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
         
-        // Calculate quantity in kg (1 crate = 25 kg), handle string/number
+        // Calculate quantity in kg using centralized helper
         const crateQty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
-        const quantityKg = crateQty * 25;
+        const quantityKg = convertCratesToKg(crateQty);
         
         // Calculate expiry_date based on product shelf life
         const harvestDate = new Date();

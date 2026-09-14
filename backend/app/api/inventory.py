@@ -60,7 +60,7 @@ async def get_room_inventory(room_id: str):
                 )
             """)
             .eq("room_id", room_id)
-            .is_("removed_at", "null")
+            .is_("removed_at", None)
             .execute()
         )
 
@@ -103,7 +103,7 @@ async def get_farmer_inventory(profile_id: str):
                 )
             """)
             .eq("batches.farmer_id", profile_id)
-            .is_("removed_at", "null")
+            .is_("removed_at", None)
             .execute()
         )
 

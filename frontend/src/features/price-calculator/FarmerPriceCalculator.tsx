@@ -26,6 +26,8 @@ const FarmerPriceCalculator: React.FC = () => {
   // Use market prices hook (fetches from API/store with 24hr cache)
   const { getTrend, loading: pricesLoading, error: pricesError } = useMarketPrices(productNames);
 
+  const [storageCostPerKg, setStorageCostPerKg] = useState<number>(2.5);
+
   useEffect(() => {
      if (!user?.id) {
          setLoading(false);
@@ -37,6 +39,18 @@ const FarmerPriceCalculator: React.FC = () => {
          const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
          if (!profile) return;
          setProfileId(profile.id);
+
+         if (activeRoomId) {
+             const { data: roomData } = await supabase
+               .from('cold_storage_rooms')
+               .select('storage_rate_per_kg_month')
+               .eq('id', activeRoomId)
+               .maybeSingle();
+
+             if (roomData?.storage_rate_per_kg_month) {
+                 setStorageCostPerKg(Number(roomData.storage_rate_per_kg_month));
+             }
+         }
 
          // NEW SCHEMA: Query batch_room_allocations -> batches -> products
          let query = supabase
@@ -101,9 +115,7 @@ const FarmerPriceCalculator: React.FC = () => {
       return <div className="p-8"><div className="animate-pulse h-64 bg-slate-100 dark:bg-slate-800 rounded-xl"></div></div>;
   }
 
-  // Analytics Evaluator mappings
-  // TODO (Priority 2): Fetch from cold_storage_rooms.storage_rate_per_kg_month
-  const storageCostPerKg = 2.5; // ₹/kg/month - System default
+  // Storage cost dynamically evaluated from cold_storage_rooms table
   let totalCurrentValue = 0;
   let totalFutureValue = 0;
   let totalStorageCost = 0;

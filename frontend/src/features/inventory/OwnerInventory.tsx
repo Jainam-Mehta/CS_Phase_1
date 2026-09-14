@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
+import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
@@ -119,13 +120,9 @@ const OwnerInventory: React.FC = () => {
     }
   };
 
-  // Derived KPI Calculations
-  // Convert kg to crates (assuming 25kg per crate as standard)
-  const KG_PER_CRATE = 25;
-  
   const totalCrates = useMemo(() => {
     const totalKg = inventory.reduce((acc, curr) => acc + (Number(curr.quantity_kg) || Number(curr.remaining_quantity_kg) || Number(curr.initial_quantity_kg) || 0), 0);
-    return Math.floor(totalKg / KG_PER_CRATE);
+    return convertKgToCrates(totalKg);
   }, [inventory]);
 
   const activeBatches = inventory.length;

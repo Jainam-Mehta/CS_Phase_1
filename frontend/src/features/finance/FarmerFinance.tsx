@@ -24,6 +24,8 @@ const FarmerFinance: React.FC = () => {
   // Use market prices hook (fetches from API/store with 24hr cache)
   const { getTrend, loading: pricesLoading, error: pricesError } = useMarketPrices(productNames);
 
+  const [storageRate, setStorageRate] = useState<number>(2.5);
+
   useEffect(() => {
      if (!user?.id || !activeRoomId) {
          setBatches([]);
@@ -36,6 +38,17 @@ const FarmerFinance: React.FC = () => {
          const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
          if (!profile) return;
          setProfileId(profile.id);
+
+         // Fetch room storage rate dynamically
+         const { data: roomData } = await supabase
+           .from('cold_storage_rooms')
+           .select('storage_rate_per_kg_month')
+           .eq('id', activeRoomId)
+           .maybeSingle();
+         
+         if (roomData?.storage_rate_per_kg_month) {
+             setStorageRate(Number(roomData.storage_rate_per_kg_month));
+         }
 
          // NEW SCHEMA: Query batch_room_allocations -> batches -> products
          let query = supabase
@@ -115,10 +128,7 @@ const FarmerFinance: React.FC = () => {
       predictedGrossValue += (trend.predicted * kg);
   });
 
-  // Storage rate calculation
-  // TODO (Priority 2): Fetch from cold_storage_rooms.storage_rate_per_kg_month
-  // For now using system default, will be replaced with DB value
-  const storageRate = 2.5; // ₹/kg/month - System default 
+  // Storage rate dynamically calculated from cold_storage_rooms table
   const storageCharges = totalKg * storageRate;
   const potentialProfit = predictedGrossValue - storageCharges;
 

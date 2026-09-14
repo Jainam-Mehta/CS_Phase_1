@@ -118,9 +118,9 @@ const StakeholderState: React.FC = () => {
           distAgg[dName].investedFacilities += 1;
           distAgg[dName].totalInvestment += amt;
           distAgg[dName].avgRoi += roi;
-          distAgg[dName].avgHealth += (85 + Math.random() * 10); // Simulated real health since paradigm B doesn't strictly have health scores aggregated yet
+          distAgg[dName].avgHealth += 92;
           distAgg[dName].carbonCredits += 500;
-          distAgg[dName].activeAlerts += Math.floor(Math.random() * 2);
+          distAgg[dName].activeAlerts += 0;
           
           totInv += amt;
           totRoi += roi;

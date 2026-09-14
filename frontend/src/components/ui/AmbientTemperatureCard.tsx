@@ -10,18 +10,11 @@ const AmbientTemperatureCard: React.FC<AmbientTemperatureCardProps> = ({ value }
   const [ambientTemp, setAmbientTemp] = useState(value || 0);
 
   useEffect(() => {
-    const updateAmbientTemp = () => {
-      // Calculate ambient temperature - random between 24-34°C
-      const randomTemp = 24 + Math.random() * 10;
-      setAmbientTemp(randomTemp);
-    };
-
-    updateAmbientTemp();
-    
-    // Update every minute
-    const interval = setInterval(updateAmbientTemp, 60000);
-    
-    return () => clearInterval(interval);
+    if (value !== undefined) {
+      setAmbientTemp(value);
+    } else {
+      setAmbientTemp(28.0);
+    }
   }, [value]);
 
   return (

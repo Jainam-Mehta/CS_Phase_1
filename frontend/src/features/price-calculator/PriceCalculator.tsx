@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Calculator, TrendingUp, AlertCircle, CheckCircle, Box, Package } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getProductConfig, PRODUCTS } from '../../utils/productConfig';
+import { KG_PER_CRATE } from '../../utils/units';
 
 const PriceCalculator: React.FC = () => {
   const { user, selectedSite } = useAuthStore();
@@ -64,8 +65,8 @@ const PriceCalculator: React.FC = () => {
     const trend = priceTrends[selectedProduct.name] || 0;
     const predictedPrice = currentPrice * (1 + trend);
 
-    // Storage cost calculations
-    const crateChargePerKg = 1.5 / 25; // ₹1.5 per 25kg = ₹0.06 per kg
+    // Storage cost calculations (using standardized crate weight)
+    const crateChargePerKg = 1.5 / KG_PER_CRATE; // ₹1.5 per crate = ₹0.06 per kg
     const totalCrateCharge = quantity * crateChargePerKg;
     
     // Storage expense (based on product-specific daily cost)
@@ -239,7 +240,7 @@ const PriceCalculator: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600 dark:text-gray-400">Crate Charge</span>
                     <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      ₹{(quantity * 1.5 / 25).toFixed(2)}
+                      ₹{(quantity * 1.5 / KG_PER_CRATE).toFixed(2)}
                     </span>
                   </div>
 

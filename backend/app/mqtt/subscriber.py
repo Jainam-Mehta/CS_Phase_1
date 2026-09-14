@@ -20,6 +20,7 @@ import paho.mqtt.client as mqtt
 
 from app.config import MQTT_BROKER, MQTT_PORT
 from app.services.sensor_service import save_sensor_reading, save_cold_storage_condition
+from app.services.door_service import process_door_state_change
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,8 @@ def on_message(client, userdata, msg):
                 condition["discharge_pressure"] = float(value)
             elif "door" in st:
                 condition["door_status"] = str(value)
+                door_val = 1 if str(value).lower() in ("1", "open", "true", "opened") else 0
+                process_door_state_change(door_id=f"door_{room_id}", new_state=door_val, room_id=room_id)
 
             if len(condition) > 1:
                 save_cold_storage_condition(condition)
@@ -121,6 +124,11 @@ def on_message(client, userdata, msg):
             for src, dst in mapping.items():
                 if src in payload:
                     condition[dst] = payload[src]
+
+            if "door_status" in payload:
+                ds = str(payload["door_status"]).lower()
+                door_val = 1 if ds in ("1", "open", "true", "opened") else 0
+                process_door_state_change(door_id=f"door_{room_id}", new_state=door_val, room_id=room_id)
 
             # Average dual temperature sensors if present
             if "temperature_sensor1" in payload and "temperature_sensor2" in payload:

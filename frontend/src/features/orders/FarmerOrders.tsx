@@ -5,6 +5,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { ShoppingCart, Truck, Plus, X, Loader2, Calendar, Package, IndianRupee, Hash } from 'lucide-react';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { useMarketPrices } from '../../hooks/useMarketPrices';
+import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 
 const FarmerOrders: React.FC = () => {
   const { user } = useAuthStore();
@@ -77,17 +78,53 @@ const FarmerOrders: React.FC = () => {
 
   const fetchOrders = async (pId: string) => {
        try {
-           // Fetch orders from database
-           const { data: ordersData, error } = await supabase
-               .from('orders')
+           // Fetch farmer's batch IDs first
+           const { data: farmerBatches } = await supabase
+               .from('batches')
+               .select('id, batch_code, remaining_quantity_kg, products(name)')
+               .eq('farmer_id', pId);
+
+           const batchIds = farmerBatches?.map((b: any) => b.id) || [];
+           if (batchIds.length === 0) {
+               setOrders([]);
+               return;
+           }
+
+           // Fetch sales records from database
+           const { data: salesData, error } = await supabase
+               .from('sales')
                .select('*')
-               .eq('farmer_id', pId)
-               .order('created_at', { ascending: false });
-           
+               .in('batch_id', batchIds)
+               .order('sold_at', { ascending: false });
+
            if (error) throw error;
-           setOrders(ordersData || []);
+
+           const mappedSales = (salesData || []).map((s: any) => {
+               const batchInfo = farmerBatches?.find((b: any) => b.id === s.batch_id);
+               const prodName = Array.isArray(batchInfo?.products) 
+                   ? batchInfo?.products[0]?.name 
+                   : batchInfo?.products?.name || 'Produce';
+               const qtyKg = Number(s.quantity_kg) || 0;
+               const price = Number(s.selling_price) || 0;
+               return {
+                   id: s.id,
+                   batch_id: s.batch_id,
+                   batch_code: batchInfo?.batch_code || 'Batch',
+                   product_name: prodName,
+                   quantity_kg: qtyKg,
+                   quantity_crates: convertKgToCrates(qtyKg),
+                   dispatch_date: s.sold_at ? new Date(s.sold_at).toISOString().split('T')[0] : '',
+                   buyer_name: s.buyer || 'N/A',
+                   price_per_kg: price,
+                   total_amount: Math.round(qtyKg * price * 100) / 100,
+                   status: 'Completed',
+                   created_at: s.sold_at || new Date().toISOString()
+               };
+           });
+
+           setOrders(mappedSales);
        } catch (error) {
-           console.error("Fetch orders error:", error);
+           console.error("Fetch sales/orders error:", error);
        }
   };
 
@@ -121,34 +158,42 @@ const FarmerOrders: React.FC = () => {
       
       setSubmitting(true);
       try {
-          const quantityKg = parseFloat(quantityCrates) * 25; // Convert crates to kg
+          const quantityKg = convertCratesToKg(parseFloat(quantityCrates));
           const pricePerKg = priceMode === 'market' ? marketPrice : parseFloat(manualPrice);
-          const totalAmount = quantityKg * pricePerKg;
+
+          // Check if quantity exceeds remaining batch quantity
+          if (selectedBatch && selectedBatch.remaining_quantity_kg !== undefined) {
+              if (quantityKg > selectedBatch.remaining_quantity_kg) {
+                  setSubmitError(`Requested ${quantityKg}kg (${quantityCrates} crates) exceeds available batch remaining quantity (${selectedBatch.remaining_quantity_kg}kg).`);
+                  setSubmitting(false);
+                  return;
+              }
+          }
           
-          // Insert into orders table
+          // Insert into real sales table
           const { data, error } = await supabase
-              .from('orders')
+              .from('sales')
               .insert([{
-                  farmer_id: profileId,
                   batch_id: selectedBatchId,
-                  batch_code: selectedBatch?.batch_code,
-                  product_name: selectedBatch?.product_name,
-                  quantity_crates: parseFloat(quantityCrates),
                   quantity_kg: quantityKg,
-                  dispatch_date: dispatchDate,
-                  buyer_name: buyerName,
-                  price_mode: priceMode,
-                  price_per_kg: pricePerKg,
-                  total_amount: totalAmount,
-                  remarks: orderRemarks,
-                  status: 'Pending',
-                  created_at: new Date().toISOString()
+                  selling_price: pricePerKg,
+                  buyer: buyerName,
+                  sold_at: new Date(dispatchDate).toISOString()
               }])
               .select();
           
           if (error) throw error;
+
+          // Update remaining quantity on batch
+          if (selectedBatch && selectedBatch.remaining_quantity_kg !== undefined) {
+              const newRemaining = Math.max(0, selectedBatch.remaining_quantity_kg - quantityKg);
+              await supabase
+                  .from('batches')
+                  .update({ remaining_quantity_kg: newRemaining })
+                  .eq('id', selectedBatchId);
+          }
           
-          // Reset form
+          // Reset form and reload
           setIsModalOpen(false);
           setSelectedBatchId('');
           setQuantityCrates('');
@@ -157,6 +202,11 @@ const FarmerOrders: React.FC = () => {
           setOrderRemarks('');
           setDispatchDate(new Date().toISOString().split('T')[0]);
           setPriceMode('market');
+
+          if (profileId) {
+              await fetchBatches(profileId);
+              await fetchOrders(profileId);
+          }
           
           if (profileId) {
               await fetchBatches(profileId);
@@ -176,7 +226,7 @@ const FarmerOrders: React.FC = () => {
 
   // Calculate total selling price based on mode
   const calculatedTotal = selectedBatch && quantityCrates 
-    ? (parseFloat(quantityCrates) * 25 * (priceMode === 'market' ? marketPrice : parseFloat(manualPrice || '0')))
+    ? (convertCratesToKg(parseFloat(quantityCrates)) * (priceMode === 'market' ? marketPrice : parseFloat(manualPrice || '0')))
     : 0;
 
   return (

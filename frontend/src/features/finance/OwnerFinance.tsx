@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, Users, IndianRupee, Zap, Wrench, Package, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import { convertKgToCrates } from '../../utils/units';
 
 // NO DEMO DATA - All data from database
 
@@ -62,8 +63,10 @@ const OwnerFinance: React.FC = () => {
       const { data: allocData } = await supabase
         .from('batch_room_allocations')
         .select(`
+          room_id,
           quantity_kg,
           batches!inner(
+            id,
             farmer_id,
             remaining_quantity_kg,
             profiles(first_name, last_name)
@@ -89,7 +92,7 @@ const OwnerFinance: React.FC = () => {
 
       const totalExp = energyCost + maintenanceCost + partsCost + otherCost;
 
-      // Group farmer revenue from allocations/sales
+      // Group farmer revenue from allocations using actual room storage rates
       const farmerMap = new Map<string, { farmer: string; crates: number; total: number; location: string }>();
 
       (allocData || []).forEach((alloc: any) => {
@@ -98,9 +101,12 @@ const OwnerFinance: React.FC = () => {
         const farmerId = b.farmer_id;
         const name = b.profiles ? `${b.profiles.first_name || ''} ${b.profiles.last_name || ''}`.trim() : 'Farmer';
         const qtyKg = Number(alloc.quantity_kg) || 0;
-        const crates = Math.ceil(qtyKg / 25);
-        const ratePerCrate = 160;
-        const rev = crates * ratePerCrate;
+        const crates = convertKgToCrates(qtyKg);
+        
+        // Dynamic room storage rate per kg/month (default to ₹2.5/kg if not set)
+        const roomObj = resolvedRooms.find(r => r.id === alloc.room_id);
+        const ratePerKgMonth = Number(roomObj?.storage_rate_per_kg_month) || 2.5;
+        const rev = qtyKg * ratePerKgMonth;
 
         if (farmerMap.has(farmerId)) {
           const curr = farmerMap.get(farmerId)!;
@@ -116,11 +122,25 @@ const OwnerFinance: React.FC = () => {
         }
       });
 
+      // 4. Fetch actual realized sales revenue for batches in these rooms
+      const batchIds = (allocData || []).map((a: any) => a.batches?.id).filter(Boolean);
+      let realizedSalesRevenue = 0;
+      if (batchIds.length > 0) {
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select('quantity_kg, selling_price')
+          .in('batch_id', batchIds);
+        
+        (salesData || []).forEach((s: any) => {
+          realizedSalesRevenue += (Number(s.quantity_kg) || 0) * (Number(s.selling_price) || 0);
+        });
+      }
+
       const farmerRevenueList = Array.from(farmerMap.values());
 
-      // Real data only - NO DEMO FALLBACK
-      const totalRev = farmerRevenueList.reduce((sum, f) => sum + f.total, 0);
-      const farmerList = farmerRevenueList;
+      // Storage fees + realized sales revenue
+      const storageFeeRev = farmerRevenueList.reduce((sum, f) => sum + f.total, 0);
+      const totalRev = storageFeeRev + realizedSalesRevenue;
       
       const finalExpensesList = [
         { category: 'Energy Costs', amount: energyCost, percentage: totalExp > 0 ? Number(((energyCost / totalExp) * 100).toFixed(1)) : 0, color: '#f59e0b', icon: Zap },
@@ -131,7 +151,7 @@ const OwnerFinance: React.FC = () => {
 
       const finalTotalExpenses = totalExp;
       const finalProfit = totalRev - finalTotalExpenses;
-      const profitMargin = totalRev > 0 ? ((finalProfit / totalRev) * 100).toFixed(1) : '0.0';
+      const profitMargin = totalRev > 0 ? ((finalProfit / totalRev) * 100).toFixed(1) : (finalTotalExpenses > 0 ? '-100.0' : '0.0');
       
       // Fetch monthly trend from farmer_payments - last 6 months
       const sixMonthsAgo = new Date();

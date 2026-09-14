@@ -173,7 +173,7 @@ const StakeholderMap: React.FC = () => {
         sums[sName].avgRoi += Number(inv.roi_percentage_estimate) || 0;
         // In real app, calculate real alerts & credits. Dummy metric scaling based on facility count
         sums[sName].carbonCredits += 1500;
-        sums[sName].activeAlerts += Math.floor(Math.random() * 2); 
+        sums[sName].activeAlerts += 0; 
       }
     });
 

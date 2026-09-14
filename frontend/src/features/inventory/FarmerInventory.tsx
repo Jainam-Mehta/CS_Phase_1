@@ -4,6 +4,7 @@ import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
+import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 
 const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
@@ -150,8 +151,8 @@ const FarmerInventory: React.FC = () => {
 
       setSubmitting(true);
       try {
-         // Convert crates to kg (1 crate = 25 kg)
-         const quantityInKg = parseFloat(qty) * 25;
+         // Convert crates to kg using centralized helper
+         const quantityInKg = convertCratesToKg(parseFloat(qty));
          
          // Get product_id from product name
          const { data: productData } = await supabase
@@ -270,7 +271,7 @@ const FarmerInventory: React.FC = () => {
                       <tbody>
                          {batches.map((b, idx) => {
                             // Convert kg to crates (1 crate = 25kg)
-                            const crates = Math.round(b.initial_quantity_kg / 25);
+                            const crates = convertKgToCrates(b.initial_quantity_kg);
                             const storedDate = new Date(b.assigned_at || b.created_at);
                             const expiryDate = new Date(b.expiry_date);
                             
@@ -400,3 +401,4 @@ const FarmerInventory: React.FC = () => {
 };
 
 export default FarmerInventory;
+

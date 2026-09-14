@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { TrendingUp, ArrowUpRight, ArrowDownRight, PackageSearch, LayoutDashboard, IndianRupee, Wallet, Receipt, CheckCircle2 } from 'lucide-react';
 import { FEATURE_FLAGS } from '../../config/features.config';
+import { convertKgToCrates } from '../../utils/units';
 
 // REMOVED: Hardcoded MARKET_TRENDS_DB - now using useMarketPrices hook with live/simulated data
 
@@ -102,7 +103,7 @@ const FarmerMarketIntelligence: React.FC = () => {
 
   batches.forEach(b => {
       const kg = b.initial_quantity_kg || 0;
-      const crates = kg / 25; // Convert kg to crates
+      const crates = convertKgToCrates(kg); // Convert kg to crates using centralized helper
       totalCrates += crates;
   });
 

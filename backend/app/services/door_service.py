@@ -1,26 +1,21 @@
-"""
-Door Service
-Handles door sensor tracking, event logging, and threshold monitoring
-"""
-
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 from app.database.supabase import supabase, get_previous_door_state
 from app.config import DOOR_THRESHOLD_MINUTES
 
+logger = logging.getLogger(__name__)
 
-def process_door_state_change(door_id: str, new_state: int) -> Optional[Dict]:
+
+def process_door_state_change(door_id: str, new_state: int, room_id: Optional[str] = None) -> Optional[Dict]:
     """
     Process door state changes and create events when doors open/close.
     
     Args:
-        door_id: ID of the door (door_sensor_1 or door_sensor_2)
+        door_id: ID of the door (door_sensor_1 or door_sensor_2 or room door ID)
         new_state: New door state (0 = Closed, 1 = Open)
-    
-    Returns:
-        Created door event dict if state changed, None otherwise
+        room_id: Optional room UUID
     """
-    # Get previous state from database
     previous_state = get_previous_door_state(door_id)
     
     # Only create event when state actually changes
@@ -29,75 +24,80 @@ def process_door_state_change(door_id: str, new_state: int) -> Optional[Dict]:
     
     # Door opened (0 -> 1)
     if new_state == 1:
-        return create_door_open_event(door_id)
+        return create_door_open_event(door_id, room_id)
     
     # Door closed (1 -> 0)
-    if new_state == 0 and previous_state == 1:
+    if new_state == 0:
         return close_door_open_event(door_id)
     
     return None
 
 
-def create_door_open_event(door_id: str) -> Dict:
+def create_door_open_event(door_id: str, room_id: Optional[str] = None) -> Dict:
     """
-    Create a new door open event.
-    
-    Args:
-        door_id: ID of the door
-    
-    Returns:
-        Created door event dict
+    Create a new door open event supporting both schema column variants.
     """
+    now_iso = datetime.now(timezone.utc).isoformat()
     event_data = {
         "door_id": door_id,
-        "opened_at": datetime.utcnow().isoformat(),
+        "room_id": room_id,
+        "event_type": "open",
+        "occurred_at": now_iso,
+        "opened_at": now_iso,
         "closed_at": None,
         "duration_seconds": None,
         "duration_minutes": None,
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": now_iso
     }
     
-    response = supabase.table("door_events").insert(event_data).execute()
-    
-    if response.data:
-        return response.data[0]
+    try:
+        response = supabase.table("door_events").insert(event_data).execute()
+        if response.data:
+            return response.data[0]
+    except Exception as e:
+        logger.error("create_door_open_event error: %s", e)
     return event_data
 
 
 def close_door_open_event(door_id: str) -> Optional[Dict]:
     """
     Close the most recent open door event by setting closed_at and duration.
-    
-    Args:
-        door_id: ID of the door
-    
-    Returns:
-        Updated door event dict if found, None otherwise
     """
-    # Find the most recent open event for this door
-    response = (
-        supabase
-        .table("door_events")
-        .select("*")
-        .eq("door_id", door_id)
-        .is_("closed_at", "null")
-        .order("opened_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    
-    if not response.data:
+    try:
+        # Find the most recent open event for this door
+        response = (
+            supabase
+            .table("door_events")
+            .select("*")
+            .eq("door_id", door_id)
+            .is_("closed_at", None)
+            .order("opened_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if not response.data:
+            return None
+        
+        event = response.data[0]
+        open_time_str = event.get("opened_at") or event.get("occurred_at")
+        opened_at = datetime.fromisoformat(open_time_str.replace("Z", "+00:00")) if open_time_str else datetime.now(timezone.utc)
+        closed_at = datetime.now(timezone.utc)
+        
+        duration_seconds = (closed_at - opened_at).total_seconds()
+        duration_minutes = duration_seconds / 60
+        
+        update_data = {
+            "closed_at": closed_at.isoformat(),
+            "duration_seconds": round(duration_seconds, 2),
+            "duration_minutes": round(duration_minutes, 2)
+        }
+        
+        resp = supabase.table("door_events").update(update_data).eq("id", event["id"]).execute()
+        return resp.data[0] if resp.data else None
+    except Exception as e:
+        logger.error("close_door_open_event error: %s", e)
         return None
-    
-    event = response.data[0]
-    opened_at = datetime.fromisoformat(event["opened_at"])
-    closed_at = datetime.utcnow()
-    
-    duration_seconds = (closed_at - opened_at).total_seconds()
-    duration_minutes = duration_seconds / 60
-    
-    update_data = {
-        "closed_at": closed_at.isoformat(),
         "duration_seconds": duration_seconds,
         "duration_minutes": duration_minutes
     }
