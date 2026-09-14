@@ -74,7 +74,7 @@ interface MaintenanceRecord {
   maintenance_type: string;
   last_service_date: string;
   next_due_date: string;
-  status: 'healthy' | 'due' | 'overdue' | 'critical';
+  status: 'healthy' | 'due' | 'in_progress' | 'critical';
   notes?: string;
   created_at: string;
   updated_at: string;
