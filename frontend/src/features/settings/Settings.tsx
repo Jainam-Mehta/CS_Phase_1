@@ -100,14 +100,12 @@ const SettingsPage: React.FC = () => {
     if (!user?.id) return;
     try {
       setLoadingFacilities(true);
-      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
-      if (!profile) return;
       
-      // Get all facilities owned by this owner
+      // Get all facilities owned by this owner using auth_user_id directly
       const { data: facilitiesData, error: facilityError } = await supabase
         .from('facilities')
         .select('id, facility_name, location, created_at')
-        .eq('owner_id', profile.id)
+        .eq('owner_id', user.id)
         .order('facility_name');
       
       if (facilityError) throw facilityError;

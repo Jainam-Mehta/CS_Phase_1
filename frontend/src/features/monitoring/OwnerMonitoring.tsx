@@ -305,8 +305,9 @@ const OwnerMonitoring: React.FC = () => {
 
   const isSensorActive = (s: any) => {
     const st = s.status?.toLowerCase();
-    // A sensor is active if database status is 'online'
-    return (st === 'online');
+    // A sensor is ONLY active if status is online/active AND it has reported at least one reading
+    const hasPassedReading = s.last_reading_value != null || (s.last_seen != null && s.last_seen !== '');
+    return (st === 'active' || st === 'online') && hasPassedReading;
   };
 
   const activeSensors = dbSensors.filter(isSensorActive).length;

@@ -235,9 +235,19 @@ const OwnerMaintenance: React.FC = () => {
 
       const scheduledDate = new Date(scheduleForm.scheduled_date);
       const nextDueDate = new Date(scheduledDate);
-      nextDueDate.setDate(nextDueDate.getDate() + maintenanceItem.urgentThreshold);
+      
+      // Calculate next due date based on frequency, NOT urgentThreshold
+      if (maintenanceItem.frequency === 'Monthly') {
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      } else if (maintenanceItem.frequency === 'Every 3 Months') {
+        nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+      } else if (maintenanceItem.frequency === 'Every 6 Months') {
+        nextDueDate.setMonth(nextDueDate.getMonth() + 6);
+      } else if (maintenanceItem.frequency === 'Yearly') {
+        nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+      }
 
-      // 1. Insert into maintenance_logs (history)
+      // 1. Insert into maintenance_logs (history) - status should be 'completed' only if actually done
       const { error: logError } = await supabase
         .from('facility_maintenance_logs')
         .insert({
@@ -246,13 +256,13 @@ const OwnerMaintenance: React.FC = () => {
           service_date: scheduledDate.toISOString(),
           performed_by: scheduleForm.performed_by,
           notes: scheduleForm.notes,
-          status: 'completed',
+          status: 'completed', // Maintenance is marked as completed when logged
           next_due_date: nextDueDate.toISOString()
         });
 
       if (logError) throw logError;
 
-      // 2. Upsert into facility_maintenance (current status)
+      // 2. Upsert into facility_maintenance (current status) - mark as healthy after completion
       const { error: statusError } = await supabase
         .from('facility_maintenance')
         .upsert({
