@@ -110,41 +110,72 @@ const OwnerMaintenance: React.FC = () => {
     try {
       setLoading(true);
       
-      // For now, using demo data since we don't have the maintenance table yet
-      // TODO: Replace with actual database query once maintenance table is created
-      const demoRecords: MaintenanceRecord[] = FACILITY_MAINTENANCE_ITEMS.map(item => {
-        // Simulate last service dates
-        const lastServiceDate = new Date();
-        lastServiceDate.setDate(lastServiceDate.getDate() - Math.floor(Math.random() * 100));
-        
-        const nextDueDate = new Date(lastServiceDate);
-        nextDueDate.setDate(nextDueDate.getDate() + item.urgentThreshold);
-        
-        const daysSinceService = Math.floor((Date.now() - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24));
-        
-        let status: 'healthy' | 'due' | 'overdue' | 'critical' = 'healthy';
-        if (daysSinceService >= item.criticalThreshold) {
-          status = 'critical';
-        } else if (daysSinceService >= item.urgentThreshold) {
-          status = 'overdue';
-        } else if (daysSinceService >= item.urgentThreshold - 15) {
-          status = 'due';
-        }
-        
-        return {
-          id: item.id,
-          facility_id: selectedFacilityId,
-          maintenance_type: item.id,
-          last_service_date: lastServiceDate.toISOString(),
-          next_due_date: nextDueDate.toISOString(),
-          status,
-          notes: '',
-          created_at: lastServiceDate.toISOString(),
-          updated_at: lastServiceDate.toISOString(),
-        };
-      });
+      // Get facility creation date
+      const { data: facilityData } = await supabase
+        .from('facilities')
+        .select('created_at')
+        .eq('id', selectedFacilityId)
+        .single();
       
-      setMaintenanceRecords(demoRecords);
+      const facilityCreatedDate = facilityData?.created_at ? new Date(facilityData.created_at) : new Date();
+      
+      // Try to fetch from maintenance table, if not found, initialize with defaults
+      const { data: existingRecords } = await supabase
+        .from('facility_maintenance')
+        .select('*')
+        .eq('facility_id', selectedFacilityId);
+      
+      if (existingRecords && existingRecords.length > 0) {
+        // Use existing records
+        setMaintenanceRecords(existingRecords);
+      } else {
+        // Initialize new maintenance records based on facility creation date
+        const demoRecords: MaintenanceRecord[] = FACILITY_MAINTENANCE_ITEMS.map(item => {
+          const lastServiceDate = facilityCreatedDate; // Use facility creation date as last service
+          const nextDueDate = new Date(lastServiceDate);
+          
+          // Calculate next due date based on frequency
+          if (item.frequency === 'Monthly') {
+            nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          } else if (item.frequency === 'Every 3 Months') {
+            nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+          } else if (item.frequency === 'Every 6 Months') {
+            nextDueDate.setMonth(nextDueDate.getMonth() + 6);
+          } else if (item.frequency === 'Yearly') {
+            nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+          }
+          
+          const daysSinceService = Math.floor((Date.now() - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          let status: 'healthy' | 'due' | 'overdue' | 'critical' = 'healthy';
+          if (daysSinceService >= item.criticalThreshold) {
+            status = 'critical';
+          } else if (daysSinceService >= item.urgentThreshold) {
+            status = 'overdue';
+          } else if (daysSinceService >= item.urgentThreshold - 15) {
+            status = 'due';
+          }
+          
+          return {
+            id: item.id,
+            facility_id: selectedFacilityId,
+            maintenance_type: item.id,
+            last_service_date: lastServiceDate.toISOString(),
+            next_due_date: nextDueDate.toISOString(),
+            status,
+            notes: `Initial maintenance schedule for ${item.name}`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+        });
+        
+        // Save to database
+        await supabase
+          .from('facility_maintenance')
+          .insert(demoRecords);
+        
+        setMaintenanceRecords(demoRecords);
+      }
     } catch (error) {
       console.error('Error loading maintenance data:', error);
     } finally {
