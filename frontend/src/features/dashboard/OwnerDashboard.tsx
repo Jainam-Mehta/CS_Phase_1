@@ -147,14 +147,14 @@ const OwnerDashboard: React.FC = () => {
         
         setRevenueHistory(weeklyRevenue);
         
-        // 2. Farmer activity - last 7 days (batch additions)
+        // 2. Farmer activity - last 7 days (batch additions via this facility's rooms)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
         const { data: batchesData } = await supabase
-          .from('batches')
+          .from('batch_room_allocations')
           .select('created_at')
-          .eq('facility_id', selectedFacilityId)
+          .in('room_id', roomIds)
           .gte('created_at', sevenDaysAgo.toISOString());
           
         // Group by day

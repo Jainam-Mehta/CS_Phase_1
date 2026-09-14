@@ -166,7 +166,7 @@ const OwnerInventory: React.FC = () => {
         const { data: facilitiesData } = await supabase
           .from('facilities')
           .select('capacity_kg, current_utilization_kg')
-          .eq('owner_profile_id', profile.id);
+          .eq('owner_id', profile.id);
 
         if (facilitiesData) {
           const total = facilitiesData.reduce((sum, f) => sum + (Number(f.capacity_kg) || 0), 0);
