@@ -37,7 +37,7 @@ const OwnerInventory: React.FC = () => {
       const { data: facilitiesData } = await supabase
         .from('facilities')
         .select('id, facility_name, capacity_kg, current_utilization_kg')
-        .eq('owner_profile_id', profile.id);
+        .eq('owner_id', profile.id);
 
       if (!facilitiesData || facilitiesData.length === 0) {
         setInventory([]);
