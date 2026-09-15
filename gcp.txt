@@ -1,0 +1,22 @@
+# 1. Start the VM
+gcloud compute instances start coldsense-production-vm --zone=asia-south1-c
+
+# 2. Wait ~1-2 minutes for VM to boot
+
+# 3. SSH into the VM
+gcloud compute ssh coldsense-production-vm --zone=asia-south1-c
+
+# 4. On the VM, pull latest code from GitHub
+cd /home/jainammehta250
+git clone https://github.com/YOUR_USERNAME/CS_Project.git  # Or git pull if already exists
+
+# 5. Go to infrastructure folder
+cd CS_Project/infrastructure
+
+# 6. Pull latest Docker images and start services
+docker compose pull
+docker compose up -d --force-recreate
+
+# 7. Check logs to verify everything started
+docker logs coldsense-mqtt --tail=20
+docker logs coldsense-backend --tail=20
