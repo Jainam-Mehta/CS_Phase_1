@@ -115,6 +115,46 @@ function FarmerDashboardCore() {
     
     return () => clearInterval(interval);
   }, [activeRoomId]);
+
+  // DEMO DATA: Roy's demo circular temperature/humidity values (15 values)
+  const DEMO_ROY_EMAIL = 'Roy@coldsense.in';
+  const DEMO_TEMP_HUMIDITY_VALUES = [
+    { temp: 3.2, hum: 87 },
+    { temp: 3.1, hum: 88 },
+    { temp: 3.3, hum: 86 },
+    { temp: 3.0, hum: 89 },
+    { temp: 3.2, hum: 87 },
+    { temp: 3.4, hum: 85 },
+    { temp: 3.1, hum: 88 },
+    { temp: 3.3, hum: 86 },
+    { temp: 3.2, hum: 87 },
+    { temp: 3.0, hum: 89 },
+    { temp: 3.1, hum: 88 },
+    { temp: 3.3, hum: 86 },
+    { temp: 3.2, hum: 87 },
+    { temp: 3.4, hum: 85 },
+    { temp: 3.1, hum: 88 }
+  ];
+
+  let demoValueIndex = 0;
+  
+  // Update demo data every minute in circular fashion
+  useEffect(() => {
+    if (user?.email !== DEMO_ROY_EMAIL) return;
+    
+    const interval = setInterval(() => {
+      demoValueIndex = (demoValueIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length;
+      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[demoValueIndex];
+      
+      setLiveConditions({
+        temp: currentValue.temp,
+        hum: currentValue.hum,
+        date: new Date().toISOString()
+      });
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(interval);
+  }, [user?.email]);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
   // Update timestamp every 5 minutes
@@ -209,11 +249,38 @@ function FarmerDashboardCore() {
   useEffect(() => {
     if (!loading && !liveConditions) {
       setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
-      setDoorStats({ status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' });
+      
+      // For Roy (demo): Show door opened 1 time
+      // For others: Show 0 times
+      if (user?.email === DEMO_ROY_EMAIL) {
+        setDoorStats({ status: 'Closed', count: 1, duration: 0, lastOpenTime: 'Today' });
+        setAlerts([
+          {
+            id: 'demo-1',
+            created_at: new Date().toISOString(),
+            title: '7 kg apples delivered to Apple Studios',
+            message: 'Order fulfillment completed successfully',
+            type: 'order',
+            is_acknowledged: true
+          },
+          {
+            id: 'demo-2',
+            created_at: new Date(Date.now() - 24*60*60*1000).toISOString(),
+            title: 'Temperature increased out of range',
+            message: 'Temperature exceeded max range (6°C for apples) for 24 minutes',
+            type: 'temperature',
+            is_acknowledged: true
+          }
+        ]);
+      } else {
+        setDoorStats({ status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' });
+        setAlerts([]);
+      }
+      
       setEnergyData([]);
       setTemperatureHistory([]);
     }
-  }, [loading, liveConditions]);
+  }, [loading, liveConditions, user?.email]);
 
   useEffect(() => {
      if (!activeRoomId || !profileId) return;
