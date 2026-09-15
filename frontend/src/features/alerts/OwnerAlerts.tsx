@@ -3,6 +3,7 @@ import { Bell, ShieldCheck, AlertCircle, Clock, CheckCircle, User, Wrench, Check
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { DEMO_ENABLED, DEMO_OWNER_ALERTS } from '../../utils/demoData';
 
 interface Alert {
   id: string;
@@ -31,6 +32,24 @@ const OwnerAlerts: React.FC = () => {
   const loadAlerts = async () => {
     try {
       setLoading(true);
+
+      // DEMO MODE
+      if (DEMO_ENABLED) {
+        const demoAlerts = DEMO_OWNER_ALERTS.map(al => ({
+          id: al.id,
+          room_id: 'demo-room-1',
+          alert_type: al.type || al.id,
+          severity: al.severity as 'critical' | 'warning' | 'info',
+          title: al.title,
+          description: al.message,
+          status: al.is_acknowledged ? 'resolved' : 'unresolved' as const,
+          resolved_at: al.is_acknowledged ? al.created_at : undefined,
+          created_at: al.created_at
+        }));
+        setAlerts(demoAlerts);
+        setLoading(false);
+        return;
+      }
       
       // Get owner's profile
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -87,6 +106,15 @@ const OwnerAlerts: React.FC = () => {
 
   const handleResolveAlert = async (alertId: string) => {
     try {
+      if (DEMO_ENABLED) {
+        setAlerts(prev => prev.map(alert => 
+          alert.id === alertId 
+            ? { ...alert, status: 'resolved', resolved_at: new Date().toISOString() }
+            : alert
+        ));
+        return;
+      }
+
       const { error } = await supabase
         .from('alerts')
         .update({ 

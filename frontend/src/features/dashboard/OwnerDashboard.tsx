@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
-import { DEMO_ENABLED, DEMO_OWNER_FINANCE } from '../../utils/demoData';
+import { DEMO_ENABLED, DEMO_OWNER_FINANCE, DEMO_OWNER_SENSORS } from '../../utils/demoData';
 
 const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
@@ -45,9 +45,41 @@ const OwnerDashboard: React.FC = () => {
 
       // DEMO MODE: Use hardcoded demo finance data
       if (DEMO_ENABLED) {
-        setRevenueHistory(DEMO_OWNER_FINANCE.weekly_revenue);
-        setFarmerActivity(DEMO_OWNER_FINANCE.farmer_activity);
-        setEnergyHistory(DEMO_OWNER_FINANCE.energy_consumption);
+        // Set all demo data for the dashboard
+        setRooms([{ id: 'demo-room-1', room_name: 'Storage Room A', capacity_kg: 10000, current_utilization_kg: 225 }]);
+        setDbSensors(DEMO_OWNER_SENSORS);
+        setInventory([{ product: 'Apple', quantity: 18, batches: { farmer_id: 'farmer-1' } }]);
+        setStakeholders([{ name: 'Roy' }]);
+        setLatestCondition({
+          temperature: 1.12,
+          humidity: 92.3,
+          ambient_temperature: 31,
+          ambient_humidity: 69,
+          solar_percentage: 95.7,
+          energy_consumption_kwh: 351
+        });
+        
+        // Format chart data for Recharts & Custom components
+        setRevenueHistory(
+          (DEMO_OWNER_FINANCE.weekly_revenue || []).map((w: any) => ({
+            time: w.week,
+            value: Number((w.revenue / 100000).toFixed(6)) // convert to lakhs
+          }))
+        );
+        setFarmerActivity(
+          (DEMO_OWNER_FINANCE.farmer_activity || []).map((d: any) => ({
+            day: d.day,
+            checkIns: d.removed || 0,
+            batchesAdded: d.added || 0
+          }))
+        );
+        setEnergyHistory(
+          (DEMO_OWNER_FINANCE.energy_consumption || []).map((e: any) => ({
+            time: e.date,
+            value: Number(((e.solar || 0) + (e.grid || 0)).toFixed(1))
+          }))
+        );
+        
         setLoading(false);
         return;
       }
@@ -331,7 +363,7 @@ const OwnerDashboard: React.FC = () => {
 
   // Inverter & Energy Values (Solar, Grid, Total kWh)
   const solarPercentage = latestCondition?.solar_percentage ?? 0;
-  const gridPercentage = solarPercentage > 0 ? Math.max(0, 100 - solarPercentage) : 100;
+  const gridPercentage = solarPercentage > 0 ? Number((100 - solarPercentage).toFixed(1)) : 100;
   const totalEnergyKwh = latestCondition?.energy_consumption_kwh ?? 0;
 
   // Calculate monthly energy from energyHistory
@@ -629,20 +661,20 @@ const OwnerDashboard: React.FC = () => {
                 
                 return (
                   <div key={index} className="flex-1 flex flex-col items-center group relative">
-                    <div className="relative w-full mb-2" style={{ height: '140px' }}>
-                      {/* Batches Added (Top) */}
+                    <div className="relative w-full mb-2 flex items-end justify-center gap-1" style={{ height: '140px' }}>
+                      {/* Removed / Harvested (Green - Left) */}
                       <div 
-                        className="absolute bottom-0 w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg transition-all duration-300 group-hover:from-blue-600 group-hover:to-blue-500 cursor-pointer"
-                        style={{ height: `${(day.batchesAdded / maxActivity) * 100}%` }}
-                        title={`${day.batchesAdded} batches added`}
+                        className="w-1/2 bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-sm transition-all duration-300 group-hover:from-emerald-600 group-hover:to-emerald-500 cursor-pointer"
+                        style={{ height: `${maxActivity > 0 ? (day.checkIns / maxActivity) * 100 : 0}%` }}
+                        title={`${day.checkIns} removed`}
                       />
-                      {/* Check-ins (Bottom) */}
+                      {/* Added / Stored (Blue - Right) */}
                       <div 
-                        className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all duration-300 group-hover:from-emerald-600 group-hover:to-emerald-500 cursor-pointer"
-                        style={{ height: `${(day.checkIns / maxActivity) * 100}%` }}
-                        title={`${day.checkIns} check-ins`}
+                        className="w-1/2 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm transition-all duration-300 group-hover:from-blue-600 group-hover:to-blue-500 cursor-pointer"
+                        style={{ height: `${maxActivity > 0 ? (day.batchesAdded / maxActivity) * 100 : 0}%` }}
+                        title={`${day.batchesAdded} added`}
                       />
-                      {/* Tooltip - positioned to not cause overflow */}
+                      {/* Tooltip */}
                       <div className="opacity-0 group-hover:opacity-100 absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs rounded px-2 py-1 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10">
                         {day.checkIns} removed · {day.batchesAdded} added
                       </div>

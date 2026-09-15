@@ -61,9 +61,11 @@ const OwnerMonitoring: React.FC = () => {
       if (DEMO_ENABLED) {
         const demoSensorsFormatted = DEMO_OWNER_SENSORS.map((sensor: any) => ({
           ...sensor,
-          status: 'Active'
+          status: 'Active',
+          last_seen: new Date().toISOString()
         }));
         setDbSensors(demoSensorsFormatted);
+        setInventory([{ farmer_id: 'demo-farmer-1' }]);
         setLoading(false);
         return;
       }
@@ -318,7 +320,7 @@ const OwnerMonitoring: React.FC = () => {
   const isSensorActive = (s: any) => {
     const st = s.status?.toLowerCase();
     // A sensor is ONLY active if status is online/active AND it has reported at least one reading
-    const hasPassedReading = s.last_reading_value != null || (s.last_seen != null && s.last_seen !== '');
+    const hasPassedReading = s.last_reading_value != null || s.reading != null || (s.last_seen != null && s.last_seen !== '');
     return (st === 'active' || st === 'online') && hasPassedReading;
   };
 
@@ -416,6 +418,10 @@ const OwnerMonitoring: React.FC = () => {
                 dbSensors.map((sensor: any, index) => {
                   // Get actual reading value with unit - NO HARDCODED DEMO FALLBACKS
                   const getReadingDisplay = () => {
+                    if (sensor.reading != null) {
+                      return sensor.reading;
+                    }
+
                     if (sensor.last_reading_value != null) {
                       const unit = sensor.last_reading_unit || '';
                       return `${sensor.last_reading_value} ${unit}`.trim();

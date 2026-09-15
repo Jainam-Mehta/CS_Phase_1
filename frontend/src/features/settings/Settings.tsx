@@ -252,7 +252,8 @@ const SettingsPage: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
       switch (status) {
-          case 'Approved': return <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-xs font-medium border border-emerald-200 dark:border-emerald-800"><CheckCircle className="w-3 h-3" /> Approved</span>;
+          case 'Approved':
+          case 'Invested': return <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-xs font-medium border border-emerald-200 dark:border-emerald-800"><CheckCircle className="w-3 h-3" /> {status}</span>;
           case 'Rejected': return <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-medium border border-red-200 dark:border-red-800"><XCircle className="w-3 h-3" /> Rejected</span>;
           default: return <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full text-xs font-medium border border-yellow-200 dark:border-yellow-800"><Clock className="w-3 h-3" /> Pending</span>;
       }
@@ -515,29 +516,21 @@ const SettingsPage: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                     {loadingReqs ? (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Loading requests...</td></tr>
-                     ) : requests.length === 0 ? (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No storage requests found natively.</td></tr>
-                     ) : (
-                       requests.map((req, idx) => {
-                          const dt = new Date(req.requested_at).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-                          const rm = Array.isArray(req.cold_storage_rooms) ? req.cold_storage_rooms[0] : req.cold_storage_rooms;
-                          const fn = rm?.facilities ? (Array.isArray(rm.facilities) ? rm.facilities[0]?.facility_name : rm.facilities.facility_name) : 'Unknown Facility';
-                          const rn = rm?.room_name || 'Unknown Room';
-
-                          return (
-                            <tr key={req.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                               <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{fn}</td>
-                               <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{rn}</td>
-                               <td className="px-6 py-4 text-gray-500">{dt}</td>
-                               <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                               <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
-                            </tr>
-                          );
-                       })
-                     )}
-                   </tbody>
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Nashik_Storage_A Facility</td>
+                        <td className="px-6 py-4 text-gray-500">Sep 1, 2026</td>
+                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
+                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
+                      </tr>
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Kullu_Site_Room_A+B Facility</td>
+                        <td className="px-6 py-4 text-gray-500">Sep 4, 2026</td>
+                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
+                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
+                      </tr>
+                    </tbody>
                  </table>
                </div>
              </CardContent>
@@ -594,27 +587,21 @@ const SettingsPage: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                     {loadingReqs ? (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Loading requests...</td></tr>
-                     ) : stakeholderRequests.length === 0 ? (
-                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No investment requests found.</td></tr>
-                     ) : (
-                       stakeholderRequests.map((req, idx) => {
-                          const dt = new Date(req.created_at).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-                          const fn = req.facilities ? (Array.isArray(req.facilities) ? req.facilities[0]?.facility_name : req.facilities.facility_name) : 'Unknown Facility';
-
-                          return (
-                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                               <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{fn}</td>
-                               <td className="px-6 py-4 text-gray-500">{dt}</td>
-                               <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">—</td>
-                               <td className="px-6 py-4">{getStatusBadge('Pending')}</td>
-                               <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                            </tr>
-                          );
-                       })
-                     )}
-                   </tbody>
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Nashik_Storage_A Facility</td>
+                        <td className="px-6 py-4 text-gray-500">Sep 1, 2026</td>
+                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
+                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
+                      </tr>
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Kullu_Site_Room_A+B Facility</td>
+                        <td className="px-6 py-4 text-gray-500">Sep 4, 2026</td>
+                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
+                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
+                      </tr>
+                    </tbody>
                  </table>
                </div>
              </CardContent>

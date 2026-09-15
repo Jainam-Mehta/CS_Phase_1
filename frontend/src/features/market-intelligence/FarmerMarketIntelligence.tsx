@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { TrendingUp, ArrowUpRight, ArrowDownRight, PackageSearch, LayoutDashboard, IndianRupee, Wallet, Receipt, CheckCircle2 } from 'lucide-react';
 import { FEATURE_FLAGS } from '../../config/features.config';
 import { convertKgToCrates } from '../../utils/units';
-import { DEMO_ENABLED, DEMO_PRODUCTS, DEMO_MARKET_PRICE, DEMO_REVENUE_EARNED, DEMO_INVENTORY } from '../../utils/demoData';
+import { DEMO_ENABLED, DEMO_PRODUCTS, DEMO_MARKET_PRICE, DEMO_MARKET_NAME, DEMO_REVENUE_EARNED, DEMO_INVENTORY } from '../../utils/demoData';
 
 const FarmerMarketIntelligence: React.FC = () => {
   const { user } = useAuthStore();
@@ -21,7 +21,7 @@ const FarmerMarketIntelligence: React.FC = () => {
            <TrendingUp className="w-8 h-8 text-primary-500" />
            <div>
              <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-               Market
+               {DEMO_MARKET_NAME}
              </h1>
              <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
                Live daily market prices

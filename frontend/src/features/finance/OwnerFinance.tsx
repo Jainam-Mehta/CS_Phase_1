@@ -26,21 +26,55 @@ const OwnerFinance: React.FC = () => {
 
       // DEMO MODE: Use hardcoded demo finance data
       if (DEMO_ENABLED) {
+        const totalRev = DEMO_OWNER_FINANCE.total_revenue;
+        const totalExp = DEMO_OWNER_FINANCE.total_expenses;
+        const totalProf = DEMO_OWNER_FINANCE.net_profit;
+        const margin = totalRev > 0 ? ((totalProf / totalRev) * 100).toFixed(1) : '0';
+        const hvacAmt = DEMO_OWNER_FINANCE.breakdown.hvac_water_check;
+        const inverterAmt = DEMO_OWNER_FINANCE.breakdown.inverter_replaced;
+        const totalCrates = DEMO_OWNER_FINANCE.crates_stored;
+        
         setFinanceData({
           currentMonth: 'September 2026',
-          totalRevenue: DEMO_OWNER_FINANCE.total_revenue / 100000, // Convert to Lakh (divide by 100k)
-          totalExpenses: DEMO_OWNER_FINANCE.total_expenses / 100000,
-          totalProfit: DEMO_OWNER_FINANCE.net_profit / 100000,
-          profitMargin: ((DEMO_OWNER_FINANCE.net_profit / DEMO_OWNER_FINANCE.total_revenue) * 100).toFixed(1),
-          farmerRevenue: [],
-          expenses: [
-            { name: 'HVAC Water Check', value: DEMO_OWNER_FINANCE.breakdown.hvac_water_check / 100, color: '#3b82f6' },
-            { name: 'Inverter Replaced', value: DEMO_OWNER_FINANCE.breakdown.inverter_replaced / 100, color: '#ef4444' }
+          totalRevenue: totalRev,
+          totalExpenses: totalExp,
+          totalProfit: totalProf,
+          profitMargin: margin,
+          farmerRevenue: [
+            {
+              farmer: 'Roy',
+              crates: totalCrates,
+              total: 21.6, // ₹21.6 storage fee revenue
+              location: 'Storage Room A',
+              pricePerCrate: '1.2',
+              percentageDisplay: '0.1'
+            }
           ],
-          monthlyTrend: DEMO_OWNER_FINANCE.six_month_trend,
-          totalCrates: DEMO_OWNER_FINANCE.crates_stored,
+          expenses: [
+            {
+              category: 'HVAC Water Check',
+              amount: hvacAmt,
+              percentage: Number(((hvacAmt / totalExp) * 100).toFixed(1)),
+              color: '#3b82f6',
+              icon: Wrench
+            },
+            {
+              category: 'Inverter Replaced',
+              amount: inverterAmt,
+              percentage: Number(((inverterAmt / totalExp) * 100).toFixed(1)),
+              color: '#ef4444',
+              icon: Zap
+            }
+          ],
+          monthlyTrend: DEMO_OWNER_FINANCE.six_month_trend.map(t => ({
+            month: t.month,
+            revenue: Number((t.revenue / 100000).toFixed(3)),
+            expenses: Number((t.expenses / 100000).toFixed(3)),
+            profit: Number((t.profit / 100000).toFixed(3))
+          })),
+          totalCrates: totalCrates,
           totalFarmers: DEMO_OWNER_FINANCE.active_farmers,
-          avgPricePerCrate: '715.9',
+          avgPricePerCrate: '1.2'
         });
         setLoading(false);
         return;
@@ -288,7 +322,11 @@ const OwnerFinance: React.FC = () => {
   }
 
   const formatCurrency = (amount: number) => {
-    return `₹${(amount / 100000).toFixed(2)} L`;
+    if (amount == null) return '₹0';
+    if (amount >= 100000) {
+      return `₹${(amount / 100000).toFixed(2)} L`;
+    }
+    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
   };
 
   const formatNumber = (num: number) => {
@@ -400,7 +438,7 @@ const OwnerFinance: React.FC = () => {
                   <RechartsTooltip
                     contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }}
                     labelStyle={{ color: '#ffffff' }}
-                    formatter={(value: any) => [`₹${(value / 1000).toFixed(1)}K`, '']}
+                    formatter={(value: any) => [value >= 1000 ? `₹${(value / 1000).toFixed(1)}K` : `₹${value}`, '']}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -419,7 +457,7 @@ const OwnerFinance: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-slate-900 dark:text-white">
-                        ₹{(expense.amount / 1000).toFixed(1)}K
+                        {expense.amount >= 1000 ? `₹${(expense.amount / 1000).toFixed(1)}K` : `₹${expense.amount}`}
                       </p>
                       <p className="text-xs text-slate-500">{expense.percentage}%</p>
                     </div>
@@ -512,7 +550,7 @@ const OwnerFinance: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs font-medium">
-                          {percentage}%
+                          {farmer.percentageDisplay ? farmer.percentageDisplay : percentage}%
                         </span>
                       </td>
                     </tr>

@@ -43,7 +43,7 @@ export const DEMO_ALERTS = [
   {
     id: 'demo-alert-1',
     created_at: new Date().toISOString(),
-    title: '7 kg apples delivered to Apple Studios',
+    title: '7 crates of apples delivered to Apple Studios',
     message: 'Order fulfillment completed successfully',
     type: 'order',
     is_acknowledged: true,
@@ -63,6 +63,18 @@ export const DEMO_ALERTS = [
     severity: 'warning',
     room_id: 'demo-room-1',
     farmer_id: 'demo-farmer-1'
+  },
+  {
+    id: 'demo-alert-3',
+    created_at: new Date('2026-09-03').toISOString(),
+    title: 'Door was left opened for 14 minutes',
+    message: 'Storage room door was open for 14 minutes on Sep 3',
+    type: 'door',
+    is_acknowledged: true,
+    alert_type: 'door_alert',
+    severity: 'info',
+    room_id: 'demo-room-1',
+    farmer_id: 'demo-farmer-1'
   }
 ];
 
@@ -73,7 +85,7 @@ export const DEMO_INVENTORY = [
     batch_code: 'BATCH-1789466259570-205BSI',
     product_name: 'Apple',
     product_id: 'demo-product-1',
-    quantity_kg: 75, // 3 crates × 25kg
+    quantity_kg: 75, // 3 crates × 25kg (after 7 sold from initial 10)
     stored_date: '2026-09-03',
     remaining_quantity_kg: 75,
     initial_quantity_kg: 75,
@@ -100,6 +112,15 @@ export const DEMO_INVENTORY = [
   }
 ];
 
+// Inventory Summary (for display)
+export const DEMO_INVENTORY_SUMMARY = {
+  total_crates: 11,
+  batches: [
+    { batch_code: 'BATCH-1789466259570-205BSI', crates: 3 },
+    { batch_code: 'BATCH-1789466295723-2XGOBE', crates: 8 }
+  ]
+};
+
 // Orders
 export const DEMO_ORDERS = [
   {
@@ -118,8 +139,9 @@ export const DEMO_ORDERS = [
 ];
 
 // Market Prices & Revenue
-export const DEMO_MARKET_PRICE = 45;
-export const DEMO_REVENUE_EARNED = 7875;
+export const DEMO_MARKET_PRICE = 95;
+export const DEMO_MARKET_NAME = 'Mandi';
+export const DEMO_REVENUE_EARNED = 95 * 7 * 25; // ₹16,625 (95 rupees/kg × 7 crates × 25 kg/crate)
 
 // Energy Data (Farmer)
 export const DEMO_ENERGY_DATA = [
@@ -177,6 +199,57 @@ export const DEMO_ROOMS = [
   }
 ];
 
+// ============ STAKEHOLDER DEMO DATA ============
+export const DEMO_STAKEHOLDER_INVESTMENTS = [
+  {
+    facility_id: 'demo-facility-1',
+    facility_name: 'Nashik_Storage_A Facility',
+    stateName: 'Maharashtra',
+    districtName: 'Nashik',
+    cityName: 'Nashik',
+    investment_amount_inr: 20000,
+    roi_percentage_estimate: 5.0,
+    carbon_credits: 241
+  },
+  {
+    facility_id: 'demo-facility-2',
+    facility_name: 'Kullu_Site_Room_A+B Facility',
+    stateName: 'Himachal Pradesh',
+    districtName: 'Kullu',
+    cityName: 'Kullu',
+    investment_amount_inr: 20000,
+    roi_percentage_estimate: 5.0,
+    carbon_credits: 241
+  }
+];
+
+export const DEMO_ALL_FACILITIES = [
+  { id: 'demo-facility-1', facility_name: 'Nashik_Storage_A Facility', stateName: 'Maharashtra', districtName: 'Nashik', cityName: 'Nashik', stateId: 'mh' },
+  { id: 'demo-facility-2', facility_name: 'Kullu_Site_Room_A+B Facility', stateName: 'Himachal Pradesh', districtName: 'Kullu', cityName: 'Kullu', stateId: 'hp' },
+  { id: 'demo-facility-3', facility_name: 'Pune_Cold_Storage', stateName: 'Maharashtra', districtName: 'Pune', cityName: 'Pune', stateId: 'mh' },
+  { id: 'demo-facility-4', facility_name: 'Nagpur_Citrus_Hub', stateName: 'Maharashtra', districtName: 'Nagpur', cityName: 'Nagpur', stateId: 'mh' },
+  { id: 'demo-facility-5', facility_name: 'Shimla_Apple_Zone', stateName: 'Himachal Pradesh', districtName: 'Shimla', cityName: 'Shimla', stateId: 'hp' },
+  { id: 'demo-facility-6', facility_name: 'Ludhiana_Agro_Cold', stateName: 'Punjab', districtName: 'Ludhiana', cityName: 'Ludhiana', stateId: 'pb' },
+  { id: 'demo-facility-7', facility_name: 'Amritsar_Storage', stateName: 'Punjab', districtName: 'Amritsar', cityName: 'Amritsar', stateId: 'pb' },
+  { id: 'demo-facility-8', facility_name: 'Agra_Potato_Vault', stateName: 'Uttar Pradesh', districtName: 'Agra', cityName: 'Agra', stateId: 'up' },
+  { id: 'demo-facility-9', facility_name: 'Varanasi_Cold_Chain', stateName: 'Uttar Pradesh', districtName: 'Varanasi', cityName: 'Varanasi', stateId: 'up' },
+  { id: 'demo-facility-10', facility_name: 'Surat_Fresh_Vault', stateName: 'Gujarat', districtName: 'Surat', cityName: 'Surat', stateId: 'gj' },
+  { id: 'demo-facility-11', facility_name: 'Rajkot_Agro_Hub', stateName: 'Gujarat', districtName: 'Rajkot', cityName: 'Rajkot', stateId: 'gj' },
+  { id: 'demo-facility-12', facility_name: 'Indore_Spices_Cold', stateName: 'Madhya Pradesh', districtName: 'Indore', cityName: 'Indore', stateId: 'mp' },
+  { id: 'demo-facility-13', facility_name: 'Bhopal_Central_Store', stateName: 'Madhya Pradesh', districtName: 'Bhopal', cityName: 'Bhopal', stateId: 'mp' }
+];
+
+export const DEMO_STAKEHOLDER_PORTFOLIO = {
+  totalInvestment: 40000,
+  totalFacilities: 13,
+  investedFacilities: 2,
+  totalCities: 2,
+  avgRoi: 5.0,
+  totalProfit: 42000,
+  carbonCredits: 482,
+  treesSavedLakhs: 0.24
+};
+
 // ============ OWNER DEMO DATA ============
 
 // Owner Sensor Data (Monitoring Page)
@@ -207,23 +280,23 @@ export const DEMO_OWNER_ENERGY = {
 // Owner Inventory (Total across all facilities)
 export const DEMO_OWNER_INVENTORY_OVERVIEW = {
   total_capacity_kg: 10000,
-  occupied_kg: 225, // 11 crates × 25kg
-  available_kg: 9775,
-  total_crates: 11,
-  occupied_percentage: 2.25,
-  available_percentage: 97.75
+  occupied_kg: 450, // 18 crates × 25kg
+  available_kg: 9550,
+  total_crates: 18,
+  occupied_percentage: 4.5,
+  available_percentage: 95.5
 };
 
 // Owner Financial Data
 export const DEMO_OWNER_FINANCE = {
   active_farmers: 1,
-  crates_stored: 11,
-  total_revenue: 787500, // ₹7,875 in Lakhs format (0.07875 L)
-  total_expenses: 20000, // ₹200 in Lakhs format (0.002 L) - only 15 days
-  net_profit: 767500, // Revenue - Expenses
+  crates_stored: 18,
+  total_revenue: 20021.6, // ₹20,021.6
+  total_expenses: 2000, // ₹2,000 (10x increase so visible in charts)
+  net_profit: 18021.6, // ₹18,021.6 (Revenue - Expenses)
   breakdown: {
-    hvac_water_check: 5000, // ₹50
-    inverter_replaced: 15000 // ₹150
+    hvac_water_check: 500, // ₹500 (25%)
+    inverter_replaced: 1500 // ₹1,500 (75%)
   },
   six_month_trend: [
     { month: 'April', revenue: 0, expenses: 0, profit: 0 },
@@ -231,13 +304,13 @@ export const DEMO_OWNER_FINANCE = {
     { month: 'June', revenue: 0, expenses: 0, profit: 0 },
     { month: 'July', revenue: 0, expenses: 0, profit: 0 },
     { month: 'August', revenue: 0, expenses: 0, profit: 0 },
-    { month: 'September', revenue: 78750, expenses: 20000, profit: 58750 } // ₹0.7875L revenue, ₹0.002L expenses, ₹0.58750L profit
+    { month: 'September', revenue: 20021.6, expenses: 2000, profit: 18021.6 }
   ],
   weekly_revenue: [
-    { week: 'Week 1', revenue: 0 },
-    { week: 'Week 2', revenue: 0 },
+    { week: 'Week 1', revenue: 10012 },
+    { week: 'Week 2', revenue: 10009.6 },
     { week: 'Week 3', revenue: 0 },
-    { week: 'Week 4', revenue: 78750 }
+    { week: 'Week 4', revenue: 0 }
   ],
   farmer_activity: [
     { day: 'Wed', removed: 0, added: 0 },
@@ -246,17 +319,16 @@ export const DEMO_OWNER_FINANCE = {
     { day: 'Sat', removed: 0, added: 0 },
     { day: 'Sun', removed: 0, added: 0 },
     { day: 'Mon', removed: 0, added: 0 },
-    { day: 'Tue', removed: 7, added: 8 } // 7 crates removed (sold), 8 crates added (new batch)
+    { day: 'Tue', removed: 1, added: 1 } // 1 batch removed (sold), 1 batch added (new batch)
   ],
   energy_consumption: [
-    { date: '08/09', solar: 0, grid: 0 },
-    { date: '09/09', solar: 0, grid: 0 },
-    { date: '10/09', solar: 0, grid: 0 },
-    { date: '11/09', solar: 0, grid: 0 },
-    { date: '12/09', solar: 0, grid: 0 },
-    { date: '13/09', solar: 0, grid: 0 },
-    { date: '14/09', solar: 0, grid: 0 },
-    { date: '15/09', solar: 723.81, grid: 32.19 }
+    { date: '09/09', solar: 47.47, grid: 2.13 }, // 49.6
+    { date: '10/09', solar: 47.75, grid: 2.15 }, // 49.9
+    { date: '11/09', solar: 48.81, grid: 2.19 }, // 51.0
+    { date: '12/09', solar: 47.66, grid: 2.14 }, // 49.8
+    { date: '13/09', solar: 48.23, grid: 2.17 }, // 50.4
+    { date: '14/09', solar: 47.95, grid: 2.15 }, // 50.1
+    { date: '15/09', solar: 48.04, grid: 2.16 }  // 50.2
   ]
 };
 
@@ -264,30 +336,30 @@ export const DEMO_OWNER_FINANCE = {
 export const DEMO_OWNER_ALERTS = [
   {
     id: 'owner-alert-1',
-    created_at: new Date('2026-09-01').toISOString(),
-    title: 'New farmer requested access',
-    message: 'Farmer Roy has requested access to Nashik_Storage_A',
-    type: 'farmer_request',
-    is_acknowledged: true,
-    severity: 'info'
-  },
-  {
-    id: 'owner-alert-2',
-    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    title: 'HVAC maintenance completed',
-    message: 'Scheduled HVAC maintenance and water check performed',
-    type: 'maintenance',
+    created_at: new Date('2026-09-03').toISOString(),
+    title: 'Door opened for 14 minutes',
+    message: 'Storage room door was open for 14 minutes on Sep 3',
+    type: 'door',
     is_acknowledged: true,
     severity: 'info'
   },
   {
     id: 'owner-alert-3',
-    created_at: new Date().toISOString(),
-    title: 'Temperature spiked alert',
-    message: 'Internal temperature exceeded threshold for 24 minutes in Nashik_Storage_A',
+    created_at: new Date('2026-09-08').toISOString(),
+    title: 'Temperature increased out of range',
+    message: 'Temperature exceeded max range (6°C for apples) for 24 minutes on Sep 8',
     type: 'temperature',
     is_acknowledged: true,
-    severity: 'warning'
+    severity: 'critical'
+  },
+  {
+    id: 'owner-alert-2',
+    created_at: new Date('2026-09-15').toISOString(),
+    title: 'HVAC maintenance completed',
+    message: 'Scheduled HVAC maintenance and water check performed successfully on Sep 15',
+    type: 'maintenance',
+    is_acknowledged: true,
+    severity: 'info'
   }
 ];
 
