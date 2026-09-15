@@ -142,9 +142,18 @@ function FarmerDashboardCore() {
   useEffect(() => {
     if (user?.email !== DEMO_ROY_EMAIL) return;
     
+    // Set initial value immediately
+    const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
+    setLiveConditions({
+      temp: firstValue.temp,
+      hum: firstValue.hum,
+      date: new Date().toISOString()
+    });
+    
+    let currentIndex = 0;
     const interval = setInterval(() => {
-      demoValueIndex = (demoValueIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length;
-      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[demoValueIndex];
+      currentIndex = (currentIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length;
+      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[currentIndex];
       
       setLiveConditions({
         temp: currentValue.temp,
@@ -298,6 +307,9 @@ function FarmerDashboardCore() {
   }, [loading, user?.email]);
 
   useEffect(() => {
+     // SKIP data fetch for Roy - use demo data only
+     if (user?.email === DEMO_ROY_EMAIL) return;
+     
      if (!activeRoomId || !profileId) return;
 
      const fetchRoomData = async () => {
