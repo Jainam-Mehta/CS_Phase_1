@@ -36,11 +36,21 @@ class ProfileResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _format_profile(profile: dict) -> dict:
-    role_obj = profile.get("roles") or {}
-    if isinstance(role_obj, list):
-        role_name = role_obj[0].get("name") if role_obj else None
-    else:
-        role_name = role_obj.get("name")
+    """Format profile response, handling both role_id (via FK) and direct role field"""
+    role_name = None
+    
+    # Try to get role from roles table (via role_id FK)
+    role_obj = profile.get("roles")
+    if role_obj:
+        if isinstance(role_obj, list):
+            role_name = role_obj[0].get("name") if role_obj else None
+        else:
+            role_name = role_obj.get("name")
+    
+    # Fallback: infer role from context if available
+    if not role_name:
+        # In future, you could infer role based on facility ownership, etc.
+        role_name = None
 
     return {
         "id": profile["id"],
@@ -60,8 +70,11 @@ async def get_profile_by_auth_id(auth_user_id: str):
     """
     Return the profile row for a given Supabase Auth user ID.
     Used by backend services that need profile info from a JWT sub claim.
+    
+    Tries to join with roles table first; falls back to basic profile if roles FK doesn't exist.
     """
     try:
+        # Try with role join first (after migration)
         resp = (
             supabase.table("profiles")
             .select("*, roles!inner(name)")
@@ -69,19 +82,52 @@ async def get_profile_by_auth_id(auth_user_id: str):
             .maybeSingle()
             .execute()
         )
+        
+        if resp.data:
+            return _format_profile(resp.data)
+        
+        # Fallback: get profile without role join (before migration)
+        resp = (
+            supabase.table("profiles")
+            .select("*")
+            .eq("auth_user_id", auth_user_id)
+            .maybeSingle()
+            .execute()
+        )
+        
         if not resp.data:
             raise HTTPException(status_code=404, detail="Profile not found")
+        
         return _format_profile(resp.data)
+        
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {e}")
+        # If inner join fails, try without it
+        try:
+            resp = (
+                supabase.table("profiles")
+                .select("*")
+                .eq("auth_user_id", auth_user_id)
+                .maybeSingle()
+                .execute()
+            )
+            if not resp.data:
+                raise HTTPException(status_code=404, detail="Profile not found")
+            return _format_profile(resp.data)
+        except Exception as fallback_error:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(fallback_error)}")
 
 
 @router.get("/profile/by-id/{profile_id}", response_model=ProfileResponse)
 async def get_profile_by_id(profile_id: str):
-    """Return profile by profiles.id (UUID PK)."""
+    """
+    Return profile by profiles.id (UUID PK).
+    
+    Tries to join with roles table first; falls back to basic profile if roles FK doesn't exist.
+    """
     try:
+        # Try with role join first (after migration)
         resp = (
             supabase.table("profiles")
             .select("*, roles!inner(name)")
@@ -89,13 +135,41 @@ async def get_profile_by_id(profile_id: str):
             .maybeSingle()
             .execute()
         )
+        
+        if resp.data:
+            return _format_profile(resp.data)
+        
+        # Fallback: get profile without role join (before migration)
+        resp = (
+            supabase.table("profiles")
+            .select("*")
+            .eq("id", profile_id)
+            .maybeSingle()
+            .execute()
+        )
+        
         if not resp.data:
             raise HTTPException(status_code=404, detail="Profile not found")
+        
         return _format_profile(resp.data)
+        
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {e}")
+        # If inner join fails, try without it
+        try:
+            resp = (
+                supabase.table("profiles")
+                .select("*")
+                .eq("id", profile_id)
+                .maybeSingle()
+                .execute()
+            )
+            if not resp.data:
+                raise HTTPException(status_code=404, detail="Profile not found")
+            return _format_profile(resp.data)
+        except Exception as fallback_error:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(fallback_error)}")
 
 
 @router.get("/facilities/{profile_id}")
