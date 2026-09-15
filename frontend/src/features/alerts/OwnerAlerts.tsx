@@ -42,7 +42,7 @@ const OwnerAlerts: React.FC = () => {
           severity: al.severity as 'critical' | 'warning' | 'info',
           title: al.title,
           description: al.message,
-          status: al.is_acknowledged ? 'resolved' : 'unresolved' as const,
+          status: (al.is_acknowledged ? 'resolved' : 'unresolved') as 'unresolved' | 'resolved',
           resolved_at: al.is_acknowledged ? al.created_at : undefined,
           created_at: al.created_at
         }));
