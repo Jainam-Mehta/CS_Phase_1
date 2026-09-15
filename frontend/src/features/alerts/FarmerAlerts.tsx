@@ -13,6 +13,7 @@ interface AlertItem {
    title: string;
    message: string;
    time: string;
+   is_acknowledged?: boolean;
 }
 
 const FarmerAlerts: React.FC = () => {
@@ -37,7 +38,8 @@ const FarmerAlerts: React.FC = () => {
              level: al.severity === 'critical' ? 'Critical' : al.severity === 'warning' ? 'Warning' : 'Info',
              title: al.title,
              message: al.message,
-             time: new Date(al.created_at).toLocaleTimeString()
+             time: new Date(al.created_at).toLocaleTimeString(),
+             is_acknowledged: al.is_acknowledged
            }));
            
            setAlerts(demoAlertItems);
@@ -94,7 +96,7 @@ const FarmerAlerts: React.FC = () => {
              </CardContent>
            </Card>
          ) : (
-           alerts.map((al) => {
+           alerts.map((al, idx) => {
                let borderCls = '';
                let iconCls = '';
                let textCls = '';
@@ -130,7 +132,14 @@ const FarmerAlerts: React.FC = () => {
                           <div className="flex-1">
                               <div className="flex justify-between items-start mb-1">
                                   <h3 className={`text-lg font-bold ${textCls}`}>{al.title}</h3>
-                                  <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">{al.time}</span>
+                                  <div className="flex items-center gap-2">
+                                    {al.is_acknowledged && (
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                                        ✓ Acknowledged
+                                      </span>
+                                    )}
+                                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">{al.time}</span>
+                                  </div>
                               </div>
                               <p className="text-slate-600 dark:text-slate-300">{al.message}</p>
                           </div>

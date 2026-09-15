@@ -51,20 +51,6 @@ const FarmerMarketIntelligence: React.FC = () => {
 
                            <div className="flex items-end gap-3 mb-6">
                               <span className="text-4xl font-extrabold tracking-tight">₹{DEMO_MARKET_PRICE}</span>
-                              <span className={`text-sm font-bold flex items-center mb-1 ${positive ? 'text-emerald-500' : 'text-red-500'}`}>
-                                  {positive ? '+' : ''}{variance.toFixed(1)}% <span className="text-slate-400 font-medium ml-1">Next 7 Days</span>
-                              </span>
-                           </div>
-                           
-                           <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                               <div>
-                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Predicted Value</p>
-                                 <p className="font-bold text-lg dark:text-slate-200">₹{(DEMO_MARKET_PRICE * 1.025).toFixed(0)} / kg</p>
-                               </div>
-                               
-                               <div className={`px-4 py-2 rounded-lg font-bold text-sm shadow-sm bg-indigo-500 text-white`}>
-                                   ACTION: HOLD
-                               </div>
                            </div>
                       </CardContent>
                   </Card>
