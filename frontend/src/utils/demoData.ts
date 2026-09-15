@@ -3,15 +3,15 @@
  * 
  * This file contains all hardcoded demo data for the farmer dashboard.
  * To remove demo data in production: 
- * 1. Delete this entire file
- * 2. Remove all imports of this file
- * 3. Remove all DEMO_ENABLED checks from FarmerDashboard.tsx
+ * 1. Set DEMO_ENABLED = false
+ * 2. Delete this entire file
+ * 3. Remove all imports of this file
  * 
- * ALL demo data is controlled by the DEMO_ENABLED flag below.
- * Set to false to disable all demo features.
+ * NOTE: Demo data only works on the main dashboard (FarmerDashboard.tsx).
+ * Other pages (Market Intelligence, Orders, Alerts) still query the database.
  */
 
-export const DEMO_ENABLED = true; // Set to false to disable all demo data
+export const DEMO_ENABLED = false; // Set to true to enable demo data on dashboard only
 
 // Demo temperature and humidity values (15 circular values)
 export const DEMO_TEMP_HUMIDITY_VALUES = [
