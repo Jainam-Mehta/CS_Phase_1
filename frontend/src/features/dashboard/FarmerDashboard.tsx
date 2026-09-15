@@ -14,18 +14,8 @@ import {
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 import { 
-  DEMO_ENABLED, 
-  DEMO_TEMP_HUMIDITY_VALUES, 
-  DEMO_DOOR_STATS, 
-  DEMO_ALERTS,
-  DEMO_INVENTORY,
-  DEMO_PRODUCTS,
-  DEMO_ACTIVE_PRODUCT_DATA,
-  DEMO_FACILITIES,
-  DEMO_ROOMS,
-  DEMO_ORDERS,
-  DEMO_ENERGY_DATA,
-  generateDemoTemperatureHistory,
+  DEMO_TEMP_HUMIDITY_VALUES,
+  getDemoCurrentValues,
   resetDemoIndex
 } from '../../utils/demoData';
 
@@ -79,7 +69,6 @@ function FarmerDashboardCore() {
   
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
-  const [roomIndex, setRoomIndex] = useState(0);
 
   // Data state
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -100,59 +89,9 @@ function FarmerDashboardCore() {
   const [hasAnyPending, setHasAnyPending] = useState(false);
   const [pendingDetails, setPendingDetails] = useState<any>(null);
   
-  // Live temperature/humidity update from database every minute
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (activeRoomId) {
-        try {
-          // Fetch latest sensor reading
-          const { data: latestReading } = await supabase
-            .from('sensor_readings')
-            .select('temperature_celsius, humidity_percentage, recorded_at')
-            .eq('room_id', activeRoomId)
-            .order('recorded_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-            
-          if (latestReading) {
-            setLiveConditions((prev: any) => ({
-              ...prev,
-              temp: latestReading.temperature_celsius,
-              hum: latestReading.humidity_percentage,
-              date: latestReading.recorded_at
-            }));
-          }
-        } catch (error) {
-          console.error('Error fetching live conditions:', error);
-        }
-      }
-    }, 60000); // Update every 60 seconds
-    
-    return () => clearInterval(interval);
-  }, [activeRoomId]);
-
-  // DEMO DATA: Circular temperature/humidity values
-  const DEMO_TEMP_HUMIDITY_VALUES_LOCAL = DEMO_TEMP_HUMIDITY_VALUES;
-
-  let demoValueIndex = 0;
+  // Track circular demo temperature/humidity index
+  const [demoTempHumIndex, setDemoTempHumIndex] = useState(0);
   
-  // Update demo data every minute in circular fashion
-  useEffect(() => {
-    if (!DEMO_ENABLED) return;
-    
-    const interval = setInterval(() => {
-      demoValueIndex = (demoValueIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length;
-      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[demoValueIndex];
-      
-      setLiveConditions({
-        temp: currentValue.temp,
-        hum: currentValue.hum,
-        date: new Date().toISOString()
-      });
-    }, 60000); // Update every minute
-    
-    return () => clearInterval(interval);
-  }, []);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
   // Update timestamp every 5 minutes
@@ -163,43 +102,30 @@ function FarmerDashboardCore() {
     return () => clearInterval(interval);
   }, []);
 
+  // Circular temperature/humidity values every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDemoTempHumIndex((prev) => (prev + 1) % DEMO_TEMP_HUMIDITY_VALUES.length);
+      
+      // Update live conditions with circular value
+      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[(demoTempHumIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length];
+      setLiveConditions((prev: any) => ({
+        ...prev,
+        temp: currentValue.temp,
+        hum: currentValue.hum,
+        date: new Date().toISOString()
+      }));
+    }, 60000); // Update every 60 seconds
+    
+    return () => clearInterval(interval);
+  }, [demoTempHumIndex]);
+
   useEffect(() => {
     if (!user?.id) return;
 
     const initializeDashboard = async () => {
       try {
         setLoading(true);
-        
-        // If DEMO is enabled, skip all database queries and use demo data only
-        if (DEMO_ENABLED) {
-          const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
-          resetDemoIndex();
-          
-          setLiveConditions({ 
-            temp: firstValue.temp, 
-            hum: firstValue.hum, 
-            date: new Date().toISOString() 
-          });
-          setTemperatureHistory(generateDemoTemperatureHistory());
-          setDoorStats(DEMO_DOOR_STATS);
-          setAlerts(DEMO_ALERTS);
-          setEnergyData(DEMO_ENERGY_DATA);
-          
-          // Set facilities, rooms, and products
-          setFacilities(DEMO_FACILITIES);
-          setRooms(DEMO_ROOMS);
-          setProducts(DEMO_PRODUCTS);
-          setActiveProductData(DEMO_ACTIVE_PRODUCT_DATA);
-          setInventory(DEMO_INVENTORY);
-          
-          setHasAnyApproved(true);
-          setSelectedFacilityId(DEMO_FACILITIES[0].id);
-          setActiveRoomId(DEMO_ROOMS[0].roomId);
-          setActiveProductId(DEMO_PRODUCTS[0].id);
-          
-          setLoading(false);
-          return; // Exit early - don't query database
-        }
         
         const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
@@ -265,6 +191,14 @@ function FarmerDashboardCore() {
             }
             setSelectedFacilityId(currentFac);
         }
+        
+        // Initialize with first demo value
+        const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
+        setLiveConditions({
+          temp: firstValue.temp,
+          hum: firstValue.hum,
+          date: new Date().toISOString()
+        });
       } catch (err) {
         console.error("Init error:", err);
       } finally {
@@ -275,10 +209,9 @@ function FarmerDashboardCore() {
     initializeDashboard();
   }, [user?.id]);
 
-  // Initialize with empty data - or demo data for all farmers
+  // Initialize with empty data
   useEffect(() => {
-    if (!loading && !DEMO_ENABLED) {
-      // Only initialize empty state if DEMO is disabled and data is still empty
+    if (!loading) {
       if (!liveConditions) {
         setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
       }
@@ -295,7 +228,7 @@ function FarmerDashboardCore() {
         setTemperatureHistory([]);
       }
     }
-  }, [loading, DEMO_ENABLED]);
+  }, [loading]);
 
   useEffect(() => {
      if (!activeRoomId || !profileId) return;

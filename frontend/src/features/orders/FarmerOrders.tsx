@@ -175,28 +175,31 @@ const FarmerOrders: React.FC = () => {
               }
           }
           
-          // Call backend API to create sale (instead of direct Supabase)
-          const apiUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-          const response = await fetch(`${apiUrl}/api/orders/`, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
+          // Create sale record directly in Supabase (temporary workaround for demo)
+          // TODO: Replace with backend API once backend is deployed
+          const { data, error } = await supabase
+              .from('sales')
+              .insert([{
                   batch_id: selectedBatchId,
                   quantity_kg: quantityKg,
                   selling_price: pricePerKg,
-                  buyer: buyerName
-              })
-          });
+                  buyer: buyerName,
+                  sold_at: new Date().toISOString()
+              }])
+              .select();
 
-          if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.detail || 'Failed to create order');
+          if (error) throw error;
+
+          // Update batch remaining quantity
+          if (selectedBatch) {
+              const newRemaining = Math.max(0, selectedBatch.remaining_quantity_kg - quantityKg);
+              await supabase
+                  .from('batches')
+                  .update({ remaining_quantity_kg: newRemaining })
+                  .eq('id', selectedBatchId);
           }
 
-          const result = await response.json();
-          console.log('Order created successfully:', result);
+          console.log('Order created successfully:', data);
           
           // Reset form and reload
           setIsModalOpen(false);
@@ -214,7 +217,7 @@ const FarmerOrders: React.FC = () => {
           }
       } catch (err: any) {
           console.error("Failed to create order", err);
-          setSubmitError(err.message || 'Failed to create order. Please ensure the backend is running.');
+          setSubmitError(err.message || 'Failed to create order. Please try again.');
       } finally {
           setSubmitting(false);
       }
