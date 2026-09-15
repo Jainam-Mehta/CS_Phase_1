@@ -101,11 +101,23 @@ const SettingsPage: React.FC = () => {
     try {
       setLoadingFacilities(true);
       
-      // Get all facilities owned by this owner using auth_user_id directly
+      // Get owner's profile
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+      if (!profile) return;
+      
+      // Get all facilities owned by this owner using owner_profile_id
       const { data: facilitiesData, error: facilityError } = await supabase
         .from('facilities')
         .select('id, facility_name, location, created_at')
-        .eq('owner_id', user.id)
+        .eq('owner_profile_id', profile.id)
         .order('facility_name');
       
       if (facilityError) throw facilityError;
