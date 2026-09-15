@@ -19,6 +19,10 @@ import {
   DEMO_DOOR_STATS, 
   DEMO_ALERTS,
   DEMO_INVENTORY,
+  DEMO_PRODUCTS,
+  DEMO_ACTIVE_PRODUCT_DATA,
+  DEMO_FACILITIES,
+  DEMO_ROOMS,
   generateDemoTemperatureHistory,
   resetDemoIndex
 } from '../../utils/demoData';
@@ -178,12 +182,19 @@ function FarmerDashboardCore() {
           setDoorStats(DEMO_DOOR_STATS);
           setAlerts(DEMO_ALERTS);
           setEnergyData([]);
-          setHasAnyApproved(true);
-          setFacilities([{ id: 'demo', name: 'Nashik_Storage_A Facility' }]);
-          setRooms([{ roomId: 'demo', roomName: 'Demo Room', facilityId: 'demo', facilityName: 'Nashik_Storage_A' }]);
-          setSelectedFacilityId('demo');
-          setActiveRoomId('demo');
+          
+          // Set facilities, rooms, and products
+          setFacilities(DEMO_FACILITIES);
+          setRooms(DEMO_ROOMS);
+          setProducts(DEMO_PRODUCTS);
+          setActiveProductData(DEMO_ACTIVE_PRODUCT_DATA);
           setInventory(DEMO_INVENTORY);
+          
+          setHasAnyApproved(true);
+          setSelectedFacilityId(DEMO_FACILITIES[0].id);
+          setActiveRoomId(DEMO_ROOMS[0].roomId);
+          setActiveProductId(DEMO_PRODUCTS[0].id);
+          
           setLoading(false);
           return; // Exit early - don't query database
         }

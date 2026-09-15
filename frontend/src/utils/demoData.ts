@@ -107,6 +107,44 @@ export const generateDemoTemperatureHistory = () => {
   }));
 };
 
+// Demo products
+export const DEMO_PRODUCTS = [
+  {
+    id: 'demo-product-1',
+    name: 'Apple',
+    storage_temp_min: 0.0,
+    storage_temp_max: 2.0,
+    storage_humidity_min: 90.0,
+    storage_humidity_max: 95.0,
+    shelf_life_days: 180
+  }
+];
+
+// Demo active product data
+export const DEMO_ACTIVE_PRODUCT_DATA = {
+  id: 'demo-product-1',
+  name: 'Apple',
+  storage_temp_min: 0.0,
+  storage_temp_max: 2.0,
+  storage_humidity_min: 90.0,
+  storage_humidity_max: 95.0,
+  shelf_life_days: 180
+};
+
+// Demo facilities and rooms
+export const DEMO_FACILITIES = [
+  { id: 'demo-facility-1', name: 'Nashik_Storage_A Facility' }
+];
+
+export const DEMO_ROOMS = [
+  { 
+    roomId: 'demo-room-1', 
+    roomName: 'Storage Room A', 
+    facilityId: 'demo-facility-1', 
+    facilityName: 'Nashik_Storage_A Facility' 
+  }
+];
+
 // Helper to get current demo temperature/humidity with circular rotation
 let demoValueIndex = 0;
 export const getDemoCurrentValues = () => {
