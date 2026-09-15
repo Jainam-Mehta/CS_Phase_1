@@ -187,9 +187,8 @@ const OwnerDashboard: React.FC = () => {
           
           activityByDay.push({
             day,
-            checkIns: batchesAddedCount, // Changed from hardcoded 0: represents farmers adding batches
-            batchesAdded: batchesAddedCount,
-            batchesRemoved: batchesRemovedCount // Changed from hardcoded 0
+            checkIns: batchesRemovedCount, // Green bars: batches removed/harvested
+            batchesAdded: batchesAddedCount // Blue bars: batches added/stored
           });
         }
         
@@ -637,7 +636,7 @@ const OwnerDashboard: React.FC = () => {
                       />
                       {/* Tooltip - positioned to not cause overflow */}
                       <div className="opacity-0 group-hover:opacity-100 absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs rounded px-2 py-1 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10">
-                        {day.checkIns} visits · {day.batchesAdded} batches
+                        {day.checkIns} removed · {day.batchesAdded} added
                       </div>
                     </div>
                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{day.day}</span>
@@ -650,11 +649,11 @@ const OwnerDashboard: React.FC = () => {
             <div className="flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                <span className="text-slate-600 dark:text-slate-400">Check-ins</span>
+                <span className="text-slate-600 dark:text-slate-400">Removed/Harvested</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                <span className="text-slate-600 dark:text-slate-400">Batches</span>
+                <span className="text-slate-600 dark:text-slate-400">Added/Stored</span>
               </div>
             </div>
           </div>
