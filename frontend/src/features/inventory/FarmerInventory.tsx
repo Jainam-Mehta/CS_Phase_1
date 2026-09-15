@@ -272,7 +272,7 @@ const FarmerInventory: React.FC = () => {
                          {batches.map((b, idx) => {
                             // Convert kg to crates (1 crate = 25kg)
                             const crates = convertKgToCrates(b.initial_quantity_kg);
-                            const storedDate = new Date(b.assigned_at || b.created_at);
+                            const storedDate = new Date(b.harvest_date || b.assigned_at || b.created_at);
                             const expiryDate = new Date(b.expiry_date);
                             
                             return (

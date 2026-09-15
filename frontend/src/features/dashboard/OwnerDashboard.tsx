@@ -147,15 +147,24 @@ const OwnerDashboard: React.FC = () => {
         
         setRevenueHistory(weeklyRevenue);
         
-        // 2. Farmer activity - last 7 days (batch additions via this facility's rooms)
+        // 2. Farmer activity - last 7 days (batch additions and removals via this facility's rooms)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
-        const { data: batchesData } = await supabase
+        // Get batches added to this facility's rooms
+        const { data: batchesAddedData } = await supabase
           .from('batch_room_allocations')
-          .select('created_at')
+          .select('assigned_at')
           .in('room_id', roomIds)
-          .gte('created_at', sevenDaysAgo.toISOString());
+          .gte('assigned_at', sevenDaysAgo.toISOString());
+        
+        // Get batches removed from this facility's rooms
+        const { data: batchesRemovedData } = await supabase
+          .from('batch_room_allocations')
+          .select('removed_at')
+          .in('room_id', roomIds)
+          .not('removed_at', 'is', null)
+          .gte('removed_at', sevenDaysAgo.toISOString());
           
         // Group by day
         const activityByDay: any[] = [];
@@ -166,16 +175,21 @@ const OwnerDashboard: React.FC = () => {
           const dayStart = new Date(date.setHours(0, 0, 0, 0));
           const dayEnd = new Date(date.setHours(23, 59, 59, 999));
           
-          const batchesAddedCount = (batchesData || []).filter((b: any) => {
-            const batchDate = new Date(b.created_at);
+          const batchesAddedCount = (batchesAddedData || []).filter((b: any) => {
+            const batchDate = new Date(b.assigned_at);
+            return batchDate >= dayStart && batchDate <= dayEnd;
+          }).length;
+          
+          const batchesRemovedCount = (batchesRemovedData || []).filter((b: any) => {
+            const batchDate = new Date(b.removed_at);
             return batchDate >= dayStart && batchDate <= dayEnd;
           }).length;
           
           activityByDay.push({
             day,
-            checkIns: 0, // Could fetch from access logs if available
+            checkIns: batchesAddedCount, // Changed from hardcoded 0: represents farmers adding batches
             batchesAdded: batchesAddedCount,
-            batchesRemoved: 0
+            batchesRemoved: batchesRemovedCount // Changed from hardcoded 0
           });
         }
         

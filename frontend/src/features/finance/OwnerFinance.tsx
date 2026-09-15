@@ -330,9 +330,6 @@ const OwnerFinance: React.FC = () => {
             <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
               {formatCurrency(financeData?.totalProfit)}
             </p>
-            <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400">
-              <span>Profit Margin: {financeData?.profitMargin}%</span>
-            </div>
           </CardContent>
         </Card>
 

@@ -64,6 +64,21 @@ const OwnerInventory: React.FC = () => {
 
       const roomIds = rooms.map(r => r.id);
 
+      // Find farmers that have APPROVED access to these rooms
+      const { data: accessData } = await supabase
+        .from('farmer_room_access')
+        .select('farmer_id')
+        .in('room_id', roomIds)
+        .eq('status', RoomRequestStatus.Approved);
+
+      if (!accessData || accessData.length === 0) {
+        setInventory([]);
+        setLoading(false);
+        return;
+      }
+
+      const farmerIds = accessData.map(a => a.farmer_id);
+
       // Query batch_room_allocations -> batches -> products -> profiles for farmer name
       const { data: allocationData } = await supabase
         .from('batch_room_allocations')
@@ -88,7 +103,7 @@ const OwnerInventory: React.FC = () => {
             profiles(first_name, last_name)
           )
         `)
-        .in('room_id', roomIds)
+        .in('batches.farmer_id', farmerIds)
         .is('removed_at', null)
         .order('assigned_at', { ascending: false });
 

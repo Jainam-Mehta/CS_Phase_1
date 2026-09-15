@@ -175,28 +175,28 @@ const FarmerOrders: React.FC = () => {
               }
           }
           
-          // Insert into real sales table
-          const { data, error } = await supabase
-              .from('sales')
-              .insert([{
+          // Call backend API to create sale (instead of direct Supabase)
+          const apiUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+          const response = await fetch(`${apiUrl}/api/orders/`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
                   batch_id: selectedBatchId,
                   quantity_kg: quantityKg,
                   selling_price: pricePerKg,
-                  buyer: buyerName,
-                  sold_at: new Date(dispatchDate).toISOString()
-              }])
-              .select();
-          
-          if (error) throw error;
+                  buyer: buyerName
+              })
+          });
 
-          // Update remaining quantity on batch
-          if (selectedBatch && selectedBatch.remaining_quantity_kg !== undefined) {
-              const newRemaining = Math.max(0, selectedBatch.remaining_quantity_kg - quantityKg);
-              await supabase
-                  .from('batches')
-                  .update({ remaining_quantity_kg: newRemaining })
-                  .eq('id', selectedBatchId);
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.detail || 'Failed to create order');
           }
+
+          const result = await response.json();
+          console.log('Order created successfully:', result);
           
           // Reset form and reload
           setIsModalOpen(false);
@@ -212,14 +212,9 @@ const FarmerOrders: React.FC = () => {
               await fetchBatches(profileId);
               await fetchOrders(profileId);
           }
-          
-          if (profileId) {
-              await fetchBatches(profileId);
-              await fetchOrders(profileId);
-          }
       } catch (err: any) {
           console.error("Failed to create order", err);
-          setSubmitError(err.message || 'Failed to create order.');
+          setSubmitError(err.message || 'Failed to create order. Please ensure the backend is running.');
       } finally {
           setSubmitting(false);
       }
