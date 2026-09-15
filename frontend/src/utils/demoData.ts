@@ -11,7 +11,7 @@
  * Other pages (Market Intelligence, Orders, Alerts) still query the database.
  */
 
-export const DEMO_ENABLED = false; // Set to true to enable demo data on dashboard only
+export const DEMO_ENABLED = true; // Set to true to enable demo data on dashboard only
 
 // Demo temperature and humidity values (15 circular values)
 export const DEMO_TEMP_HUMIDITY_VALUES = [
