@@ -517,15 +517,22 @@ const SettingsPage: React.FC = () => {
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                       {requests.length > 0 ? (
-                        requests.map((req, idx) => (
-                          <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{req.room?.cold_storage_rooms?.facility_name || 'Unknown Facility'}</td>
-                            <td className="px-6 py-4 text-gray-500">{req.room?.room_name || 'Unknown Room'}</td>
-                            <td className="px-6 py-4 text-gray-500">{new Date(req.requested_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
-                            <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                            <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
-                          </tr>
-                        ))
+                        requests.map((req, idx) => {
+                          // Extract facility name from nested structure
+                          const room = Array.isArray(req.cold_storage_rooms) ? req.cold_storage_rooms[0] : req.cold_storage_rooms;
+                          const facilities = Array.isArray(room?.facilities) ? room?.facilities[0] : room?.facilities;
+                          const facilityName = facilities?.facility_name || room?.facilities?.facility_name || 'Unknown Facility';
+                          
+                          return (
+                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                              <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{facilityName}</td>
+                              <td className="px-6 py-4 text-gray-500">{room?.room_name || '—'}</td>
+                              <td className="px-6 py-4 text-gray-500">{new Date(req.requested_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                              <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                              <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
                           <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
