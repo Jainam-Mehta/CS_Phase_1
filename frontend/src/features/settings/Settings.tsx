@@ -516,20 +516,23 @@ const SettingsPage: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Nashik_Storage_A Facility</td>
-                        <td className="px-6 py-4 text-gray-500">Sep 1, 2026</td>
-                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
-                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
-                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                      </tr>
-                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Kullu_Site_Room_A+B Facility</td>
-                        <td className="px-6 py-4 text-gray-500">Sep 4, 2026</td>
-                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
-                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
-                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                      </tr>
+                      {requests.length > 0 ? (
+                        requests.map((req, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{req.room?.cold_storage_rooms?.facility_name || 'Unknown Facility'}</td>
+                            <td className="px-6 py-4 text-gray-500">{req.room?.room_name || 'Unknown Room'}</td>
+                            <td className="px-6 py-4 text-gray-500">{new Date(req.requested_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                            <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                            <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                            No storage requests yet. Submit your first request to get started!
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                  </table>
                </div>
