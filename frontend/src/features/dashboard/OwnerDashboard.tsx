@@ -5,8 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
-
-// NO DEMO DATA - All data from database
+import { DEMO_ENABLED, DEMO_OWNER_FINANCE } from '../../utils/demoData';
 
 const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
@@ -43,6 +42,15 @@ const OwnerDashboard: React.FC = () => {
   const loadFacilityData = async () => {
     try {
       setLoading(true);
+
+      // DEMO MODE: Use hardcoded demo finance data
+      if (DEMO_ENABLED) {
+        setRevenueHistory(DEMO_OWNER_FINANCE.weekly_revenue);
+        setFarmerActivity(DEMO_OWNER_FINANCE.farmer_activity);
+        setEnergyHistory(DEMO_OWNER_FINANCE.energy_consumption);
+        setLoading(false);
+        return;
+      }
 
       // Fetch Rooms for selected facility
       const { data: rmData } = await supabase

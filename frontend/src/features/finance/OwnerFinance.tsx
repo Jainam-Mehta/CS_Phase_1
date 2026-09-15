@@ -6,8 +6,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTo
 import { TrendingUp, TrendingDown, DollarSign, Users, IndianRupee, Zap, Wrench, Package, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { convertKgToCrates } from '../../utils/units';
-
-// NO DEMO DATA - All data from database
+import { DEMO_ENABLED, DEMO_OWNER_FINANCE } from '../../utils/demoData';
 
 const OwnerFinance: React.FC = () => {
   const { user } = useAuthStore();
@@ -24,6 +23,28 @@ const OwnerFinance: React.FC = () => {
   const loadFinanceData = async () => {
     try {
       setLoading(true);
+
+      // DEMO MODE: Use hardcoded demo finance data
+      if (DEMO_ENABLED) {
+        setFinanceData({
+          currentMonth: 'September 2026',
+          totalRevenue: DEMO_OWNER_FINANCE.total_revenue / 100000, // Convert to Lakh (divide by 100k)
+          totalExpenses: DEMO_OWNER_FINANCE.total_expenses / 100000,
+          totalProfit: DEMO_OWNER_FINANCE.net_profit / 100000,
+          profitMargin: ((DEMO_OWNER_FINANCE.net_profit / DEMO_OWNER_FINANCE.total_revenue) * 100).toFixed(1),
+          farmerRevenue: [],
+          expenses: [
+            { name: 'HVAC Water Check', value: DEMO_OWNER_FINANCE.breakdown.hvac_water_check / 100, color: '#3b82f6' },
+            { name: 'Inverter Replaced', value: DEMO_OWNER_FINANCE.breakdown.inverter_replaced / 100, color: '#ef4444' }
+          ],
+          monthlyTrend: DEMO_OWNER_FINANCE.six_month_trend,
+          totalCrates: DEMO_OWNER_FINANCE.crates_stored,
+          totalFarmers: DEMO_OWNER_FINANCE.active_farmers,
+          avgPricePerCrate: '715.9',
+        });
+        setLoading(false);
+        return;
+      }
 
       // 1. Get rooms for selected facility
       const { data: rmData } = await supabase

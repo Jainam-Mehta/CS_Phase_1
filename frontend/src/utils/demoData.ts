@@ -66,33 +66,37 @@ export const DEMO_ALERTS = [
   }
 ];
 
-// Inventory (Batches)
+// Inventory (Batches) - with farmer names
 export const DEMO_INVENTORY = [
   {
     id: 'demo-batch-1',
     batch_code: 'BATCH-1789466259570-205BSI',
     product_name: 'Apple',
     product_id: 'demo-product-1',
-    quantity_kg: 250,
+    quantity_kg: 75, // 3 crates × 25kg
     stored_date: '2026-09-03',
     remaining_quantity_kg: 75,
-    initial_quantity_kg: 250,
+    initial_quantity_kg: 75,
     harvest_date: '2026-09-03',
     quality_grade: 'A',
-    expiry_date: '2026-03-03'
+    expiry_date: '2026-03-03',
+    farmer_name: 'Roy',
+    crates: 3
   },
   {
     id: 'demo-batch-2',
     batch_code: 'BATCH-1789466295723-2XGOBE',
     product_name: 'Apple',
     product_id: 'demo-product-1',
-    quantity_kg: 200,
+    quantity_kg: 200, // 8 crates × 25kg
     stored_date: '2026-09-15',
     remaining_quantity_kg: 200,
     initial_quantity_kg: 200,
     harvest_date: '2026-09-15',
     quality_grade: 'A',
-    expiry_date: '2027-03-15'
+    expiry_date: '2027-03-15',
+    farmer_name: 'Roy',
+    crates: 8
   }
 ];
 
@@ -180,7 +184,7 @@ export const DEMO_OWNER_SENSORS = [
   { id: 1, icon: 'droplets', name: 'AmbientHumidity', reading: '69%', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientHumidity', display_name: 'AmbientHumidity', last_reading_value: 69, last_reading_unit: '%' },
   { id: 2, icon: 'thermometer', name: 'AmbientTemperature', reading: '31°C', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientTemperature', display_name: 'AmbientTemperature', last_reading_value: 31, last_reading_unit: '°C' },
   { id: 3, icon: 'battery', name: 'Battery', reading: '100%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Battery', display_name: 'Battery', last_reading_value: 100, last_reading_unit: '%', battery_percentage: 100 },
-  { id: 4, icon: 'door-open', name: 'Door', reading: 'Closed', status: 'Active', maintenance: 'Not Required', sensor_type: 'Door', display_name: 'Door', last_reading_value: null, last_reading_unit: '' },
+  { id: 4, icon: 'door-open', name: 'Door', reading: 'Closed', status: 'Active', maintenance: 'Not Required', sensor_type: 'Door', display_name: 'Door', last_reading_value: null, last_reading_unit: 'Closed' },
   { id: 5, icon: 'wind', name: 'Ethylene', reading: '2.4 ppm', status: 'Active', maintenance: 'Not Required', sensor_type: 'Ethylene', display_name: 'Ethylene', last_reading_value: 2.4, last_reading_unit: 'ppm' },
   { id: 6, icon: 'zap', name: 'GridPower', reading: '0 W', status: 'Active', maintenance: 'Not Required', sensor_type: 'GridPower', display_name: 'GridPower', last_reading_value: 0, last_reading_unit: 'W' },
   { id: 7, icon: 'droplets', name: 'Humidity', reading: '92.3%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Humidity', display_name: 'Humidity', last_reading_value: 92.3, last_reading_unit: '%' },
@@ -214,7 +218,7 @@ export const DEMO_OWNER_INVENTORY_OVERVIEW = {
 export const DEMO_OWNER_FINANCE = {
   active_farmers: 1,
   crates_stored: 11,
-  total_revenue: 787500, // ₹7,875 in Lakhs format (7.875 L)
+  total_revenue: 787500, // ₹7,875 in Lakhs format (0.07875 L)
   total_expenses: 20000, // ₹200 in Lakhs format (0.002 L) - only 15 days
   net_profit: 767500, // Revenue - Expenses
   breakdown: {
@@ -227,7 +231,32 @@ export const DEMO_OWNER_FINANCE = {
     { month: 'June', revenue: 0, expenses: 0, profit: 0 },
     { month: 'July', revenue: 0, expenses: 0, profit: 0 },
     { month: 'August', revenue: 0, expenses: 0, profit: 0 },
-    { month: 'September', revenue: 787500, expenses: 20000, profit: 767500 }
+    { month: 'September', revenue: 78750, expenses: 20000, profit: 58750 } // ₹0.7875L revenue, ₹0.002L expenses, ₹0.58750L profit
+  ],
+  weekly_revenue: [
+    { week: 'Week 1', revenue: 0 },
+    { week: 'Week 2', revenue: 0 },
+    { week: 'Week 3', revenue: 0 },
+    { week: 'Week 4', revenue: 78750 }
+  ],
+  farmer_activity: [
+    { day: 'Wed', removed: 0, added: 0 },
+    { day: 'Thu', removed: 0, added: 0 },
+    { day: 'Fri', removed: 0, added: 0 },
+    { day: 'Sat', removed: 0, added: 0 },
+    { day: 'Sun', removed: 0, added: 0 },
+    { day: 'Mon', removed: 0, added: 0 },
+    { day: 'Tue', removed: 7, added: 8 } // 7 crates removed (sold), 8 crates added (new batch)
+  ],
+  energy_consumption: [
+    { date: '08/09', solar: 0, grid: 0 },
+    { date: '09/09', solar: 0, grid: 0 },
+    { date: '10/09', solar: 0, grid: 0 },
+    { date: '11/09', solar: 0, grid: 0 },
+    { date: '12/09', solar: 0, grid: 0 },
+    { date: '13/09', solar: 0, grid: 0 },
+    { date: '14/09', solar: 0, grid: 0 },
+    { date: '15/09', solar: 723.81, grid: 32.19 }
   ]
 };
 
