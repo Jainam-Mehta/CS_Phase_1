@@ -151,8 +151,11 @@ const FarmerInventory: React.FC = () => {
 
       setSubmitting(true);
       try {
+         console.log('🔍 DEBUG: Adding inventory', { profileId, targetRoom, targetProduct, qty, harvestDate });
+         
          // Convert crates to kg using centralized helper
          const quantityInKg = convertCratesToKg(parseFloat(qty));
+         console.log('🔍 DEBUG: Converted to KG:', quantityInKg);
          
          // Get product_id from product name
          const { data: productData } = await supabase
@@ -164,6 +167,8 @@ const FarmerInventory: React.FC = () => {
          if (!productData) {
              throw new Error('Product not found. Please select a valid product.');
          }
+
+         console.log('🔍 DEBUG: Product found:', productData);
 
          // Generate unique batch_code
          const batchCode = `BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -187,13 +192,20 @@ const FarmerInventory: React.FC = () => {
              remarks: null,
          };
 
+         console.log('🔍 DEBUG: Batch payload:', batchPayload);
+
          const { data: batchData, error: batchError } = await supabase
            .from('batches')
            .insert([batchPayload])
            .select()
            .single();
 
-         if (batchError) throw batchError;
+         if (batchError) {
+             console.error('❌ ERROR: Batch insert failed:', batchError);
+             throw batchError;
+         }
+
+         console.log('✅ DEBUG: Batch created successfully:', batchData);
 
          // Step 2: Insert into batch_room_allocations
          const allocationPayload = {
@@ -204,11 +216,18 @@ const FarmerInventory: React.FC = () => {
              removed_at: null,
          };
 
+         console.log('🔍 DEBUG: Allocation payload:', allocationPayload);
+
          const { error: allocationError } = await supabase
            .from('batch_room_allocations')
            .insert([allocationPayload]);
 
-         if (allocationError) throw allocationError;
+         if (allocationError) {
+             console.error('❌ ERROR: Allocation insert failed:', allocationError);
+             throw allocationError;
+         }
+
+         console.log('✅ DEBUG: Allocation created successfully');
          
          setIsModalOpen(false);
          setTargetProduct('');
@@ -220,7 +239,7 @@ const FarmerInventory: React.FC = () => {
          }
 
       } catch (err: any) {
-          console.error('Inventory creation error:', err);
+          console.error('❌ Inventory creation error:', err);
           setSubmitError(err.message || 'Failed to add inventory.');
       } finally {
           setSubmitting(false);

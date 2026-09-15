@@ -34,11 +34,15 @@ const OwnerInventory: React.FC = () => {
 
       if (!profile) return;
 
+      console.log('🔍 DEBUG Owner: Profile ID:', profile.id);
+
       // Get ALL facilities for this owner
       const { data: facilitiesData } = await supabase
         .from('facilities')
         .select('id, facility_name, capacity_kg, current_utilization_kg')
         .eq('owner_profile_id', profile.id);
+
+      console.log('🔍 DEBUG Owner: Facilities found:', facilitiesData?.length || 0, facilitiesData);
 
       if (!facilitiesData || facilitiesData.length === 0) {
         setInventory([]);
@@ -55,6 +59,7 @@ const OwnerInventory: React.FC = () => {
         .in('facility_id', facilityIds);
 
       const rooms = rmData || [];
+      console.log('🔍 DEBUG Owner: Rooms found:', rooms.length, rooms);
 
       if (rooms.length === 0) {
         setInventory([]);
@@ -71,6 +76,8 @@ const OwnerInventory: React.FC = () => {
         .in('room_id', roomIds)
         .eq('status', RoomRequestStatus.Approved);
 
+      console.log('🔍 DEBUG Owner: Approved farmers:', accessData?.length || 0, accessData);
+
       if (!accessData || accessData.length === 0) {
         setInventory([]);
         setLoading(false);
@@ -78,6 +85,7 @@ const OwnerInventory: React.FC = () => {
       }
 
       const farmerIds = accessData.map(a => a.farmer_id);
+      console.log('🔍 DEBUG Owner: Farmer IDs to query:', farmerIds);
 
       // Query batch_room_allocations -> batches -> products -> profiles for farmer name
       const { data: allocationData } = await supabase
@@ -107,6 +115,8 @@ const OwnerInventory: React.FC = () => {
         .is('removed_at', null)
         .order('assigned_at', { ascending: false });
 
+      console.log('🔍 DEBUG Owner: Allocations found:', allocationData?.length || 0, allocationData);
+
       // Transform the data
       const transformedInventory = allocationData?.map((allocation: any) => {
         const products = allocation.batches.products;
@@ -126,9 +136,10 @@ const OwnerInventory: React.FC = () => {
         };
       }) || [];
 
+      console.log('✅ DEBUG Owner: Final inventory:', transformedInventory.length, transformedInventory);
       setInventory(transformedInventory);
     } catch (error) {
-      console.error('Error loading inventory:', error);
+      console.error('❌ Error loading inventory:', error);
       setInventory([]);
     } finally {
       setLoading(false);
