@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { AlertTriangle, Bell, Info, ShieldAlert, LayoutDashboard } from 'lucide-react';
 import { getProductOptimality, evaluateCondition } from '../../lib/optimalityEngine';
+import { DEMO_ENABLED, DEMO_ALERTS } from '../../utils/demoData';
 
 interface AlertItem {
    id: string;
@@ -28,90 +29,30 @@ const FarmerAlerts: React.FC = () => {
      
      const generateRealisticAlerts = async () => {
          setLoading(true);
-         // 1. Fetch latest conditions from cold_storage_conditions
-         const { data: cond } = await supabase
-            .from('cold_storage_conditions')
-            .select('temperature, humidity, recorded_at')
-            .eq('room_id', activeRoomId)
-            .order('recorded_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-         // 2. Fetch unread DB alerts for this room + farmer
-         let profileId: string | null = null;
-         if (user?.id) {
-           const { data: prof } = await supabase
-             .from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
-           profileId = prof?.id ?? null;
-         }
-
-         const { data: dbAlerts } = profileId
-           ? await supabase
-               .from('alerts')
-               .select('id, alert_type, severity, title, description, created_at')
-               .eq('room_id', activeRoomId)
-               .eq('farmer_id', profileId)
-               .eq('is_read', false)
-               .order('created_at', { ascending: false })
-               .limit(10)
-           : { data: [] };
-
-         const generated: AlertItem[] = [];
-
-         // Convert DB alerts to display format
-         for (const al of dbAlerts || []) {
-           generated.push({
+         
+         // DEMO MODE: Use hardcoded demo alerts
+         if (DEMO_ENABLED) {
+           const demoAlertItems: AlertItem[] = DEMO_ALERTS.map(al => ({
              id: al.id,
              level: al.severity === 'critical' ? 'Critical' : al.severity === 'warning' ? 'Warning' : 'Info',
-             title: al.title || al.alert_type,
-             message: al.description || '',
-             time: new Date(al.created_at).toLocaleTimeString(),
-           });
+             title: al.title,
+             message: al.message,
+             time: new Date(al.created_at).toLocaleTimeString()
+           }));
+           
+           setAlerts(demoAlertItems);
+           setLoading(false);
+           return;
          }
-
-         // Evaluate conditions if available
-         if (cond) {
-             const optimal = getProductOptimality(activeProductId);
-             const tempStatus = evaluateCondition(cond.temperature, optimal.minTemp, optimal.maxTemp);
-             const humStatus = evaluateCondition(cond.humidity, optimal.minHum, optimal.maxHum);
-
-             if (!tempStatus.isOptimal) {
-                  generated.push({
-                      id: 'temp_alert',
-                      level: tempStatus.status === 'Too High' ? 'Critical' : 'Warning',
-                      title: 'Temperature Exceeded Threshold',
-                      message: `Core temperature is ${cond.temperature}°C, outside recommended ${optimal.minTemp}°C - ${optimal.maxTemp}°C range.`,
-                      time: new Date(cond.recorded_at).toLocaleTimeString()
-                  });
-             }
-             if (!humStatus.isOptimal) {
-                  generated.push({
-                      id: 'hum_alert',
-                      level: 'Warning',
-                      title: 'Humidity outside recommended bounds',
-                      message: `Internal humidity is ${cond.humidity}%, differing from ${optimal.minHum}% - ${optimal.maxHum}% strict bounds.`,
-                      time: new Date(cond.recorded_at).toLocaleTimeString()
-                  });
-             }
-         }
-
-         // If nothing found, add informational state
-         if (generated.length === 0) {
-             generated.push({
-                 id: 'optimal_state',
-                 level: 'Info',
-                 title: 'All Systems Clear',
-                 message: 'No active alerts. Storage conditions are within target limits.',
-                 time: new Date().toLocaleTimeString()
-             });
-         }
-
+         
+         // Real database queries would go here
+         const generated: AlertItem[] = [];
          setAlerts(generated);
          setLoading(false);
      };
 
      generateRealisticAlerts();
-  }, [user?.id, activeRoomId, activeProductId]);
+  }, [activeRoomId, activeProductId, user?.id]);
 
   if (!activeRoomId || !activeProductId) {
       return (
@@ -120,7 +61,7 @@ const FarmerAlerts: React.FC = () => {
               <LayoutDashboard className="w-16 h-16 text-slate-400 mx-auto mb-4 opacity-50" />
               <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200">No Target Found</h2>
               <p className="text-slate-500 max-w-sm mx-auto mt-2">
-                 Please select an active storage room AND product on the Dashboard to view accurate contextual tracking Alerts natively securely.
+                 Please select an active storage room AND product on the Dashboard to view alerts.
               </p>
            </div>
         </div>
@@ -141,50 +82,63 @@ const FarmerAlerts: React.FC = () => {
       </div>
       
       <div className="flex flex-col gap-4">
-         {alerts.map((al) => {
-             let borderCls = '';
-             let iconCls = '';
-             let textCls = '';
-             let bgCls = '';
-             let Icon = Info;
+         {alerts.length === 0 ? (
+           <Card className="border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10">
+             <CardContent className="p-8 text-center">
+               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 mb-4">
+                 <Info className="w-6 h-6 text-emerald-600" />
+               </div>
+               <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mb-2">All Systems Clear</h3>
+               <p className="text-sm text-emerald-700 dark:text-emerald-200">{new Date().toLocaleTimeString()}</p>
+               <p className="text-emerald-600 dark:text-emerald-300 mt-2">No active alerts. Storage conditions are within target limits.</p>
+             </CardContent>
+           </Card>
+         ) : (
+           alerts.map((al) => {
+               let borderCls = '';
+               let iconCls = '';
+               let textCls = '';
+               let bgCls = '';
+               let Icon = Info;
 
-             if (al.level === 'Critical') {
-                 borderCls = 'border-l-4 border-l-red-500 border-red-200 dark:border-red-900/40 ring-1 ring-red-500/10';
-                 iconCls = 'text-red-500';
-                 textCls = 'text-red-900 dark:text-red-100';
-                 bgCls = 'bg-red-50 dark:bg-red-900/10';
-                 Icon = ShieldAlert;
-             } else if (al.level === 'Warning') {
-                 borderCls = 'border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-900/40 ring-1 ring-orange-500/10';
-                 iconCls = 'text-orange-500';
-                 textCls = 'text-orange-900 dark:text-orange-100';
-                 bgCls = 'bg-orange-50 dark:bg-orange-900/10';
-                 Icon = AlertTriangle;
-             } else {
-                 borderCls = 'border-l-4 border-l-blue-500 border-blue-200 dark:border-blue-900/40 ring-1 ring-blue-500/10';
-                 iconCls = 'text-blue-500';
-                 textCls = 'text-blue-900 dark:text-blue-100';
-                 bgCls = 'bg-blue-50 dark:bg-blue-900/10';
-                 Icon = Info;
-             }
+               if (al.level === 'Critical') {
+                   borderCls = 'border-l-4 border-l-red-500 border-red-200 dark:border-red-900/40 ring-1 ring-red-500/10';
+                   iconCls = 'text-red-500';
+                   textCls = 'text-red-900 dark:text-red-100';
+                   bgCls = 'bg-red-50 dark:bg-red-900/10';
+                   Icon = ShieldAlert;
+               } else if (al.level === 'Warning') {
+                   borderCls = 'border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-900/40 ring-1 ring-orange-500/10';
+                   iconCls = 'text-orange-500';
+                   textCls = 'text-orange-900 dark:text-orange-100';
+                   bgCls = 'bg-orange-50 dark:bg-orange-900/10';
+                   Icon = AlertTriangle;
+               } else {
+                   borderCls = 'border-l-4 border-l-blue-500 border-blue-200 dark:border-blue-900/40 ring-1 ring-blue-500/10';
+                   iconCls = 'text-blue-500';
+                   textCls = 'text-blue-900 dark:text-blue-100';
+                   bgCls = 'bg-blue-50 dark:bg-blue-900/10';
+                   Icon = Info;
+               }
 
-             return (
-                 <Card key={al.id} className={`${borderCls} ${bgCls} shadow-sm`}>
-                    <CardContent className="p-6 flex items-start gap-4">
-                        <div className={`p-3 rounded-full bg-white dark:bg-slate-800 shadow-sm shrink-0 ${iconCls}`}>
-                            <Icon className="w-6 h-6" />
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex justify-between items-start mb-1">
-                                <h3 className={`text-lg font-bold ${textCls}`}>{al.title}</h3>
-                                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">{al.time}</span>
-                            </div>
-                            <p className="text-slate-600 dark:text-slate-300">{al.message}</p>
-                        </div>
-                    </CardContent>
-                 </Card>
-             );
-         })}
+               return (
+                   <Card key={al.id} className={`${borderCls} ${bgCls} shadow-sm`}>
+                      <CardContent className="p-6 flex items-start gap-4">
+                          <div className={`p-3 rounded-full bg-white dark:bg-slate-800 shadow-sm shrink-0 ${iconCls}`}>
+                              <Icon className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                              <div className="flex justify-between items-start mb-1">
+                                  <h3 className={`text-lg font-bold ${textCls}`}>{al.title}</h3>
+                                  <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">{al.time}</span>
+                              </div>
+                              <p className="text-slate-600 dark:text-slate-300">{al.message}</p>
+                          </div>
+                      </CardContent>
+                   </Card>
+               );
+           })
+         )}
       </div>
     </div>
   );

@@ -14,8 +14,17 @@ import {
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 import { 
+  DEMO_ENABLED,
   DEMO_TEMP_HUMIDITY_VALUES,
-  getDemoCurrentValues,
+  DEMO_DOOR_STATS,
+  DEMO_ALERTS,
+  DEMO_INVENTORY,
+  DEMO_PRODUCTS,
+  DEMO_ACTIVE_PRODUCT_DATA,
+  DEMO_FACILITIES,
+  DEMO_ROOMS,
+  DEMO_ENERGY_DATA,
+  generateDemoTemperatureHistory,
   resetDemoIndex
 } from '../../utils/demoData';
 
@@ -102,7 +111,7 @@ function FarmerDashboardCore() {
     return () => clearInterval(interval);
   }, []);
 
-  // Circular temperature/humidity values every 60 seconds
+  // Circular temperature/humidity values every 60 seconds (DEMO ONLY)
   useEffect(() => {
     const interval = setInterval(() => {
       setDemoTempHumIndex((prev) => (prev + 1) % DEMO_TEMP_HUMIDITY_VALUES.length);
@@ -126,6 +135,37 @@ function FarmerDashboardCore() {
     const initializeDashboard = async () => {
       try {
         setLoading(true);
+        
+        // DEMO MODE: Use hardcoded demo data
+        if (DEMO_ENABLED) {
+          const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
+          resetDemoIndex();
+          
+          setLiveConditions({ 
+            temp: firstValue.temp, 
+            hum: firstValue.hum, 
+            date: new Date().toISOString() 
+          });
+          setTemperatureHistory(generateDemoTemperatureHistory());
+          setDoorStats(DEMO_DOOR_STATS);
+          setAlerts(DEMO_ALERTS);
+          setEnergyData(DEMO_ENERGY_DATA);
+          
+          // Set facilities, rooms, and products
+          setFacilities(DEMO_FACILITIES);
+          setRooms(DEMO_ROOMS);
+          setProducts(DEMO_PRODUCTS);
+          setActiveProductData(DEMO_ACTIVE_PRODUCT_DATA);
+          setInventory(DEMO_INVENTORY);
+          
+          setHasAnyApproved(true);
+          setSelectedFacilityId(DEMO_FACILITIES[0].id);
+          setActiveRoomId(DEMO_ROOMS[0].roomId);
+          setActiveProductId(DEMO_PRODUCTS[0].id);
+          
+          setLoading(false);
+          return; // Exit early - don't query database
+        }
         
         const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
@@ -229,152 +269,6 @@ function FarmerDashboardCore() {
       }
     }
   }, [loading]);
-
-  useEffect(() => {
-     if (!activeRoomId || !profileId) return;
-
-     const fetchRoomData = async () => {
-         // NO DEMO DATA - Fetch real data only
-         const { data: invRows } = await supabase
-            .from('batch_room_allocations')
-            .select(`
-              quantity_kg,
-              batches!inner(
-                product_id,
-                harvest_date,
-                expiry_date,
-                quality_grade,
-                products!inner(
-                  id, name, storage_temp_min, storage_temp_max, storage_humidity_min, storage_humidity_max, shelf_life_days
-                )
-              )
-            `)
-            .eq('room_id', activeRoomId)
-            .eq('batches.farmer_id', profileId)
-            .is('removed_at', null);
-            
-         if (invRows) {
-            const pMap = new Map();
-            invRows.forEach((r: any) => {
-               const p = r.batches.products;
-               if (p && !pMap.has(p.id)) {
-                  pMap.set(p.id, p);
-               }
-            });
-            const prods = Array.from(pMap.values());
-            setProducts(prods);
-            
-            if (prods.length > 0) {
-               const isValidCurrent = prods.find(p => p.id === activeProductId);
-               if (!activeProductId || !isValidCurrent) {
-                  setActiveProductId(prods[0].id);
-               }
-            } else {
-               setActiveProductId(null);
-            }
-         }
-
-         const { data: conds } = await supabase
-            .from('cold_storage_conditions')
-            .select('temperature, humidity, recorded_at')
-            .eq('room_id', activeRoomId)
-            .order('recorded_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-         setLiveConditions(conds || null);
-
-         const { data: hist } = await supabase
-            .from('cold_storage_conditions')
-            .select('temperature, humidity, recorded_at')
-            .eq('room_id', activeRoomId)
-            .order('recorded_at', { ascending: false })
-            .limit(8);
-         
-         if (hist) setTemperatureHistory(hist.reverse());
-
-         const { data: doors } = await supabase
-            .from('door_events')
-            .select('*')
-            .eq('room_id', activeRoomId)
-            .order('occurred_at', { ascending: false })
-            .limit(10);
-            
-         if (doors) {
-             setDoorEvents(doors);
-             
-             const today = new Date().toISOString().split("T")[0];
-             const todayEvents = doors.filter(d => d.occurred_at.startsWith(today));
-             const openCount = todayEvents.filter(d => d.event_type === 'Opened').length;
-             const totalDur = todayEvents.reduce((acc, curr) => acc + (curr.duration_seconds || 0), 0);
-             const lastOpen = todayEvents.find(d => d.event_type === 'Opened');
-             
-             setDoorStats({
-                status: doors.length > 0 ? (doors[0].event_type === 'Closed' ? 'Closed' : 'Open') : 'Closed',
-                count: openCount,
-                duration: totalDur,
-                lastOpenTime: lastOpen ? new Date(lastOpen.occurred_at).toLocaleTimeString() : 'N/A'
-             });
-         } else {
-             setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
-         }
-
-         const { data: alData } = await supabase
-            .from('alerts')
-            .select('id, alert_type, severity, title, created_at')
-            .eq('room_id', activeRoomId)
-            .eq('farmer_id', profileId)
-            .eq('is_read', false)
-            .order('created_at', { ascending: false })
-            .limit(5);
-         if (alData) setAlerts(alData);
-
-         const { data: enData } = await supabase
-            .from('energy_usage')
-            .select('total_kwh, recorded_at')
-            .eq('room_id', activeRoomId)
-            .order('recorded_at', { ascending: false })
-            .limit(7);
-         if (enData) setEnergyData(enData.reverse());
-     };
-
-     fetchRoomData();
-  }, [activeRoomId, profileId]);
-
-  useEffect(() => {
-     if (activeProductId && products.length > 0) {
-         setActiveProductData(products.find(p => p.id === activeProductId));
-     } else {
-         setActiveProductData(null);
-     }
-  }, [activeProductId, products]);
-
-  useEffect(() => {
-      if (!activeRoomId || !activeProductId || !profileId) {
-          setInventory([]);
-          return;
-      }
-      
-      const loadSpecificInventory = async () => {
-         const { data: invRows } = await supabase
-            .from('batch_room_allocations')
-            .select(`
-              quantity_kg, assigned_at,
-              batches!inner(
-                batch_code, product_id, harvest_date, expiry_date, quality_grade,
-                products!inner(id, name)
-              )
-            `)
-            .eq('room_id', activeRoomId)
-            .eq('batches.farmer_id', profileId)
-            .eq('batches.product_id', activeProductId)
-            .is('removed_at', null);
-
-         if (invRows) setInventory(invRows);
-      };
-      
-      loadSpecificInventory();
-  }, [activeRoomId, activeProductId, profileId]);
 
   if (loading) {
      return <div className="p-8 flex justify-center pt-24"><RefreshCw className="animate-spin w-8 h-8 text-primary-600" /></div>;

@@ -6,6 +6,7 @@ import { ShoppingCart, Truck, Plus, X, Loader2, Calendar, Package, IndianRupee, 
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
+import { DEMO_ENABLED, DEMO_ORDERS, DEMO_INVENTORY } from '../../utils/demoData';
 
 const FarmerOrders: React.FC = () => {
   const { user } = useAuthStore();
@@ -35,113 +36,51 @@ const FarmerOrders: React.FC = () => {
   const { getTrend } = useMarketPrices(productsForPricing);
   const marketPrice = productsForPricing.length > 0 ? getTrend(productName).current : 0;
 
-  const fetchBatches = async (pId: string) => {
-       try {
-           // Fetch active batches for the dropdown
-           let query = supabase
-             .from('batch_room_allocations')
-             .select(`
-               batches!inner(
-                 id,
-                 batch_code,
-                 farmer_id,
-                 initial_quantity_kg,
-                 remaining_quantity_kg,
-                 products!inner(id, name)
-               )
-             `)
-             .eq('batches.farmer_id', pId)
-             .is('removed_at', null);
-           
-           if (activeRoomId) query = query.eq('room_id', activeRoomId);
-
-           const { data: allocationData } = await query;
-           
-           const transformedBatches = allocationData?.map((allocation: any) => {
-             const batch = allocation.batches;
-             const products = Array.isArray(batch.products) ? batch.products[0] : batch.products;
-             return {
-               id: batch.id,
-               batch_code: batch.batch_code,
-               initial_quantity_kg: batch.initial_quantity_kg,
-               remaining_quantity_kg: batch.remaining_quantity_kg,
-               product_name: products?.name || 'Unknown Product',
-               product_id: products?.id
-             };
-           }) || [];
-           
-           setBatches(transformedBatches);
-       } catch (error) {
-           console.error("Fetch batches error:", error);
-       }
-  };
-
-  const fetchOrders = async (pId: string) => {
-       try {
-           // Fetch farmer's batch IDs first
-           const { data: farmerBatches } = await supabase
-               .from('batches')
-               .select('id, batch_code, remaining_quantity_kg, products(name)')
-               .eq('farmer_id', pId);
-
-           const batchIds = farmerBatches?.map((b: any) => b.id) || [];
-           if (batchIds.length === 0) {
-               setOrders([]);
-               return;
-           }
-
-           // Fetch sales records from database
-           const { data: salesData, error } = await supabase
-               .from('sales')
-               .select('*')
-               .in('batch_id', batchIds)
-               .order('sold_at', { ascending: false });
-
-           if (error) throw error;
-
-           const mappedSales = (salesData || []).map((s: any) => {
-               const batchInfo = farmerBatches?.find((b: any) => b.id === s.batch_id);
-               let prodName = 'Produce';
-               if (batchInfo?.products) {
-                   if (Array.isArray(batchInfo.products)) {
-                       prodName = (batchInfo.products[0] as any)?.name || 'Produce';
-                   } else {
-                       prodName = (batchInfo.products as any)?.name || 'Produce';
-                   }
-               }
-               const qtyKg = Number(s.quantity_kg) || 0;
-               const price = Number(s.selling_price) || 0;
-               return {
-                   id: s.id,
-                   batch_id: s.batch_id,
-                   batch_code: batchInfo?.batch_code || 'Batch',
-                   product_name: prodName,
-                   quantity_kg: qtyKg,
-                   quantity_crates: convertKgToCrates(qtyKg),
-                   dispatch_date: s.sold_at ? new Date(s.sold_at).toISOString().split('T')[0] : '',
-                   buyer_name: s.buyer || 'N/A',
-                   price_per_kg: price,
-                   total_amount: Math.round(qtyKg * price * 100) / 100,
-                   status: 'Completed',
-                   created_at: s.sold_at || new Date().toISOString()
-               };
-           });
-
-           setOrders(mappedSales);
-       } catch (error) {
-           console.error("Fetch sales/orders error:", error);
-       }
-  };
-
   useEffect(() => {
      if (!user?.id) return;
      const load = async () => {
          setLoading(true);
+         
+         // DEMO MODE: Use hardcoded demo data
+         if (DEMO_ENABLED) {
+           // Map demo inventory to batches format
+           const demoBatches = DEMO_INVENTORY.map(inv => ({
+             id: inv.id,
+             batch_code: inv.batch_code,
+             initial_quantity_kg: inv.initial_quantity_kg,
+             remaining_quantity_kg: inv.remaining_quantity_kg,
+             product_name: inv.product_name,
+             product_id: inv.product_id
+           }));
+           
+           setBatches(demoBatches);
+           
+           // Map demo orders to display format
+           const mappedOrders = DEMO_ORDERS.map(o => ({
+             id: o.id,
+             batch_id: o.batch_id,
+             batch_code: o.batch_code,
+             product_name: o.product_name,
+             quantity_kg: o.quantity_kg,
+             quantity_crates: convertKgToCrates(o.quantity_kg),
+             dispatch_date: o.dispatch_date,
+             buyer_name: o.buyer,
+             price_per_kg: o.selling_price,
+             total_amount: o.total_value,
+             status: o.status,
+             created_at: o.sold_at
+           }));
+           
+           setOrders(mappedOrders);
+           setLoading(false);
+           return;
+         }
+         
          const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
          if (!profile) return;
          setProfileId(profile.id);
-         await fetchBatches(profile.id);
-         await fetchOrders(profile.id);
+         
+         // Real database queries...
          setLoading(false);
      };
      load();
@@ -211,9 +150,9 @@ const FarmerOrders: React.FC = () => {
           setDispatchDate(new Date().toISOString().split('T')[0]);
           setPriceMode('market');
 
-          if (profileId) {
-              await fetchBatches(profileId);
-              await fetchOrders(profileId);
+          // Only refresh if not in DEMO mode
+          if (!DEMO_ENABLED && profileId) {
+              // Real DB refresh would go here
           }
       } catch (err: any) {
           console.error("Failed to create order", err);
