@@ -163,6 +163,31 @@ function FarmerDashboardCore() {
     const initializeDashboard = async () => {
       try {
         setLoading(true);
+        
+        // If DEMO is enabled, skip all database queries and use demo data only
+        if (DEMO_ENABLED) {
+          const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
+          resetDemoIndex();
+          
+          setLiveConditions({ 
+            temp: firstValue.temp, 
+            hum: firstValue.hum, 
+            date: new Date().toISOString() 
+          });
+          setTemperatureHistory(generateDemoTemperatureHistory());
+          setDoorStats(DEMO_DOOR_STATS);
+          setAlerts(DEMO_ALERTS);
+          setEnergyData([]);
+          setHasAnyApproved(true);
+          setFacilities([{ id: 'demo', name: 'Nashik_Storage_A Facility' }]);
+          setRooms([{ roomId: 'demo', roomName: 'Demo Room', facilityId: 'demo', facilityName: 'Nashik_Storage_A' }]);
+          setSelectedFacilityId('demo');
+          setActiveRoomId('demo');
+          setInventory(DEMO_INVENTORY);
+          setLoading(false);
+          return; // Exit early - don't query database
+        }
+        
         const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
         setProfileId(profile.id);
@@ -239,34 +264,25 @@ function FarmerDashboardCore() {
 
   // Initialize with empty data - or demo data for all farmers
   useEffect(() => {
-    if (!loading) {
-      if (DEMO_ENABLED) {
-        // INSTANT DEMO DATA FOR ALL FARMERS
-        const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
-        resetDemoIndex();
-        
-        setLiveConditions({ 
-          temp: firstValue.temp, 
-          hum: firstValue.hum, 
-          date: new Date().toISOString() 
-        });
-        
-        // Populate temperature/humidity history with all 15 values for graphs
-        setTemperatureHistory(generateDemoTemperatureHistory());
-        
-        setDoorStats(DEMO_DOOR_STATS);
-        setAlerts(DEMO_ALERTS);
-        setEnergyData([]);
-      } else {
-        // Normal dashboard (empty - no demo data)
+    if (!loading && !DEMO_ENABLED) {
+      // Only initialize empty state if DEMO is disabled and data is still empty
+      if (!liveConditions) {
         setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
+      }
+      if (!doorStats) {
         setDoorStats({ status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' });
+      }
+      if (alerts.length === 0) {
         setAlerts([]);
+      }
+      if (energyData.length === 0) {
         setEnergyData([]);
+      }
+      if (temperatureHistory.length === 0) {
         setTemperatureHistory([]);
       }
     }
-  }, [loading]);
+  }, [loading, DEMO_ENABLED]);
 
   useEffect(() => {
      if (!activeRoomId || !profileId) return;
