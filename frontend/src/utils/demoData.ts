@@ -1,13 +1,14 @@
 /**
  * DEMO DATA - ALL HARDCODED FOR QUICK DEMO
  * 
- * This file contains all demo data. Once demo is done, revert to querying Supabase.
+ * This file contains all demo data for both FARMER and OWNER.
+ * Once demo is done, revert to querying Supabase.
  * To revert: set DEMO_ENABLED = false and remove all hardcoded logic from pages.
  */
 
 export const DEMO_ENABLED = true;
 
-// ============ TEMPERATURE & HUMIDITY CIRCULAR VALUES ============
+// ============ TEMPERATURE & HUMIDITY CIRCULAR VALUES (SHARED BY FARMER & OWNER) ============
 export const DEMO_TEMP_HUMIDITY_VALUES = [
   { temp: 1.11, hum: 92.23 },
   { temp: 1.12, hum: 92.34 },
@@ -26,7 +27,9 @@ export const DEMO_TEMP_HUMIDITY_VALUES = [
   { temp: 1.12, hum: 92.39 }
 ];
 
-// ============ DOOR STATS ============
+// ============ FARMER DEMO DATA ============
+
+// Door Stats
 export const DEMO_DOOR_STATS = {
   status: 'Closed',
   count: 1,
@@ -35,7 +38,7 @@ export const DEMO_DOOR_STATS = {
   openedTodayCount: 1
 };
 
-// ============ ALERTS ============
+// Alerts
 export const DEMO_ALERTS = [
   {
     id: 'demo-alert-1',
@@ -63,7 +66,7 @@ export const DEMO_ALERTS = [
   }
 ];
 
-// ============ INVENTORY (BATCHES) ============
+// Inventory (Batches)
 export const DEMO_INVENTORY = [
   {
     id: 'demo-batch-1',
@@ -93,7 +96,7 @@ export const DEMO_INVENTORY = [
   }
 ];
 
-// ============ ORDERS ============
+// Orders
 export const DEMO_ORDERS = [
   {
     id: 'demo-order-1',
@@ -110,11 +113,11 @@ export const DEMO_ORDERS = [
   }
 ];
 
-// ============ MARKET PRICES & REVENUE ============
+// Market Prices & Revenue
 export const DEMO_MARKET_PRICE = 45;
 export const DEMO_REVENUE_EARNED = 7875;
 
-// ============ ENERGY DATA ============
+// Energy Data (Farmer)
 export const DEMO_ENERGY_DATA = [
   { time: '09/08', value: 756, total_kwh: 756, recorded_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
   { time: '09/09', value: 756, total_kwh: 756, recorded_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString() },
@@ -126,7 +129,7 @@ export const DEMO_ENERGY_DATA = [
   { time: '09/15', value: 756, total_kwh: 756, recorded_at: new Date().toISOString() }
 ];
 
-// ============ PRODUCTS ============
+// Products
 export const DEMO_PRODUCTS = [
   {
     id: 'demo-product-1',
@@ -149,7 +152,7 @@ export const DEMO_ACTIVE_PRODUCT_DATA = {
   shelf_life_days: 180
 };
 
-// ============ FACILITIES & ROOMS ============
+// Facilities & Rooms
 export const DEMO_FACILITIES = [
   { 
     id: 'demo-facility-1', 
@@ -167,6 +170,95 @@ export const DEMO_ROOMS = [
     facility_id: 'demo-facility-1',
     facilityName: 'Nashik_Storage_A Facility',
     facility_name: 'Nashik_Storage_A Facility'
+  }
+];
+
+// ============ OWNER DEMO DATA ============
+
+// Owner Sensor Data (Monitoring Page)
+export const DEMO_OWNER_SENSORS = [
+  { id: 1, icon: 'droplets', name: 'AmbientHumidity', reading: 'No Telemetry', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientHumidity', display_name: 'AmbientHumidity', last_reading_value: null, last_reading_unit: '' },
+  { id: 2, icon: 'thermometer', name: 'AmbientTemperature', reading: '31°C', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientTemperature', display_name: 'AmbientTemperature', last_reading_value: 31, last_reading_unit: '°C' },
+  { id: 3, icon: 'battery', name: 'Battery', reading: '100%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Battery', display_name: 'Battery', last_reading_value: 100, last_reading_unit: '%', battery_percentage: 100 },
+  { id: 4, icon: 'door-open', name: 'Door', reading: 'Closed', status: 'Active', maintenance: 'Not Required', sensor_type: 'Door', display_name: 'Door', last_reading_value: null, last_reading_unit: '' },
+  { id: 5, icon: 'wind', name: 'Ethylene', reading: '2.4 ppm', status: 'Active', maintenance: 'Not Required', sensor_type: 'Ethylene', display_name: 'Ethylene', last_reading_value: 2.4, last_reading_unit: 'ppm' },
+  { id: 6, icon: 'zap', name: 'GridPower', reading: '0 W', status: 'Active', maintenance: 'Not Required', sensor_type: 'GridPower', display_name: 'GridPower', last_reading_value: 0, last_reading_unit: 'W' },
+  { id: 7, icon: 'droplets', name: 'Humidity', reading: '92.3%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Humidity', display_name: 'Humidity', last_reading_value: 92.3, last_reading_unit: '%' },
+  { id: 8, icon: 'wind', name: 'Oxygen', reading: '20.8%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Oxygen', display_name: 'Oxygen', last_reading_value: 20.8, last_reading_unit: '%' },
+  { id: 9, icon: 'sun', name: 'Solar', reading: '2.1 kWh', status: 'Active', maintenance: 'Not Required', sensor_type: 'Solar', display_name: 'Solar', last_reading_value: 2.1, last_reading_unit: 'kWh' },
+  { id: 10, icon: 'thermometer', name: 'Temperature', reading: '1.12°C', status: 'Active', maintenance: 'Not Required', sensor_type: 'Temperature', display_name: 'Temperature', last_reading_value: 1.12, last_reading_unit: '°C' }
+];
+
+// Owner Energy Data
+export const DEMO_OWNER_ENERGY = {
+  total_consumed: 756,
+  from_grid: 32.19,
+  from_solar: 723.81,
+  cost_saved: 21714, // ₹30/kWh × 723.81 kWh ≈ ₹21,714
+  per_facility: [
+    { facility: 'Nashik_Storage_A Facility', consumed: 756 }
+  ]
+};
+
+// Owner Inventory (Total across all facilities)
+export const DEMO_OWNER_INVENTORY_OVERVIEW = {
+  total_capacity_kg: 10000,
+  occupied_kg: 225, // 11 crates × 25kg
+  available_kg: 9775,
+  total_crates: 11,
+  occupied_percentage: 2.25,
+  available_percentage: 97.75
+};
+
+// Owner Financial Data
+export const DEMO_OWNER_FINANCE = {
+  active_farmers: 1,
+  crates_stored: 11,
+  total_revenue: 787500, // ₹7,875 in Lakhs format (7.875 L)
+  total_expenses: 20000, // ₹200 in Lakhs format (0.002 L) - only 15 days
+  net_profit: 767500, // Revenue - Expenses
+  breakdown: {
+    hvac_water_check: 5000, // ₹50
+    inverter_replaced: 15000 // ₹150
+  },
+  six_month_trend: [
+    { month: 'April', revenue: 0, expenses: 0, profit: 0 },
+    { month: 'May', revenue: 0, expenses: 0, profit: 0 },
+    { month: 'June', revenue: 0, expenses: 0, profit: 0 },
+    { month: 'July', revenue: 0, expenses: 0, profit: 0 },
+    { month: 'August', revenue: 0, expenses: 0, profit: 0 },
+    { month: 'September', revenue: 787500, expenses: 20000, profit: 767500 }
+  ]
+};
+
+// Owner System Alerts
+export const DEMO_OWNER_ALERTS = [
+  {
+    id: 'owner-alert-1',
+    created_at: new Date('2026-09-01').toISOString(),
+    title: 'New farmer requested access',
+    message: 'Farmer Roy has requested access to Nashik_Storage_A',
+    type: 'farmer_request',
+    is_acknowledged: true,
+    severity: 'info'
+  },
+  {
+    id: 'owner-alert-2',
+    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+    title: 'HVAC maintenance completed',
+    message: 'Scheduled HVAC maintenance and water check performed',
+    type: 'maintenance',
+    is_acknowledged: true,
+    severity: 'info'
+  },
+  {
+    id: 'owner-alert-3',
+    created_at: new Date().toISOString(),
+    title: 'Temperature spiked alert',
+    message: 'Internal temperature exceeded threshold for 24 minutes in Nashik_Storage_A',
+    type: 'temperature',
+    is_acknowledged: true,
+    severity: 'warning'
   }
 ];
 
