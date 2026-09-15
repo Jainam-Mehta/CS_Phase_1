@@ -23,6 +23,8 @@ import {
   DEMO_ACTIVE_PRODUCT_DATA,
   DEMO_FACILITIES,
   DEMO_ROOMS,
+  DEMO_ORDERS,
+  DEMO_ENERGY_DATA,
   generateDemoTemperatureHistory,
   resetDemoIndex
 } from '../../utils/demoData';
@@ -181,7 +183,7 @@ function FarmerDashboardCore() {
           setTemperatureHistory(generateDemoTemperatureHistory());
           setDoorStats(DEMO_DOOR_STATS);
           setAlerts(DEMO_ALERTS);
-          setEnergyData([]);
+          setEnergyData(DEMO_ENERGY_DATA);
           
           // Set facilities, rooms, and products
           setFacilities(DEMO_FACILITIES);
@@ -648,7 +650,7 @@ function FarmerDashboardCore() {
               {/* 6. CHARTS SECTION */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  <Card className="shadow-sm border-slate-200">
-                    <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Temperature History (Last 8 Readings)</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Temperature History</CardTitle></CardHeader>
                     <CardContent className="h-72">
                        {displayTemperatureHistory.length > 0 ? (
                            <ResponsiveContainer width="100%" height="100%">

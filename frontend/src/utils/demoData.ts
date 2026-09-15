@@ -80,22 +80,36 @@ export const DEMO_INVENTORY = [
   }
 ];
 
-// Demo order for all farmers
-export const DEMO_ORDER = {
-  id: 'demo-order-1',
-  batch_id: 'demo-inv-1',
-  quantity_kg: 175, // 7 crates × 25kg
-  selling_price: 45, // ₹45 per kg
-  buyer: 'Apple Studios',
-  sold_at: new Date().toISOString(),
-  total_value: 7875 // 7 crates × 25kg × ₹45/kg
-};
+// Demo orders for all farmers
+export const DEMO_ORDERS = [
+  {
+    id: 'demo-order-1',
+    batch_id: 'demo-inv-1',
+    quantity_kg: 175, // 7 crates × 25kg
+    selling_price: 45, // ₹45 per kg
+    buyer: 'Apple Studios',
+    sold_at: new Date().toISOString(),
+    total_value: 7875 // 7 crates × 25kg × ₹45/kg
+  }
+];
 
 // Demo revenue for all farmers
 export const DEMO_REVENUE_EARNED = 7875; // From the order above
 
 // Demo market intelligence for all farmers
 export const DEMO_MARKET_PRICE = 45; // ₹45 per kg for apples
+
+// Demo energy data (756 kWh)
+export const DEMO_ENERGY_DATA = [
+  { time: '09/08', value: 756 },
+  { time: '09/09', value: 756 },
+  { time: '09/10', value: 756 },
+  { time: '09/11', value: 756 },
+  { time: '09/12', value: 756 },
+  { time: '09/13', value: 756 },
+  { time: '09/14', value: 756 },
+  { time: '09/15', value: 756 }
+];
 
 // Generate temperature history graph data from circular values
 export const generateDemoTemperatureHistory = () => {
