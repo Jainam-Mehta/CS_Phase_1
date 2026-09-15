@@ -280,11 +280,11 @@ export const DEMO_OWNER_ENERGY = {
 // Owner Inventory (Total across all facilities)
 export const DEMO_OWNER_INVENTORY_OVERVIEW = {
   total_capacity_kg: 10000,
-  occupied_kg: 450, // 18 crates × 25kg
-  available_kg: 9550,
-  total_crates: 18,
-  occupied_percentage: 4.5,
-  available_percentage: 95.5
+  occupied_kg: 275, // 18 crates × 25kg
+  available_kg: 9725,
+  total_crates: 11,
+  occupied_percentage: 2.7,
+  available_percentage: 97.3
 };
 
 // Owner Financial Data
