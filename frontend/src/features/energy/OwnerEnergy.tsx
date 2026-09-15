@@ -3,6 +3,7 @@ import { Zap, Sun, IndianRupee, BarChart3, Building } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { DEMO_ENABLED, DEMO_OWNER_ENERGY, DEMO_FACILITIES } from '../../utils/demoData';
 
 interface FacilityEnergy {
   facility_id: string;
@@ -28,6 +29,25 @@ const OwnerEnergy: React.FC = () => {
   const loadEnergyData = async () => {
     try {
       setLoading(true);
+
+      // DEMO MODE: Use hardcoded demo energy data
+      if (DEMO_ENABLED) {
+        const demoFacilityEnergy = DEMO_OWNER_ENERGY.per_facility.map(f => ({
+          facility_id: 'demo-facility-1',
+          facility_name: f.facility,
+          solar_kwh: DEMO_OWNER_ENERGY.from_solar,
+          grid_kwh: DEMO_OWNER_ENERGY.from_grid,
+          total_kwh: DEMO_OWNER_ENERGY.total_consumed
+        }));
+        setFacilityEnergy(demoFacilityEnergy);
+        setTotals({
+          solar: DEMO_OWNER_ENERGY.from_solar,
+          grid: DEMO_OWNER_ENERGY.from_grid,
+          saved: DEMO_OWNER_ENERGY.cost_saved
+        });
+        setLoading(false);
+        return;
+      }
 
       // Get owner's profile
       const { data: { user: authUser } } = await supabase.auth.getUser();

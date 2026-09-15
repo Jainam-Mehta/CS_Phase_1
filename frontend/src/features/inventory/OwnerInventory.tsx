@@ -5,6 +5,7 @@ import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
 import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
+import { DEMO_ENABLED, DEMO_OWNER_INVENTORY_OVERVIEW, DEMO_INVENTORY, DEMO_FACILITIES } from '../../utils/demoData';
 
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
@@ -21,6 +22,13 @@ const OwnerInventory: React.FC = () => {
   const loadAllInventory = async () => {
     try {
       setLoading(true);
+
+      // DEMO MODE: Use hardcoded demo inventory data
+      if (DEMO_ENABLED) {
+        setInventory(DEMO_INVENTORY);
+        setLoading(false);
+        return;
+      }
       
       // Get owner's profile
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -175,6 +183,15 @@ const OwnerInventory: React.FC = () => {
   useEffect(() => {
     const loadCapacityData = async () => {
       try {
+        // DEMO MODE: Use hardcoded demo capacity data
+        if (DEMO_ENABLED) {
+          setCapacityData({
+            total: DEMO_OWNER_INVENTORY_OVERVIEW.total_capacity_kg,
+            used: DEMO_OWNER_INVENTORY_OVERVIEW.occupied_kg
+          });
+          return;
+        }
+
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (!authUser) return;
 

@@ -177,7 +177,7 @@ export const DEMO_ROOMS = [
 
 // Owner Sensor Data (Monitoring Page)
 export const DEMO_OWNER_SENSORS = [
-  { id: 1, icon: 'droplets', name: 'AmbientHumidity', reading: 'No Telemetry', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientHumidity', display_name: 'AmbientHumidity', last_reading_value: null, last_reading_unit: '' },
+  { id: 1, icon: 'droplets', name: 'AmbientHumidity', reading: '69%', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientHumidity', display_name: 'AmbientHumidity', last_reading_value: 69, last_reading_unit: '%' },
   { id: 2, icon: 'thermometer', name: 'AmbientTemperature', reading: '31°C', status: 'Active', maintenance: 'Not Required', sensor_type: 'AmbientTemperature', display_name: 'AmbientTemperature', last_reading_value: 31, last_reading_unit: '°C' },
   { id: 3, icon: 'battery', name: 'Battery', reading: '100%', status: 'Active', maintenance: 'Not Required', sensor_type: 'Battery', display_name: 'Battery', last_reading_value: 100, last_reading_unit: '%', battery_percentage: 100 },
   { id: 4, icon: 'door-open', name: 'Door', reading: 'Closed', status: 'Active', maintenance: 'Not Required', sensor_type: 'Door', display_name: 'Door', last_reading_value: null, last_reading_unit: '' },
