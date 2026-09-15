@@ -13,6 +13,15 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
+import { 
+  DEMO_ENABLED, 
+  DEMO_TEMP_HUMIDITY_VALUES, 
+  DEMO_DOOR_STATS, 
+  DEMO_ALERTS,
+  DEMO_INVENTORY,
+  generateDemoTemperatureHistory,
+  resetDemoIndex
+} from '../../utils/demoData';
 
 class DashboardErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorMsg: string}> {
   constructor(props: {children: React.ReactNode}) {
@@ -116,31 +125,14 @@ function FarmerDashboardCore() {
     return () => clearInterval(interval);
   }, [activeRoomId]);
 
-  // DEMO DATA: Roy's demo circular temperature/humidity values (15 values)
-  const DEMO_ROY_EMAIL = 'roy@coldsense.in';
-  const DEMO_TEMP_HUMIDITY_VALUES = [
-    { temp: 1.11, hum: 92.23 },
-    { temp: 1.12, hum: 92.34 },
-    { temp: 1.11, hum: 92.27 },
-    { temp: 1.13, hum: 92.45 },
-    { temp: 1.12, hum: 92.31 },
-    { temp: 1.14, hum: 92.38 },
-    { temp: 1.11, hum: 92.42 },
-    { temp: 1.12, hum: 92.27 },
-    { temp: 1.11, hum: 92.40 },
-    { temp: 1.10, hum: 92.34 },
-    { temp: 1.11, hum: 92.28 },
-    { temp: 1.09, hum: 92.36 },
-    { temp: 1.11, hum: 92.34 },
-    { temp: 1.13, hum: 92.41 },
-    { temp: 1.12, hum: 92.39 }
-  ];
+  // DEMO DATA: Circular temperature/humidity values
+  const DEMO_TEMP_HUMIDITY_VALUES_LOCAL = DEMO_TEMP_HUMIDITY_VALUES;
 
   let demoValueIndex = 0;
   
   // Update demo data every minute in circular fashion
   useEffect(() => {
-    if (user?.email !== DEMO_ROY_EMAIL) return;
+    if (!DEMO_ENABLED) return;
     
     const interval = setInterval(() => {
       demoValueIndex = (demoValueIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length;
@@ -154,7 +146,7 @@ function FarmerDashboardCore() {
     }, 60000); // Update every minute
     
     return () => clearInterval(interval);
-  }, [user?.email]);
+  }, []);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
   // Update timestamp every 5 minutes
@@ -245,12 +237,14 @@ function FarmerDashboardCore() {
     initializeDashboard();
   }, [user?.id]);
 
-  // Initialize with empty data - or demo data for Roy
+  // Initialize with empty data - or demo data for all farmers
   useEffect(() => {
     if (!loading) {
-      if (user?.email === DEMO_ROY_EMAIL) {
-        // INSTANT DEMO DATA FOR ROY
+      if (DEMO_ENABLED) {
+        // INSTANT DEMO DATA FOR ALL FARMERS
         const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
+        resetDemoIndex();
+        
         setLiveConditions({ 
           temp: firstValue.temp, 
           hum: firstValue.hum, 
@@ -258,36 +252,13 @@ function FarmerDashboardCore() {
         });
         
         // Populate temperature/humidity history with all 15 values for graphs
-        const historyData = DEMO_TEMP_HUMIDITY_VALUES.map((val, idx) => ({
-          time: `T${idx + 1}`,
-          temperature: val.temp,
-          humidity: val.hum,
-          recorded_at: new Date(Date.now() - (15 - idx) * 60000).toISOString()
-        }));
-        setTemperatureHistory(historyData);
+        setTemperatureHistory(generateDemoTemperatureHistory());
         
-        setDoorStats({ status: 'Closed', count: 1, duration: 0, lastOpenTime: 'Today' });
-        setAlerts([
-          {
-            id: 'demo-1',
-            created_at: new Date().toISOString(),
-            title: '7 kg apples delivered to Apple Studios',
-            message: 'Order fulfillment completed successfully',
-            type: 'order',
-            is_acknowledged: true
-          },
-          {
-            id: 'demo-2',
-            created_at: new Date(Date.now() - 24*60*60*1000).toISOString(),
-            title: 'Temperature increased out of range',
-            message: 'Temperature exceeded max range (6°C for apples) for 24 minutes',
-            type: 'temperature',
-            is_acknowledged: true
-          }
-        ]);
+        setDoorStats(DEMO_DOOR_STATS);
+        setAlerts(DEMO_ALERTS);
         setEnergyData([]);
       } else {
-        // Normal dashboard (empty)
+        // Normal dashboard (empty - no demo data)
         setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
         setDoorStats({ status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' });
         setAlerts([]);
@@ -295,7 +266,7 @@ function FarmerDashboardCore() {
         setTemperatureHistory([]);
       }
     }
-  }, [loading, user?.email]);
+  }, [loading]);
 
   useEffect(() => {
      if (!activeRoomId || !profileId) return;
