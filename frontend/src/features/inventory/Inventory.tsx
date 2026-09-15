@@ -63,12 +63,13 @@ const Inventory: React.FC = () => {
       // Fetch farmer profiles
       const { data: farmerProfiles } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, first_name, last_name')
         .in('id', farmerIds);
 
       const farmerMap: Record<number, string> = {};
       farmerProfiles?.forEach((profile) => {
-        farmerMap[profile.id] = profile.full_name || `Farmer ${profile.id}`;
+        const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+        farmerMap[profile.id] = name || `Farmer ${profile.id}`;
       });
       setFarmers(farmerMap);
     } catch (err) {
@@ -129,13 +130,32 @@ const Inventory: React.FC = () => {
       setRooms(roomsData);
       setSelectedRoomId(roomsData[0].id);
 
-      // Fetch inventory batches for the farmer
+      // Fetch inventory batches for the farmer (from batch_room_allocations joined with batches)
       const { data: inventoryData } = await supabase
-        .from('inventory_batches')
-        .select('*, products(name)')
-        .eq('farmer_id', profile.id);
+        .from('batch_room_allocations')
+        .select(`
+          quantity_kg,
+          room_id,
+          batches!inner(
+            id,
+            batch_code,
+            initial_quantity_kg,
+            remaining_quantity_kg,
+            products(name)
+          )
+        `)
+        .in('room_id', roomIds)
+        .is('removed_at', null);
 
-      setInventory(inventoryData || []);
+      // Transform the data to match expected structure
+      const transformedInventory = inventoryData?.map((alloc: any) => ({
+        ...alloc.batches,
+        room_id: alloc.room_id,
+        quantity_kg: alloc.quantity_kg,
+        remaining_quantity_kg: alloc.batches.remaining_quantity_kg
+      })) || [];
+
+      setInventory(transformedInventory);
     } catch (err) {
       console.error('Error fetching inventory:', err);
       setError('Failed to load inventory. Please try again.');

@@ -116,7 +116,7 @@ const SettingsPage: React.FC = () => {
       // Get all facilities owned by this owner using owner_profile_id
       const { data: facilitiesData, error: facilityError } = await supabase
         .from('facilities')
-        .select('id, facility_name, location, created_at')
+        .select('id, facility_name, capacity_kg, current_utilization_kg, created_at')
         .eq('owner_profile_id', profile.id)
         .order('facility_name');
       
