@@ -117,7 +117,7 @@ function FarmerDashboardCore() {
   }, [activeRoomId]);
 
   // DEMO DATA: Roy's demo circular temperature/humidity values (15 values)
-  const DEMO_ROY_EMAIL = 'Roy@coldsense.in';
+  const DEMO_ROY_EMAIL = 'roy@coldsense.in';
   const DEMO_TEMP_HUMIDITY_VALUES = [
     { temp: 3.2, hum: 87 },
     { temp: 3.1, hum: 88 },
