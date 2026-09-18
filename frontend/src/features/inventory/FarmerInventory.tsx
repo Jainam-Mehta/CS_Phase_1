@@ -6,6 +6,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 
+const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { activeRoomId, setActiveRoomId } = useFarmerStore();
   

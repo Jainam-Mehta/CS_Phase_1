@@ -9,8 +9,6 @@ import { resolveProfile } from '../../lib/profileUtils';
 import { Search, Map as MapIcon, Loader2, AlertCircle, TrendingUp, Building2, MapPin, Leaf, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { DEMO_ENABLED, DEMO_STAKEHOLDER_INVESTMENTS, DEMO_ALL_FACILITIES, DEMO_STAKEHOLDER_PORTFOLIO } from '../../utils/demoData';
-
 // The topological data downloaded locally
 const geoUrl = '/india.topo.json';
 
@@ -91,24 +89,13 @@ const StakeholderMap: React.FC = () => {
     try {
       setLoading(true);
 
-      if (DEMO_ENABLED) {
-        setFacilities(DEMO_ALL_FACILITIES as any);
-        setInvestments(DEMO_STAKEHOLDER_INVESTMENTS as any);
-        setLoading(false);
-        return;
-      }
-
       if (!user) {
-        setFacilities(DEMO_ALL_FACILITIES as any);
-        setInvestments(DEMO_STAKEHOLDER_INVESTMENTS as any);
         setLoading(false);
         return;
       }
 
       const profile = await resolveProfile(user.id);
       if (!profile) {
-        setFacilities(DEMO_ALL_FACILITIES as any);
-        setInvestments(DEMO_STAKEHOLDER_INVESTMENTS as any);
         setLoading(false);
         return;
       }
@@ -142,17 +129,10 @@ const StakeholderMap: React.FC = () => {
         .select('*')
         .eq('stakeholder_id', profile.id);
 
-      if (!flatFacilities.length || !invs || !invs.length) {
-        setFacilities(DEMO_ALL_FACILITIES as any);
-        setInvestments(DEMO_STAKEHOLDER_INVESTMENTS as any);
-      } else {
-        setFacilities(flatFacilities);
-        setInvestments(invs);
-      }
+      setFacilities(flatFacilities);
+      setInvestments(invs || []);
     } catch (e) {
       console.error("Error loading portfolio data:", e);
-      setFacilities(DEMO_ALL_FACILITIES as any);
-      setInvestments(DEMO_STAKEHOLDER_INVESTMENTS as any);
     } finally {
       setLoading(false);
     }

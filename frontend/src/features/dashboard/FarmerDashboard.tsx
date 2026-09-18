@@ -13,20 +13,6 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
-import { 
-  DEMO_ENABLED,
-  DEMO_TEMP_HUMIDITY_VALUES,
-  DEMO_DOOR_STATS,
-  DEMO_ALERTS,
-  DEMO_INVENTORY,
-  DEMO_PRODUCTS,
-  DEMO_ACTIVE_PRODUCT_DATA,
-  DEMO_FACILITIES,
-  DEMO_ROOMS,
-  DEMO_ENERGY_DATA,
-  generateDemoTemperatureHistory,
-  resetDemoIndex
-} from '../../utils/demoData';
 
 class DashboardErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorMsg: string}> {
   constructor(props: {children: React.ReactNode}) {
@@ -98,9 +84,6 @@ function FarmerDashboardCore() {
   const [hasAnyPending, setHasAnyPending] = useState(false);
   const [pendingDetails, setPendingDetails] = useState<any>(null);
   
-  // Track circular demo temperature/humidity index
-  const [demoTempHumIndex, setDemoTempHumIndex] = useState(0);
-  
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
   // Update timestamp every 5 minutes
@@ -111,61 +94,12 @@ function FarmerDashboardCore() {
     return () => clearInterval(interval);
   }, []);
 
-  // Circular temperature/humidity values every 60 seconds (DEMO ONLY)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDemoTempHumIndex((prev) => (prev + 1) % DEMO_TEMP_HUMIDITY_VALUES.length);
-      
-      // Update live conditions with circular value
-      const currentValue = DEMO_TEMP_HUMIDITY_VALUES[(demoTempHumIndex + 1) % DEMO_TEMP_HUMIDITY_VALUES.length];
-      setLiveConditions((prev: any) => ({
-        ...prev,
-        temp: currentValue.temp,
-        hum: currentValue.hum,
-        date: new Date().toISOString()
-      }));
-    }, 60000); // Update every 60 seconds
-    
-    return () => clearInterval(interval);
-  }, [demoTempHumIndex]);
-
   useEffect(() => {
     if (!user?.id) return;
 
     const initializeDashboard = async () => {
       try {
         setLoading(true);
-        
-        // DEMO MODE: Use hardcoded demo data
-        if (DEMO_ENABLED) {
-          const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
-          resetDemoIndex();
-          
-          setLiveConditions({ 
-            temp: firstValue.temp, 
-            hum: firstValue.hum, 
-            date: new Date().toISOString() 
-          });
-          setTemperatureHistory(generateDemoTemperatureHistory());
-          setDoorStats(DEMO_DOOR_STATS);
-          setAlerts(DEMO_ALERTS);
-          setEnergyData(DEMO_ENERGY_DATA);
-          
-          // Set facilities, rooms, and products
-          setFacilities(DEMO_FACILITIES);
-          setRooms(DEMO_ROOMS);
-          setProducts(DEMO_PRODUCTS);
-          setActiveProductData(DEMO_ACTIVE_PRODUCT_DATA);
-          setInventory(DEMO_INVENTORY);
-          
-          setHasAnyApproved(true);
-          setSelectedFacilityId(DEMO_FACILITIES[0].id);
-          setActiveRoomId(DEMO_ROOMS[0].roomId);
-          setActiveProductId(DEMO_PRODUCTS[0].id);
-          
-          setLoading(false);
-          return; // Exit early - don't query database
-        }
         
         const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
@@ -231,14 +165,6 @@ function FarmerDashboardCore() {
             }
             setSelectedFacilityId(currentFac);
         }
-        
-        // Initialize with first demo value
-        const firstValue = DEMO_TEMP_HUMIDITY_VALUES[0];
-        setLiveConditions({
-          temp: firstValue.temp,
-          hum: firstValue.hum,
-          date: new Date().toISOString()
-        });
       } catch (err) {
         console.error("Init error:", err);
       } finally {
