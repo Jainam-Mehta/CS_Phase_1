@@ -153,6 +153,21 @@ function FarmerDashboardCore() {
             setFacilities(facs);
             setRooms(approvedRooms);
 
+            // Fetch farmer's products
+            const { data: farmerProds } = await supabase
+              .from('farmer_products')
+              .select('products(id, name)')
+              .eq('farmer_id', profile.id);
+            
+            const prodList: any[] = [];
+            if (farmerProds) {
+              farmerProds.forEach((fp: any) => {
+                const prod = Array.isArray(fp.products) ? fp.products[0] : fp.products;
+                if (prod) prodList.push(prod);
+              });
+            }
+            setProducts(prodList.length > 0 ? prodList : []);
+
             let currentFac = facs[0].id;
             let currentRoomId = approvedRooms.find(r => r.facilityId === currentFac)?.roomId;
             

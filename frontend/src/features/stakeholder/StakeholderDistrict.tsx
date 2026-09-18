@@ -116,71 +116,17 @@ const StakeholderDistrict: React.FC = () => {
       });
 
       if (res.length === 0) {
-        if (districtName === 'Nashik') {
-          setFacilities([{
-            id: 'demo-facility-1',
-            facility_name: 'Nashik_Storage_A Facility',
-            stateName: 'Maharashtra',
-            investmentAmount: 20000,
-            roi: 5.0,
-            carbonCredits: 241,
-            capacity_total_kg: 10000,
-            capacity_used_kg: 450,
-            address: 'Nashik, Maharashtra'
-          }]);
-          setStateNameStr('Maharashtra');
-          setLoading(false);
-          return;
-        }
-        if (districtName === 'Kullu') {
-          setFacilities([{
-            id: 'demo-facility-2',
-            facility_name: 'Kullu_Site_Room_A+B Facility',
-            stateName: 'Himachal Pradesh',
-            investmentAmount: 20000,
-            roi: 5.0,
-            carbonCredits: 241,
-            capacity_total_kg: 10000,
-            capacity_used_kg: 450,
-            address: 'Kullu, Himachal Pradesh'
-          }]);
-          setStateNameStr('Himachal Pradesh');
-          setLoading(false);
-          return;
-        }
+        setFacilities([]);
+        if (stateNameFromDb) setStateNameStr(stateNameFromDb);
+        setLoading(false);
+        return;
       }
 
       setFacilities(res);
       
     } catch (e) {
       console.error(e);
-      if (districtName === 'Nashik') {
-        setFacilities([{
-          id: 'demo-facility-1',
-          facility_name: 'Nashik_Storage_A Facility',
-          stateName: 'Maharashtra',
-          investmentAmount: 20000,
-          roi: 5.0,
-          carbonCredits: 241,
-          capacity_total_kg: 10000,
-          capacity_used_kg: 450,
-          address: 'Nashik, Maharashtra'
-        }]);
-        setStateNameStr('Maharashtra');
-      } else if (districtName === 'Kullu') {
-        setFacilities([{
-          id: 'demo-facility-2',
-          facility_name: 'Kullu_Site_Room_A+B Facility',
-          stateName: 'Himachal Pradesh',
-          investmentAmount: 20000,
-          roi: 5.0,
-          carbonCredits: 241,
-          capacity_total_kg: 10000,
-          capacity_used_kg: 450,
-          address: 'Kullu, Himachal Pradesh'
-        }]);
-        setStateNameStr('Himachal Pradesh');
-      }
+      setFacilities([]);
     } finally {
       setLoading(false);
     }

@@ -199,13 +199,13 @@ const StakeholderMap: React.FC = () => {
     const avgRoi = totalInvestedFacs > 0 ? (totalRoiRaw / totalInvestedFacs) : 5.0;
 
     return {
-      totalInvestment: totInv > 0 ? totInv : 40000,
-      totalFacilities: Math.max(facilities.length, 13),
-      investedFacilities: totalInvestedFacs > 0 ? totalInvestedFacs : 2,
-      totalCities: totCities.size > 0 ? totCities.size : 2,
+      totalInvestment: totInv > 0 ? totInv : 0,
+      totalFacilities: facilities.length,
+      investedFacilities: totalInvestedFacs > 0 ? totalInvestedFacs : 0,
+      totalCities: totCities.size > 0 ? totCities.size : 0,
       avgRoi: avgRoi,
-      totalProfit: 42000,
-      carbonCredits: totalCredits > 0 ? totalCredits : 482,
+      totalProfit: 0,
+      carbonCredits: totalCredits > 0 ? totalCredits : 0,
     };
   }, [facilities, investments]);
 
