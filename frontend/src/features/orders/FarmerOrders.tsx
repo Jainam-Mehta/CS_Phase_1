@@ -6,7 +6,7 @@ import { ShoppingCart, Truck, Plus, X, Loader2, Calendar, Package, IndianRupee, 
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
-import { DEMO_ENABLED, DEMO_ORDERS, DEMO_INVENTORY } from '../../utils/demoData';
+
 
 const FarmerOrders: React.FC = () => {
   const { user } = useAuthStore();
@@ -40,41 +40,6 @@ const FarmerOrders: React.FC = () => {
      if (!user?.id) return;
      const load = async () => {
          setLoading(true);
-         
-         // DEMO MODE: Use hardcoded demo data
-         if (DEMO_ENABLED) {
-           // Map demo inventory to batches format
-           const demoBatches = DEMO_INVENTORY.map(inv => ({
-             id: inv.id,
-             batch_code: inv.batch_code,
-             initial_quantity_kg: inv.initial_quantity_kg,
-             remaining_quantity_kg: inv.remaining_quantity_kg,
-             product_name: inv.product_name,
-             product_id: inv.product_id
-           }));
-           
-           setBatches(demoBatches);
-           
-           // Map demo orders to display format
-           const mappedOrders = DEMO_ORDERS.map(o => ({
-             id: o.id,
-             batch_id: o.batch_id,
-             batch_code: o.batch_code,
-             product_name: o.product_name,
-             quantity_kg: o.quantity_kg,
-             quantity_crates: convertKgToCrates(o.quantity_kg),
-             dispatch_date: o.dispatch_date,
-             buyer_name: o.buyer,
-             price_per_kg: o.selling_price,
-             total_amount: o.total_value,
-             status: o.status,
-             created_at: o.sold_at
-           }));
-           
-           setOrders(mappedOrders);
-           setLoading(false);
-           return;
-         }
          
          const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
          if (!profile) return;
@@ -151,7 +116,7 @@ const FarmerOrders: React.FC = () => {
           setPriceMode('market');
 
           // Only refresh if not in DEMO mode
-          if (!DEMO_ENABLED && profileId) {
+          if (profileId) {
               // Real DB refresh would go here
           }
       } catch (err: any) {

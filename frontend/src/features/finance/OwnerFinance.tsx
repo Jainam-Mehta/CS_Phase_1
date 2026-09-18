@@ -6,7 +6,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTo
 import { TrendingUp, TrendingDown, DollarSign, Users, IndianRupee, Zap, Wrench, Package, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { convertKgToCrates } from '../../utils/units';
-import { DEMO_ENABLED, DEMO_OWNER_FINANCE } from '../../utils/demoData';
+
 
 const OwnerFinance: React.FC = () => {
   const { user } = useAuthStore();
@@ -23,62 +23,6 @@ const OwnerFinance: React.FC = () => {
   const loadFinanceData = async () => {
     try {
       setLoading(true);
-
-      // DEMO MODE: Use hardcoded demo finance data
-      if (DEMO_ENABLED) {
-        const totalRev = DEMO_OWNER_FINANCE.total_revenue;
-        const totalExp = DEMO_OWNER_FINANCE.total_expenses;
-        const totalProf = DEMO_OWNER_FINANCE.net_profit;
-        const margin = totalRev > 0 ? ((totalProf / totalRev) * 100).toFixed(1) : '0';
-        const hvacAmt = DEMO_OWNER_FINANCE.breakdown.hvac_water_check;
-        const inverterAmt = DEMO_OWNER_FINANCE.breakdown.inverter_replaced;
-        const totalCrates = DEMO_OWNER_FINANCE.crates_stored;
-        
-        setFinanceData({
-          currentMonth: 'September 2026',
-          totalRevenue: totalRev,
-          totalExpenses: totalExp,
-          totalProfit: totalProf,
-          profitMargin: margin,
-          farmerRevenue: [
-            {
-              farmer: 'Roy',
-              crates: totalCrates,
-              total: 21.6, // ₹21.6 storage fee revenue
-              location: 'Storage Room A',
-              pricePerCrate: '1.2',
-              percentageDisplay: '0.1'
-            }
-          ],
-          expenses: [
-            {
-              category: 'HVAC Water Check',
-              amount: hvacAmt,
-              percentage: Number(((hvacAmt / totalExp) * 100).toFixed(1)),
-              color: '#3b82f6',
-              icon: Wrench
-            },
-            {
-              category: 'Inverter Replaced',
-              amount: inverterAmt,
-              percentage: Number(((inverterAmt / totalExp) * 100).toFixed(1)),
-              color: '#ef4444',
-              icon: Zap
-            }
-          ],
-          monthlyTrend: DEMO_OWNER_FINANCE.six_month_trend.map(t => ({
-            month: t.month,
-            revenue: Number((t.revenue / 100000).toFixed(3)),
-            expenses: Number((t.expenses / 100000).toFixed(3)),
-            profit: Number((t.profit / 100000).toFixed(3))
-          })),
-          totalCrates: totalCrates,
-          totalFarmers: DEMO_OWNER_FINANCE.active_farmers,
-          avgPricePerCrate: '1.2'
-        });
-        setLoading(false);
-        return;
-      }
 
       // 1. Get rooms for selected facility
       const { data: rmData } = await supabase

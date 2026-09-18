@@ -5,9 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
-import { DEMO_ENABLED, DEMO_INVENTORY, DEMO_INVENTORY_SUMMARY } from '../../utils/demoData';
 
-const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { activeRoomId, setActiveRoomId } = useFarmerStore();
   
@@ -249,89 +247,6 @@ const FarmerInventory: React.FC = () => {
 
   if (loading) {
       return <div className="p-8"><div className="animate-pulse h-64 bg-slate-100 dark:bg-slate-800 rounded-xl"></div></div>;
-  }
-
-  // DEMO MODE
-  if (DEMO_ENABLED) {
-    return (
-      <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-screen">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3">
-            <PackageOpen className="w-8 h-8 text-primary-500" />
-            <div>
-              <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Inventory Management</h1>
-            </div>
-          </div>
-        </div>
-
-        {/* LIVE INVENTORY TRACKING TABLE */}
-        <Card className="shadow-sm border-slate-200 overflow-hidden">
-          <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-500" />
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Live Inventory Tracking</h2>
-            </div>
-          </div>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Product</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Batch Code</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Quantity</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Facility</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Stored Date</th>
-                    <th className="py-4 px-6 font-bold text-slate-900 dark:text-white">Expiry Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEMO_INVENTORY.map((batch, idx) => (
-                    <tr key={idx} className="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors text-slate-700 dark:text-slate-300 font-medium text-sm">
-                      <td className="py-4 px-6 font-bold text-slate-900 dark:text-white">{batch.product_name}</td>
-                      <td className="py-4 px-6">{batch.batch_code}</td>
-                      <td className="py-4 px-6">{batch.crates} Crates</td>
-                      <td className="py-4 px-6">Facility - Nashik_Storage_A Facility</td>
-                      <td className="py-4 px-6">{new Date(batch.stored_date).toLocaleDateString('en-US', { year: '2-digit', month: 'short', day: 'numeric' })}</td>
-                      <td className="py-4 px-6">{new Date(batch.expiry_date).toLocaleDateString('en-US', { year: '2-digit', month: 'short', day: 'numeric' })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Inventory Summary */}
-        <Card className="shadow-sm border-slate-200 mt-8">
-          <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-4">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-emerald-500" />
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Total Inventory Summary</h2>
-            </div>
-          </div>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm font-semibold mb-2">Total Crates Stored</p>
-                <p className="text-4xl font-extrabold text-emerald-600 dark:text-emerald-400">{DEMO_INVENTORY_SUMMARY.total_crates}</p>
-              </div>
-              <div>
-                <p className="text-slate-600 dark:text-slate-400 text-sm font-semibold mb-2">Batch Breakdown</p>
-                <div className="space-y-2">
-                  {DEMO_INVENTORY_SUMMARY.batches.map((b, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                      <span className="text-sm font-mono text-slate-700 dark:text-slate-300">{b.batch_code}</span>
-                      <span className="font-bold text-slate-900 dark:text-white">{b.crates} crates</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return (

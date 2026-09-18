@@ -3,7 +3,7 @@ import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { DEMO_ENABLED, DEMO_OWNER_SENSORS, DEMO_TEMP_HUMIDITY_VALUES } from '../../utils/demoData';
+
 
 interface Sensor {
   id: string;
@@ -56,19 +56,6 @@ const OwnerMonitoring: React.FC = () => {
   const loadMonitoringData = async () => {
     try {
       setLoading(true);
-
-      // DEMO MODE: Use hardcoded demo sensor data
-      if (DEMO_ENABLED) {
-        const demoSensorsFormatted = DEMO_OWNER_SENSORS.map((sensor: any) => ({
-          ...sensor,
-          status: 'Active',
-          last_seen: new Date().toISOString()
-        }));
-        setDbSensors(demoSensorsFormatted);
-        setInventory([{ farmer_id: 'demo-farmer-1' }]);
-        setLoading(false);
-        return;
-      }
 
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')

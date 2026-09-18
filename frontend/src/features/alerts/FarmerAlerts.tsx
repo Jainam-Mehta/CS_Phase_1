@@ -5,7 +5,6 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/Card';
 import { AlertTriangle, Bell, Info, ShieldAlert, LayoutDashboard } from 'lucide-react';
 import { getProductOptimality, evaluateCondition } from '../../lib/optimalityEngine';
-import { DEMO_ENABLED, DEMO_ALERTS } from '../../utils/demoData';
 
 interface AlertItem {
    id: string;
@@ -31,23 +30,7 @@ const FarmerAlerts: React.FC = () => {
      const generateRealisticAlerts = async () => {
          setLoading(true);
          
-         // DEMO MODE: Use hardcoded demo alerts
-         if (DEMO_ENABLED) {
-           const demoAlertItems: AlertItem[] = DEMO_ALERTS.map(al => ({
-             id: al.id,
-             level: al.severity === 'critical' ? 'Critical' : al.severity === 'warning' ? 'Warning' : 'Info',
-             title: al.title,
-             message: al.message,
-             time: new Date(al.created_at).toLocaleTimeString(),
-             is_acknowledged: al.is_acknowledged
-           }));
-           
-           setAlerts(demoAlertItems);
-           setLoading(false);
-           return;
-         }
-         
-         // Real database queries would go here
+         // Real database queries
          const generated: AlertItem[] = [];
          setAlerts(generated);
          setLoading(false);

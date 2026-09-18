@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
-import { DEMO_ENABLED, DEMO_OWNER_FINANCE, DEMO_OWNER_SENSORS } from '../../utils/demoData';
+
 
 const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
@@ -42,47 +42,6 @@ const OwnerDashboard: React.FC = () => {
   const loadFacilityData = async () => {
     try {
       setLoading(true);
-
-      // DEMO MODE: Use hardcoded demo finance data
-      if (DEMO_ENABLED) {
-        // Set all demo data for the dashboard
-        setRooms([{ id: 'demo-room-1', room_name: 'Storage Room A', capacity_kg: 10000, current_utilization_kg: 225 }]);
-        setDbSensors(DEMO_OWNER_SENSORS);
-        setInventory([{ product: 'Apple', quantity: 18, batches: { farmer_id: 'farmer-1' } }]);
-        setStakeholders([{ name: 'Roy' }]);
-        setLatestCondition({
-          temperature: 1.12,
-          humidity: 92.3,
-          ambient_temperature: 31,
-          ambient_humidity: 69,
-          solar_percentage: 95.7,
-          energy_consumption_kwh: 351
-        });
-        
-        // Format chart data for Recharts & Custom components
-        setRevenueHistory(
-          (DEMO_OWNER_FINANCE.weekly_revenue || []).map((w: any) => ({
-            time: w.week,
-            value: Number((w.revenue / 100000).toFixed(6)) // convert to lakhs
-          }))
-        );
-        setFarmerActivity(
-          (DEMO_OWNER_FINANCE.farmer_activity || []).map((d: any) => ({
-            day: d.day,
-            checkIns: d.removed || 0,
-            batchesAdded: d.added || 0
-          }))
-        );
-        setEnergyHistory(
-          (DEMO_OWNER_FINANCE.energy_consumption || []).map((e: any) => ({
-            time: e.date,
-            value: Number(((e.solar || 0) + (e.grid || 0)).toFixed(1))
-          }))
-        );
-        
-        setLoading(false);
-        return;
-      }
 
       // Fetch Rooms for selected facility
       const { data: rmData } = await supabase
