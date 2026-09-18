@@ -196,7 +196,7 @@ const StakeholderMap: React.FC = () => {
       }
     });
 
-    const avgRoi = totalInvestedFacs > 0 ? (totalRoiRaw / totalInvestedFacs) : 5.0;
+    const avgRoi = totalInvestedFacs > 0 ? (totalRoiRaw / totalInvestedFacs) : 0;
 
     return {
       totalInvestment: totInv > 0 ? totInv : 0,
