@@ -8,7 +8,11 @@ gcloud compute ssh coldsense-production-vm --zone=asia-south1-c
 
 # 4. On the VM, pull latest code from GitHub
 cd /home/jainammehta250
-git clone https://github.com/YOUR_USERNAME/CS_Project.git  # Or git pull if already exists
+if [ -d CS_Project ]; then
+  cd CS_Project && git pull
+else
+  git clone https://github.com/Jainam-Mehta/CS_Phase_1.git CS_Project
+fi # Or git pull if already exists
 
 # 5. Go to infrastructure folder
 cd CS_Project/infrastructure
@@ -20,3 +24,19 @@ docker compose up -d --force-recreate
 # 7. Check logs to verify everything started
 docker logs coldsense-mqtt --tail=20
 docker logs coldsense-backend --tail=20
+
+
+# For stopping
+
+# 1. SSH into the VM
+gcloud compute ssh coldsense-production-vm --zone=asia-south1-c
+
+# 2. On the VM, stop all Docker containers
+cd /home/jainammehta250/CS_Project/infrastructure
+docker compose down
+
+# 3. Exit SSH
+exit
+
+# 4. Stop the VM instance
+gcloud compute instances stop coldsense-production-vm --zone=asia-south1-c

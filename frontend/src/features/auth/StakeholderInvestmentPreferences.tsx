@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { MapPin, Building2, Plus, Check, AlertCircle, Briefcase } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { logStakeholderRequest } from '../../lib/activityLogger';
 import type { State, Site, ColdStorageRoom } from '../../lib/supabase';
 
 interface Facility {
@@ -18,13 +19,17 @@ interface Facility {
   totalCapacity: number;
 }
 
+interface SelectedFacilityWithAmount extends Facility {
+  investmentAmount: number;
+}
+
 const StakeholderInvestmentPreferences: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [states, setStates] = useState<State[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
-  const [selectedFacilities, setSelectedFacilities] = useState<Facility[]>([]);
+  const [selectedFacilities, setSelectedFacilities] = useState<SelectedFacilityWithAmount[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -170,8 +175,14 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       return;
     }
 
-    setSelectedFacilities([...selectedFacilities, facility]);
+    setSelectedFacilities([...selectedFacilities, { ...facility, investmentAmount: 100000 }]);
     setError('');
+  };
+
+  const handleUpdateInvestmentAmount = (facilityId: string, amount: number) => {
+    setSelectedFacilities(selectedFacilities.map(f =>
+      f.id === facilityId ? { ...f, investmentAmount: amount } : f
+    ));
   };
 
   const handleRemoveFacility = (facilityId: string) => {
@@ -209,10 +220,11 @@ const StakeholderInvestmentPreferences: React.FC = () => {
         throw new Error('Profile not found');
       }
 
-      // Insert into stakeholder_interest
+      // Insert into stakeholder_interest with investment amounts
       const interests = selectedFacilities.map((facility) => ({
         stakeholder_id: profile.id,
         facility_id: facility.id,
+        interest_status: 'Interested'
       }));
 
       const { error: insertError } = await supabase
@@ -220,6 +232,17 @@ const StakeholderInvestmentPreferences: React.FC = () => {
         .insert(interests);
 
       if (insertError) throw insertError;
+
+      // Log stakeholder requests for each facility
+      for (const facility of selectedFacilities) {
+        await logStakeholderRequest(
+          profile.id,
+          `${session.user.email || 'Unknown'}`,
+          facility.id,
+          facility.name,
+          facility.investmentAmount
+        );
+      }
 
       setSuccess(true);
       setTimeout(() => {
@@ -362,13 +385,27 @@ const StakeholderInvestmentPreferences: React.FC = () => {
                     {selectedFacilities.map((facility) => (
                       <div
                         key={facility.id}
-                        className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg gap-4"
                       >
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium text-gray-900 dark:text-white">{facility.name}</p>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
                             {facility.siteName}, {facility.district}
                           </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Investment:</span>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400">₹</span>
+                            <input
+                              type="number"
+                              min="10000"
+                              step="10000"
+                              value={facility.investmentAmount}
+                              onChange={(e) => handleUpdateInvestmentAmount(facility.id, parseInt(e.target.value) || 0)}
+                              className="pl-6 pr-3 py-1 w-32 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
                         </div>
                         <Button
                           variant="outline"

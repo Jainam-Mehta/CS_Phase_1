@@ -3,7 +3,8 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Check, X, Clock, MapPin, Building2, User } from 'lucide-react';
+import { Check, X, Clock, MapPin, Building2, User, Briefcase, CheckCircle } from 'lucide-react';
+import { logFarmerApproved, logStakeholderApproved, logPaymentReceived } from '../../lib/activityLogger';
 
 interface ApprovalRequest {
   id: string;
@@ -16,9 +17,33 @@ interface ApprovalRequest {
   roomName: string;
 }
 
+interface InvestmentRequest {
+  id: string;
+  stakeholder_id: string;
+  stakeholder_name: string;
+  facility_id: string;
+  facility_name: string;
+  created_at: string;
+  interest_status: string;
+}
+
+interface PaymentRequest {
+  id: string;
+  investment_id: string;
+  stakeholder_id: string;
+  stakeholder_name: string;
+  facility_name: string;
+  amount_inr: number;
+  payment_status: string;
+  created_at: string;
+  remarks: string | null;
+}
+
 const OwnerApprovals: React.FC = () => {
   const { user } = useAuthStore();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+  const [investmentRequests, setInvestmentRequests] = useState<InvestmentRequest[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -135,8 +160,140 @@ const OwnerApprovals: React.FC = () => {
     }
   };
 
+  const loadInvestmentRequests = async () => {
+    if (!user?.id) return;
+    try {
+      const profile = await resolveProfile(user.id);
+      if (!profile) return;
+
+      // Get facilities owned by this owner
+      const { data: facilities } = await supabase
+        .from('facilities')
+        .select('id, facility_name')
+        .eq('owner_profile_id', profile.id);
+
+      if (!facilities || facilities.length === 0) {
+        setInvestmentRequests([]);
+        return;
+      }
+
+      const facilityIds = facilities.map(f => f.id);
+      const facilityMap = new Map(facilities.map(f => [f.id, f.facility_name]));
+
+      // Get pending investment interests for these facilities
+      const { data: interests } = await supabase
+        .from('stakeholder_interest')
+        .select(`
+          id,
+          stakeholder_id,
+          facility_id,
+          created_at,
+          interest_status,
+          profiles!stakeholder_id (
+            first_name,
+            last_name
+          )
+        `)
+        .in('facility_id', facilityIds)
+        .eq('interest_status', 'Interested');
+
+      if (!interests) {
+        setInvestmentRequests([]);
+        return;
+      }
+
+      const formatted = interests.map((interest: any) => ({
+        id: interest.id,
+        stakeholder_id: interest.stakeholder_id,
+        stakeholder_name: `${interest.profiles?.first_name || ''} ${interest.profiles?.last_name || ''}`.trim() || 'Unknown Stakeholder',
+        facility_id: interest.facility_id,
+        facility_name: facilityMap.get(interest.facility_id) || 'Unknown Facility',
+        created_at: interest.created_at,
+        interest_status: interest.interest_status
+      }));
+
+      setInvestmentRequests(formatted);
+    } catch (err) {
+      console.error('Error loading investment requests:', err);
+    }
+  };
+
+  const loadPaymentRequests = async () => {
+    if (!user?.id) return;
+    try {
+      const profile = await resolveProfile(user.id);
+      if (!profile) return;
+
+      // Get all approved investments for this owner's facilities
+      const { data: facilities } = await supabase
+        .from('facilities')
+        .select('id')
+        .eq('owner_profile_id', profile.id);
+
+      if (!facilities || facilities.length === 0) {
+        setPaymentRequests([]);
+        return;
+      }
+
+      const facilityIds = facilities.map(f => f.id);
+
+      // Get pending payments for investments in these facilities
+      const { data: payments } = await supabase
+        .from('stakeholder_payments')
+        .select(`
+          id,
+          investment_id,
+          stakeholder_id,
+          amount_inr,
+          payment_status,
+          created_at,
+          remarks,
+          stakeholder_investments(facility_id),
+          profiles!stakeholder_id(first_name, last_name),
+          facilities(facility_name)
+        `)
+        .in('payment_status', ['Pending', 'Received']);
+
+      if (!payments) {
+        setPaymentRequests([]);
+        return;
+      }
+
+      // Filter to only owner's facilities and get facility names
+      const { data: facilitiesData } = await supabase
+        .from('facilities')
+        .select('id, facility_name')
+        .in('id', facilityIds);
+
+      const facilityMap = new Map(facilitiesData?.map(f => [f.id, f.facility_name]) || []);
+
+      const formatted = payments
+        .filter((p: any) => {
+          const facilityId = p.stakeholder_investments?.facility_id;
+          return facilityIds.includes(facilityId);
+        })
+        .map((p: any) => ({
+          id: p.id,
+          investment_id: p.investment_id,
+          stakeholder_id: p.stakeholder_id,
+          stakeholder_name: `${p.profiles?.first_name || ''} ${p.profiles?.last_name || ''}`.trim() || 'Unknown',
+          facility_name: facilityMap.get(p.stakeholder_investments?.facility_id) || 'Unknown Facility',
+          amount_inr: p.amount_inr,
+          payment_status: p.payment_status,
+          created_at: p.created_at,
+          remarks: p.remarks
+        }));
+
+      setPaymentRequests(formatted);
+    } catch (err) {
+      console.error('Error loading payment requests:', err);
+    }
+  };
+
   useEffect(() => {
     loadRequests();
+    loadInvestmentRequests();
+    loadPaymentRequests();
   }, [user?.id]);
 
   const handleAction = async (requestId: string, action: 'Approved' | 'Rejected') => {
@@ -144,6 +301,7 @@ const OwnerApprovals: React.FC = () => {
     try {
       setActionLoading(requestId);
       const profile = await resolveProfile(user.id);
+      const req = requests.find(r => r.id === requestId);
       
       const payload: any = {
         status: action,
@@ -162,10 +320,119 @@ const OwnerApprovals: React.FC = () => {
 
       if (error) throw error;
       
+      // Log farmer approval activity
+      if (action === 'Approved' && req && profile) {
+        await logFarmerApproved(
+          profile.id,
+          `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          req.id, // farmer_id would be in the request but we use the request id as reference
+          req.farmerName,
+          req.id, // roomId
+          req.roomName,
+          req.id, // facilityId
+          req.facilityName
+        );
+      }
+
       // Update DOM gracefully instead of reloading page implicitly
       setRequests((prev) => prev.filter(r => r.id !== requestId));
     } catch (err) {
       console.error(`Failed to natively ${action} request:`, err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleInvestmentAction = async (interestId: string, stakeholderId: string, facilityId: string, action: 'Approved' | 'Rejected') => {
+    if (!user?.id) return;
+    try {
+      setActionLoading(interestId);
+      const profile = await resolveProfile(user.id);
+      const req = investmentRequests.find(r => r.id === interestId);
+
+      if (action === 'Approved') {
+        // Create entry in stakeholder_investments
+        const { error: investError } = await supabase
+          .from('stakeholder_investments')
+          .insert({
+            stakeholder_id: stakeholderId,
+            facility_id: facilityId,
+            owner_company_id: profile?.owner_company_id,
+            investment_amount: 0,
+            investment_percentage: 0,
+            investment_date: new Date().toISOString(),
+            total_investment_amount: 0,
+            total_paid_amount: 0,
+            payment_status: 'Pending'
+          });
+
+        if (investError) throw investError;
+
+        // Log stakeholder approval
+        if (profile && req) {
+          await logStakeholderApproved(
+            profile.id,
+            `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            stakeholderId,
+            req.stakeholder_name,
+            facilityId,
+            req.facility_name,
+            0 // investment amount will be updated during payment
+          );
+        }
+      }
+
+      // Update interest status
+      const { error: statusError } = await supabase
+        .from('stakeholder_interest')
+        .update({ interest_status: action === 'Approved' ? 'Accepted' : 'Rejected' })
+        .eq('id', interestId);
+
+      if (statusError) throw statusError;
+
+      setInvestmentRequests((prev) => prev.filter(r => r.id !== interestId));
+    } catch (err) {
+      console.error(`Failed to ${action} investment request:`, err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMarkPaymentAsReceived = async (paymentId: string) => {
+    if (!user?.id) return;
+    try {
+      setActionLoading(paymentId);
+      const profile = await resolveProfile(user.id);
+      const payment = paymentRequests.find(p => p.id === paymentId);
+
+      const { error } = await supabase
+        .from('stakeholder_payments')
+        .update({
+          payment_status: 'Received',
+          received_by_owner_at: new Date().toISOString(),
+          received_by_owner_id: profile?.id
+        })
+        .eq('id', paymentId);
+
+      if (error) throw error;
+
+      // Log payment received
+      if (profile && payment) {
+        await logPaymentReceived(
+          profile.id,
+          `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          payment.stakeholder_id,
+          payment.stakeholder_name,
+          '', // We don't have facilityId directly, but it's in the investment
+          payment.facility_name,
+          payment.amount_inr,
+          paymentId
+        );
+      }
+
+      setPaymentRequests((prev) => prev.filter(r => r.id !== paymentId));
+    } catch (err) {
+      console.error('Failed to mark payment as received:', err);
     } finally {
       setActionLoading(null);
     }
@@ -271,6 +538,169 @@ const OwnerApprovals: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Investment Requests Section */}
+      <div className="mt-10 pt-10 border-t border-gray-200 dark:border-gray-700">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Investment Requests</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Review and approve investment requests from stakeholders for your facilities.
+          </p>
+        </div>
+
+        {investmentRequests.length === 0 ? (
+          <Card className="mt-6">
+            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
+              <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No pending investment requests at this time.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            {investmentRequests.map(req => (
+              <Card key={req.id} className="border-t-4 border-t-blue-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
+                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
+                      <Briefcase className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{req.stakeholder_name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Investment Interest</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Requested</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {new Date(req.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Facility</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{req.facility_name}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <button
+                      onClick={() => handleInvestmentAction(req.id, req.stakeholder_id, req.facility_id, 'Approved')}
+                      disabled={actionLoading !== null}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white hover:bg-blue-600 rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === req.id ? 'Accepting...' : <><Check className="h-4 w-4" /> Accept</>}
+                    </button>
+                    <button
+                      onClick={() => handleInvestmentAction(req.id, req.stakeholder_id, req.facility_id, 'Rejected')}
+                      disabled={actionLoading !== null}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" /> Reject
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Payment Requests Section */}
+      <div className="mt-10 pt-10 border-t border-gray-200 dark:border-gray-700">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Pending Payments</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Review and confirm payments received from stakeholders for their investments.
+          </p>
+        </div>
+
+        {paymentRequests.length === 0 ? (
+          <Card className="mt-6">
+            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
+              <Check className="h-12 w-12 mx-auto mb-4 text-green-500" />
+              <p>No pending payments at this time.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            {paymentRequests.map(payment => (
+              <Card key={payment.id} className="border-t-4 border-t-emerald-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
+                    <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/20 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                      <Check className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{payment.stakeholder_name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Payment Received</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Amount:</span>
+                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">₹{payment.amount_inr.toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Facility:</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{payment.facility_name}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Submitted:</span>
+                      <span className="text-sm text-gray-500">{new Date(payment.created_at).toLocaleDateString()}</span>
+                    </div>
+
+                    {payment.remarks && (
+                      <div>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Remarks:</span>
+                        <p className="text-sm text-gray-500 mt-1 bg-gray-50 dark:bg-slate-800/50 p-2 rounded">
+                          {payment.remarks}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                      <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">
+                        Status: {payment.payment_status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {payment.payment_status === 'Pending' && (
+                    <button
+                      onClick={() => handleMarkPaymentAsReceived(payment.id)}
+                      disabled={actionLoading !== null}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading === payment.id ? 'Confirming...' : <><Check className="h-4 w-4" /> Mark as Received</>}
+                    </button>
+                  )}
+                  {payment.payment_status === 'Received' && (
+                    <div className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg font-medium">
+                      <CheckCircle className="h-4 w-4" /> Confirmed
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

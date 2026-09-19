@@ -120,6 +120,7 @@ const StakeholderDashboard = React.lazy(() => import('../features/stakeholder/St
 
 // Shared pages
 const Notifications = React.lazy(() => import('../features/notifications/Notifications'));
+const ActivityAlerts = React.lazy(() => import('../features/notifications/ActivityAlerts'));
 const Settings = React.lazy(() => import('../features/settings/Settings'));
 const Profile = React.lazy(() => import('../features/settings/Profile'));
 const OwnerProfile = React.lazy(() => import('../features/settings/OwnerProfile'));
@@ -594,6 +595,19 @@ export const router = createBrowserRouter([
         <ProtectedRoute>
           <React.Suspense fallback={<LoadingFallback />}>
             <Notifications />
+          </React.Suspense>
+        </ProtectedRoute>
+      </AuthLayout>
+    ),
+  },
+
+  {
+    path: '/alerts',
+    element: (
+      <AuthLayout>
+        <ProtectedRoute>
+          <React.Suspense fallback={<LoadingFallback />}>
+            <ActivityAlerts />
           </React.Suspense>
         </ProtectedRoute>
       </AuthLayout>

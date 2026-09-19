@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { Plus, Building, User, Warehouse, Clock, CheckCircle, XCircle, Briefcase, Users, IndianRupee, Save, Edit2 } from 'lucide-react';
+import { Plus, Building, User, Warehouse, Clock, CheckCircle, XCircle, Briefcase, Users, IndianRupee, Save, Edit2, CreditCard, AlertCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -14,7 +14,13 @@ const SettingsPage: React.FC = () => {
   
   const [requests, setRequests] = useState<any[]>([]);
   const [stakeholderRequests, setStakeholderRequests] = useState<any[]>([]);
+  const [stakeholderPayments, setStakeholderPayments] = useState<any[]>([]);
   const [loadingReqs, setLoadingReqs] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPaymentInvestment, setSelectedPaymentInvestment] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentRemarks, setPaymentRemarks] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
   
   // Facilities Details State
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -80,20 +86,82 @@ const SettingsPage: React.FC = () => {
          if (!profile) return;
          
          const { data } = await supabase
-            .from('stakeholder_interest')
+            .from('stakeholder_investments')
             .select(`
-               id, facility_id, created_at,
+               id, facility_id, investment_amount, investment_date,
                facilities(facility_name)
             `)
             .eq('stakeholder_id', profile.id)
-            .order('created_at', { ascending: false });
+            .order('investment_date', { ascending: false });
             
          if (data) setStakeholderRequests(data);
+         
+         // Load payments for these investments
+         loadStakeholderPayments(profile.id);
      } catch (err) {
          console.error('Failed loading investments', err);
      } finally {
          setLoadingReqs(false);
      }
+  };
+
+  const loadStakeholderPayments = async (stakeholderId: string) => {
+    try {
+      const { data } = await supabase
+        .from('stakeholder_payments')
+        .select(`
+          id,
+          investment_id,
+          amount_inr,
+          payment_status,
+          payment_date,
+          received_by_owner_at,
+          remarks,
+          created_at
+        `)
+        .eq('stakeholder_id', stakeholderId)
+        .order('created_at', { ascending: false });
+
+      if (data) setStakeholderPayments(data);
+    } catch (err) {
+      console.error('Failed loading payments', err);
+    }
+  };
+
+  const handleAddPayment = async () => {
+    if (!user?.id || !selectedPaymentInvestment || !paymentAmount) return;
+
+    setPaymentLoading(true);
+    try {
+      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+      if (!profile) throw new Error('Profile not found');
+
+      const { error } = await supabase
+        .from('stakeholder_payments')
+        .insert({
+          investment_id: selectedPaymentInvestment,
+          stakeholder_id: profile.id,
+          amount_inr: parseInt(paymentAmount),
+          payment_status: 'Pending',
+          remarks: paymentRemarks || null,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      // Reload payments
+      loadStakeholderPayments(profile.id);
+      
+      // Reset form
+      setShowPaymentModal(false);
+      setSelectedPaymentInvestment(null);
+      setPaymentAmount('');
+      setPaymentRemarks('');
+    } catch (err) {
+      console.error('Failed to add payment:', err);
+    } finally {
+      setPaymentLoading(false);
+    }
   };
 
   const loadFacilitiesWithFarmers = async () => {
@@ -597,25 +665,180 @@ const SettingsPage: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Nashik_Storage_A Facility</td>
-                        <td className="px-6 py-4 text-gray-500">Sep 1, 2026</td>
-                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
-                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
-                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                      </tr>
-                      <tr className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">Kullu_Site_Room_A+B Facility</td>
-                        <td className="px-6 py-4 text-gray-500">Sep 4, 2026</td>
-                        <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">₹20,000</td>
-                        <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
-                        <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                      </tr>
+                      {stakeholderRequests.length > 0 ? (
+                        stakeholderRequests.map((req: any) => (
+                          <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
+                              {req.facilities?.facility_name || 'Unknown Facility'}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500">
+                              {new Date(req.investment_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </td>
+                            <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">
+                              ₹{req.investment_amount?.toLocaleString() || '0'}
+                            </td>
+                            <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                            <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                            No investments yet
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                  </table>
                </div>
              </CardContent>
            </Card>
+
+           {/* My Payments Section - for Stakeholders */}
+           <Card variant="default">
+             <CardHeader className="border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
+               <CardTitle className="text-lg flex items-center gap-2">
+                 <CreditCard className="w-5 h-5" /> My Payments
+               </CardTitle>
+               <Button 
+                 variant="primary" 
+                 size="sm"
+                 onClick={() => setShowPaymentModal(true)}
+                 className="flex items-center gap-2"
+               >
+                 <Plus className="w-4 h-4" /> Add Payment
+               </Button>
+             </CardHeader>
+             <CardContent className="p-0">
+               <div className="overflow-x-auto">
+                 <table className="w-full text-sm text-left">
+                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-slate-800/50">
+                     <tr>
+                       <th className="px-6 py-4 font-semibold">Amount</th>
+                       <th className="px-6 py-4 font-semibold">Status</th>
+                       <th className="px-6 py-4 font-semibold">Paid On</th>
+                       <th className="px-6 py-4 font-semibold">Approved On</th>
+                       <th className="px-6 py-4 font-semibold">Remarks</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {stakeholderPayments.length > 0 ? (
+                        stakeholderPayments.map((payment: any) => (
+                          <tr key={payment.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
+                              ₹{payment.amount_inr?.toLocaleString() || '0'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                payment.payment_status === 'Received' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
+                                payment.payment_status === 'Verified' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' :
+                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                              }`}>
+                                {payment.payment_status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-gray-500">
+                              {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'Not yet'}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500">
+                              {payment.received_by_owner_at ? new Date(payment.received_by_owner_at).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500 text-xs max-w-[200px] truncate">{payment.remarks || '—'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                            No payments yet
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                 </table>
+               </div>
+             </CardContent>
+           </Card>
+        </div>
+      )}
+      
+      {/* Payment Modal */}
+      {showPaymentModal && user?.role === 'stakeholder' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Add Payment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Investment
+                </label>
+                <select
+                  value={selectedPaymentInvestment || ''}
+                  onChange={(e) => setSelectedPaymentInvestment(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Select an investment</option>
+                  {stakeholderRequests.map((inv: any) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.facilities?.facility_name} - ₹{inv.investment_amount?.toLocaleString() || '0'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Payment Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Enter amount"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Remarks (Optional)
+                </label>
+                <textarea
+                  value={paymentRemarks}
+                  onChange={(e) => setPaymentRemarks(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="e.g., Bank transfer reference, payment method, etc."
+                  rows={3}
+                />
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Payment will be marked as "Pending" until owner verifies receipt.
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowPaymentModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="primary" 
+                  onClick={handleAddPayment}
+                  disabled={paymentLoading || !selectedPaymentInvestment || !paymentAmount}
+                >
+                  {paymentLoading ? 'Adding...' : 'Add Payment'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
       
