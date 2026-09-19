@@ -85,7 +85,20 @@ const SettingsPage: React.FC = () => {
          const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
          if (!profile) return;
          
-         const { data } = await supabase
+         // Get both pending interests AND approved investments
+         // Pending: stakeholder_interest
+         const { data: interests } = await supabase
+            .from('stakeholder_interest')
+            .select(`
+               id, facility_id, created_at, interest_status,
+               facilities(facility_name)
+            `)
+            .eq('stakeholder_id', profile.id)
+            .eq('interest_status', 'Interested')
+            .order('created_at', { ascending: false });
+
+         // Approved: stakeholder_investments
+         const { data: investments } = await supabase
             .from('stakeholder_investments')
             .select(`
                id, facility_id, investment_amount, investment_date,
@@ -93,8 +106,21 @@ const SettingsPage: React.FC = () => {
             `)
             .eq('stakeholder_id', profile.id)
             .order('investment_date', { ascending: false });
-            
-         if (data) setStakeholderRequests(data);
+
+         // Combine both - show approved investments first, then pending interests
+         const combined = [
+           ...(investments || []).map(inv => ({
+             ...inv,
+             created_at: inv.investment_date,
+             status: 'Invested'
+           })),
+           ...(interests || []).map(int => ({
+             ...int,
+             status: 'Pending'
+           }))
+         ];
+
+         setStakeholderRequests(combined);
          
          // Load payments for these investments
          loadStakeholderPayments(profile.id);
@@ -672,12 +698,20 @@ const SettingsPage: React.FC = () => {
                               {req.facilities?.facility_name || 'Unknown Facility'}
                             </td>
                             <td className="px-6 py-4 text-gray-500">
-                              {new Date(req.investment_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              {new Date(req.created_at || req.investment_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
                             </td>
                             <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">
-                              ₹{req.investment_amount?.toLocaleString() || '0'}
+                              ₹{(req.investment_amount || 0).toLocaleString()}
                             </td>
-                            <td className="px-6 py-4">{getStatusBadge('Invested')}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                req.status === 'Invested' 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                              }`}>
+                                {req.status === 'Invested' ? 'Approved' : 'Pending'}
+                              </span>
+                            </td>
                             <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
                           </tr>
                         ))
