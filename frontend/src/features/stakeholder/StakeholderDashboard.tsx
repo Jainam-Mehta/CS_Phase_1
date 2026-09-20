@@ -103,13 +103,13 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
               // Get today's energy consumption
               const { data: energyData } = await supabase
                 .from('energy_consumption')
-                .select('energy_kwh')
+                .select('total_kwh')
                 .eq('facility_id', fac.id)
-                .gte('timestamp', new Date(new Date().setHours(0,0,0,0)).toISOString())
-                .order('timestamp', { ascending: false })
+                .gte('reading_date', new Date(new Date().setHours(0,0,0,0)).toISOString().split('T')[0])
+                .order('reading_date', { ascending: false })
                 .limit(1);
 
-              const todayEnergy = energyData && energyData.length > 0 ? energyData[0].energy_kwh : 0;
+              const todayEnergy = energyData && energyData.length > 0 ? energyData[0].total_kwh : 0;
 
               setTelemetry({
                 temperature: Number(avgTemp.toFixed(1)),

@@ -237,7 +237,20 @@ const OwnerApprovals: React.FC = () => {
 
       const facilityIds = facilities.map(f => f.id);
 
-      // Get pending payments for investments in these facilities
+      // Get investments for these facilities
+      const { data: investments } = await supabase
+        .from('stakeholder_investments')
+        .select('id, stakeholder_id, facility_id')
+        .in('facility_id', facilityIds);
+
+      if (!investments || investments.length === 0) {
+        setPaymentRequests([]);
+        return;
+      }
+
+      const investmentIds = investments.map(i => i.id);
+
+      // Get pending payments for these investments
       const { data: payments } = await supabase
         .from('stakeholder_payments')
         .select(`
@@ -247,11 +260,9 @@ const OwnerApprovals: React.FC = () => {
           amount_inr,
           payment_status,
           created_at,
-          remarks,
-          stakeholder_investments(facility_id),
-          profiles!stakeholder_id(first_name, last_name),
-          facilities(facility_name)
+          remarks
         `)
+        .in('investment_id', investmentIds)
         .in('payment_status', ['Pending', 'Received']);
 
       if (!payments) {
@@ -259,30 +270,44 @@ const OwnerApprovals: React.FC = () => {
         return;
       }
 
-      // Filter to only owner's facilities and get facility names
+      // Get stakeholder and facility names
+      const stakeholderIds = [...new Set(payments.map(p => p.stakeholder_id))];
+      const { data: stakeholders } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', stakeholderIds);
+
+      const stakeholderMap = new Map((stakeholders || []).map(s => [
+        s.id,
+        `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown'
+      ]));
+
+      const facilityMap = new Map(facilities.map(f => [f.id, `Facility ${facilityIds.indexOf(f.id) + 1}`]));
+
+      // Get facility names
       const { data: facilitiesData } = await supabase
         .from('facilities')
         .select('id, facility_name')
         .in('id', facilityIds);
 
-      const facilityMap = new Map(facilitiesData?.map(f => [f.id, f.facility_name]) || []);
+      if (facilitiesData) {
+        facilitiesData.forEach(f => facilityMap.set(f.id, f.facility_name));
+      }
 
-      const formatted = payments
-        .filter((p: any) => {
-          const facilityId = p.stakeholder_investments?.facility_id;
-          return facilityIds.includes(facilityId);
-        })
-        .map((p: any) => ({
+      const formatted = payments.map((p: any) => {
+        const investment = investments.find(i => i.id === p.investment_id);
+        return {
           id: p.id,
           investment_id: p.investment_id,
           stakeholder_id: p.stakeholder_id,
-          stakeholder_name: `${p.profiles?.first_name || ''} ${p.profiles?.last_name || ''}`.trim() || 'Unknown',
-          facility_name: facilityMap.get(p.stakeholder_investments?.facility_id) || 'Unknown Facility',
+          stakeholder_name: stakeholderMap.get(p.stakeholder_id) || 'Unknown',
+          facility_name: investment ? facilityMap.get(investment.facility_id) || 'Unknown Facility' : 'Unknown Facility',
           amount_inr: p.amount_inr,
           payment_status: p.payment_status,
           created_at: p.created_at,
           remarks: p.remarks
-        }));
+        };
+      });
 
       setPaymentRequests(formatted);
     } catch (err) {
@@ -347,52 +372,70 @@ const OwnerApprovals: React.FC = () => {
     if (!user?.id) return;
     try {
       setActionLoading(interestId);
+      console.log('Starting investment action:', { interestId, stakeholderId, facilityId, action });
+      
       const profile = await resolveProfile(user.id);
+      console.log('Resolved profile:', profile);
+      
       const req = investmentRequests.find(r => r.id === interestId);
+      console.log('Found investment request:', req);
 
       if (action === 'Approved') {
-        // Create entry in stakeholder_investments
-        const { error: investError } = await supabase
-          .from('stakeholder_investments')
-          .insert({
-            stakeholder_id: stakeholderId,
-            facility_id: facilityId,
-            owner_company_id: profile?.owner_company_id,
-            investment_amount: 0,
-            investment_percentage: 0,
-            investment_date: new Date().toISOString(),
-            total_investment_amount: 0,
-            total_paid_amount: 0,
-            payment_status: 'Pending'
-          });
+        // Get owner company ID from the owner's profile
+        console.log('Owner profile:', profile);
 
+        // Create entry in stakeholder_investments
+        const investmentData: any = {
+          stakeholder_id: stakeholderId,
+          facility_id: facilityId,
+          owner_company_id: profile?.owner_company_id
+        };
+        
+        console.log('Inserting stakeholder_investments:', investmentData);
+        
+        const { data: investData, error: investError } = await supabase
+          .from('stakeholder_investments')
+          .insert(investmentData)
+          .select();
+
+        console.log('Insert response:', { data: investData, error: investError });
         if (investError) throw investError;
 
         // Log stakeholder approval
         if (profile && req) {
-          await logStakeholderApproved(
-            profile.id,
-            `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-            stakeholderId,
-            req.stakeholder_name,
-            facilityId,
-            req.facility_name,
-            0 // investment amount will be updated during payment
-          );
+          console.log('Logging stakeholder approval...');
+          try {
+            await logStakeholderApproved(
+              profile.id,
+              `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+              stakeholderId,
+              req.stakeholder_name,
+              facilityId,
+              req.facility_name,
+              0 // investment amount will be updated during payment
+            );
+            console.log('Stakeholder approval logged successfully');
+          } catch (logErr) {
+            console.error('Failed to log stakeholder approval:', logErr);
+          }
         }
       }
 
-      // Update interest status
+      // Update interest status - use 'Approved' when accepted, 'Rejected' when rejected
+      console.log('Updating stakeholder_interest status to:', action === 'Approved' ? 'Approved' : 'Rejected');
       const { error: statusError } = await supabase
         .from('stakeholder_interest')
-        .update({ interest_status: action === 'Approved' ? 'Accepted' : 'Rejected' })
+        .update({ interest_status: action === 'Approved' ? 'Approved' : 'Rejected' })
         .eq('id', interestId);
 
+      console.log('Status update error:', statusError);
       if (statusError) throw statusError;
 
+      console.log('Action successful, filtering requests');
       setInvestmentRequests((prev) => prev.filter(r => r.id !== interestId));
     } catch (err) {
       console.error(`Failed to ${action} investment request:`, err);
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error occurred'}`);
     } finally {
       setActionLoading(null);
     }

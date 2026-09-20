@@ -210,7 +210,7 @@ const SettingsPage: React.FC = () => {
       // Get all facilities owned by this owner using owner_profile_id
       const { data: facilitiesData, error: facilityError } = await supabase
         .from('facilities')
-        .select('id, facility_name, capacity_kg, current_utilization_kg, created_at')
+        .select('id, facility_name, created_at')
         .eq('owner_profile_id', profile.id)
         .order('facility_name');
       
@@ -222,51 +222,74 @@ const SettingsPage: React.FC = () => {
       
       // For each facility, get approved farmers with their pricing
       const facilitiesWithFarmers = await Promise.all(
-        facilitiesData.map(async (facility) => {
+        facilitiesData.map(async (facility: any) => {
+          console.log('Processing facility:', facility.facility_name);
+          
           // Get rooms for this facility
-          const { data: rooms } = await supabase
+          const { data: rooms, error: roomError } = await supabase
             .from('cold_storage_rooms')
             .select('id')
             .eq('facility_id', facility.id);
           
+          console.log('Rooms query result:', { rooms, roomError, facilityId: facility.id });
+          
           // If no rooms, show facility anyway (empty farmers list)
           if (!rooms || rooms.length === 0) {
+            console.log('No rooms found for facility, returning empty farmers');
             return { ...facility, farmers: [] };
           }
           
           const roomIds = rooms.map(r => r.id);
+          console.log('Room IDs:', roomIds);
           
           // Get approved farmer accesses for these rooms
-          const { data: accesses } = await supabase
+          const { data: accesses, error: accessError } = await supabase
             .from('farmer_room_access')
             .select(`
               id,
               farmer_id,
-              price_per_crate,
-              profiles!farmer_room_access_farmer_id_fkey(
-                id,
-                full_name,
-                auth_user_id
-              )
+              price_per_crate
             `)
             .in('room_id', roomIds)
             .eq('status', 'Approved');
+
+          console.log('Farmer accesses query result:', { accesses, accessError, roomIds });
+          
+          if (accessError) {
+            console.error('Error fetching farmer accesses:', accessError);
+            return { ...facility, farmers: [] };
+          }
+          
+          // For each access, get the farmer name from profiles table
+          if (!accesses || accesses.length === 0) {
+            return { ...facility, farmers: [] };
+          }
+
+          const farmerIds = accesses.map(a => a.farmer_id);
+          const { data: farmerProfiles } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', farmerIds);
+
+          const farmerNameMap = new Map((farmerProfiles || []).map(f => [
+            f.id,
+            `${f.first_name || ''} ${f.last_name || ''}`.trim() || 'Unknown Farmer'
+          ]));
           
           // Group by farmer (since we're treating 1 facility = 1 room concept)
           const farmerMap = new Map();
-          if (accesses) {
-            accesses.forEach(access => {
-              const farmerProfile = Array.isArray(access.profiles) ? access.profiles[0] : access.profiles;
-              if (farmerProfile && !farmerMap.has(access.farmer_id)) {
-                farmerMap.set(access.farmer_id, {
-                  farmerId: access.farmer_id,
-                  farmerName: farmerProfile.full_name || 'Unknown Farmer',
-                  pricePerCrate: access.price_per_crate || null,
-                  accessId: access.id
-                });
-              }
-            });
-          }
+          accesses.forEach((access: any) => {
+            const farmerName = farmerNameMap.get(access.farmer_id) || 'Unknown Farmer';
+              
+            if (!farmerMap.has(access.farmer_id)) {
+              farmerMap.set(access.farmer_id, {
+                farmerId: access.farmer_id,
+                farmerName: farmerName,
+                pricePerCrate: access.price_per_crate || null,
+                accessId: access.id
+              });
+            }
+          });
           
           return {
             ...facility,

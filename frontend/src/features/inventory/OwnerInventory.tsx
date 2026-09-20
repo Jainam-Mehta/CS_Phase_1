@@ -40,7 +40,7 @@ const OwnerInventory: React.FC = () => {
       // Get ALL facilities for this owner
       const { data: facilitiesData } = await supabase
         .from('facilities')
-        .select('id, facility_name, capacity_kg, current_utilization_kg')
+        .select('id, facility_name, total_capacity_kg, current_utilization_kg')
         .eq('owner_profile_id', profile.id);
 
       console.log('🔍 DEBUG Owner: Facilities found:', facilitiesData?.length || 0, facilitiesData);
@@ -132,8 +132,10 @@ const OwnerInventory: React.FC = () => {
           room_id: allocation.room_id,
           quantity_kg: allocation.quantity_kg,
           assigned_at: allocation.assigned_at,
+          removed_at: allocation.removed_at,
           product_name: productName || 'Unknown Product',
-          farmer_name: farmerName
+          farmer_name: farmerName,
+          display_date: allocation.created_at || allocation.assigned_at  // Use batch created_at first
         };
       }) || [];
 
@@ -187,16 +189,44 @@ const OwnerInventory: React.FC = () => {
 
         if (!profile) return;
 
+        // Get all facilities for owner
         const { data: facilitiesData } = await supabase
           .from('facilities')
-          .select('capacity_kg, current_utilization_kg')
-          .eq('owner_id', profile.id);
+          .select('id, total_capacity_kg')
+          .eq('owner_profile_id', profile.id);
 
-        if (facilitiesData) {
-          const total = facilitiesData.reduce((sum, f) => sum + (Number(f.capacity_kg) || 0), 0);
-          const used = facilitiesData.reduce((sum, f) => sum + (Number(f.current_utilization_kg) || 0), 0);
-          setCapacityData({ total, used });
+        if (!facilitiesData || facilitiesData.length === 0) {
+          setCapacityData({ total: 0, used: 0 });
+          return;
         }
+
+        const facilityIds = facilitiesData.map(f => f.id);
+        const totalCapacity = facilitiesData.reduce((sum, f) => sum + (Number(f.total_capacity_kg) || 0), 0);
+
+        // Get all rooms for these facilities
+        const { data: roomsData } = await supabase
+          .from('cold_storage_rooms')
+          .select('id')
+          .in('facility_id', facilityIds);
+
+        if (!roomsData || roomsData.length === 0) {
+          setCapacityData({ total: totalCapacity, used: 0 });
+          return;
+        }
+
+        const roomIds = roomsData.map(r => r.id);
+
+        // Calculate actual occupancy from batch_room_allocations
+        const { data: allocationsData } = await supabase
+          .from('batch_room_allocations')
+          .select('quantity_kg')
+          .in('room_id', roomIds)
+          .is('removed_at', null);
+
+        const usedCapacity = (allocationsData || []).reduce((sum, alloc) => sum + (Number(alloc.quantity_kg) || 0), 0);
+        
+        console.log('Capacity Debug:', { totalCapacity, usedCapacity, allocations: allocationsData?.length || 0 });
+        setCapacityData({ total: totalCapacity, used: usedCapacity });
       } catch (error) {
         console.error('Error loading capacity data:', error);
       }
@@ -334,7 +364,8 @@ const OwnerInventory: React.FC = () => {
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product Name</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quantity</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer Name</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Added At</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -353,8 +384,13 @@ const OwnerInventory: React.FC = () => {
                           <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
                             {item.farmer_name || 'Unknown Farmer'}
                           </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
+                              In Storage
+                            </span>
+                          </td>
                           <td className="px-6 py-4 text-sm text-slate-500">
-                            {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Recent'}
+                            {item.display_date ? new Date(item.display_date).toLocaleDateString() : 'Date unavailable'}
                           </td>
                         </tr>
                       );

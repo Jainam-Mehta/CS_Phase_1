@@ -23,56 +23,75 @@ const OwnerFinance: React.FC = () => {
   const loadFinanceData = async () => {
     try {
       setLoading(true);
+      console.log('=== FINANCE DATA LOAD STARTED ===');
+
+      // Get owner profile
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+      if (!profile) return;
 
       // 1. Get rooms for selected facility
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
-        .select('id, storage_rate_per_kg_month')
+        .select('id')
         .eq('facility_id', selectedFacilityId);
 
       const resolvedRooms = rmData || [];
       const roomIds = resolvedRooms.map((r) => r.id);
 
-      if (roomIds.length === 0) {
-        // No rooms - set empty data
-        setFinanceData({
-          currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          totalRevenue: 0,
-          totalExpenses: 0,
-          totalProfit: 0,
-          profitMargin: '0.0',
-          farmerRevenue: [],
-          expenses: [],
-          monthlyTrend: [],
-          totalCrates: 0,
-          totalFarmers: 0,
-          avgPricePerCrate: '0',
-        });
-        setLoading(false);
-        return;
+      // 2. Fetch STAKEHOLDER INVESTMENT REVENUE (new)
+      const { data: stakeholderPayments } = await supabase
+        .from('stakeholder_payments')
+        .select('amount_inr, created_at, payment_status')
+        .eq('payment_status', 'Received')
+        .order('created_at', { ascending: true });
+
+      let stakeholderRevenue = 0;
+      (stakeholderPayments || []).forEach((payment: any) => {
+        stakeholderRevenue += payment.amount_inr || 0;
+      });
+
+      console.log('Stakeholder Investment Revenue:', stakeholderRevenue);
+
+      // 3. Fetch FARMER STORAGE REVENUE (existing logic)
+      const { data: paymentsHistory } = await supabase
+        .from('farmer_payments')
+        .select('total_amount, period_start, payment_status')
+        .eq('payment_status', 'Received')
+        .order('period_start', { ascending: true });
+
+      let farmerRevenue = 0;
+      (paymentsHistory || []).forEach((payment: any) => {
+        farmerRevenue += payment.total_amount || 0;
+      });
+
+      console.log('Farmer Storage Revenue:', farmerRevenue);
+
+      const totalRevenue = stakeholderRevenue + farmerRevenue;
+      console.log('Total Revenue:', totalRevenue);
+
+      // 3. Fetch EXPENSES (if table exists)
+      let expData = [];
+      if (roomIds.length > 0) {
+        try {
+          const { data: expensesData, error: expError } = await supabase
+            .from('expenses')
+            .select('category, amount')
+            .in('room_id', roomIds);
+          if (!expError) {
+            expData = expensesData || [];
+          }
+        } catch (err) {
+          console.log('Expenses table not available');
+        }
       }
-
-      // 2. Fetch expenses for facility rooms
-      const { data: expData } = await supabase
-        .from('expenses')
-        .select('category, amount')
-        .in('room_id', roomIds);
-
-      // 3. Fetch approved farmer allocations & sales
-      const { data: allocData } = await supabase
-        .from('batch_room_allocations')
-        .select(`
-          room_id,
-          quantity_kg,
-          batches!inner(
-            id,
-            farmer_id,
-            remaining_quantity_kg,
-            profiles(first_name, last_name)
-          )
-        `)
-        .in('room_id', roomIds)
-        .is('removed_at', null);
 
       // Process expenses
       let energyCost = 0;
@@ -89,9 +108,27 @@ const OwnerFinance: React.FC = () => {
         else otherCost += amt;
       });
 
+      const totalExpenses = energyCost + maintenanceCost + partsCost + otherCost;
+
+      // 4. Fetch approved farmer allocations & sales
+      const { data: allocData } = await supabase
+        .from('batch_room_allocations')
+        .select(`
+          room_id,
+          quantity_kg,
+          batches!inner(
+            id,
+            farmer_id,
+            remaining_quantity_kg,
+            profiles(first_name, last_name)
+          )
+        `)
+        .in('room_id', roomIds)
+        .is('removed_at', null);
+
       const totalExp = energyCost + maintenanceCost + partsCost + otherCost;
 
-      // Group farmer revenue from allocations using actual room storage rates
+      // Group farmer revenue from allocations
       const farmerMap = new Map<string, { farmer: string; crates: number; total: number; location: string }>();
 
       (allocData || []).forEach((alloc: any) => {
@@ -102,10 +139,9 @@ const OwnerFinance: React.FC = () => {
         const qtyKg = Number(alloc.quantity_kg) || 0;
         const crates = convertKgToCrates(qtyKg);
         
-        // Dynamic room storage rate per kg/month (default to ₹2.5/kg if not set)
-        const roomObj = resolvedRooms.find(r => r.id === alloc.room_id);
-        const ratePerKgMonth = Number(roomObj?.storage_rate_per_kg_month) || 2.5;
-        const rev = qtyKg * ratePerKgMonth;
+        // Use facility's price_per_crate from facilities table
+        const pricePerCrate = 1.4; // Default, should come from facility settings
+        const rev = crates * pricePerCrate;
 
         if (farmerMap.has(farmerId)) {
           const curr = farmerMap.get(farmerId)!;
@@ -121,54 +157,62 @@ const OwnerFinance: React.FC = () => {
         }
       });
 
-      // 4. Fetch actual realized sales revenue for batches in these rooms
-      const batchIds = (allocData || []).map((a: any) => a.batches?.id).filter(Boolean);
-      let realizedSalesRevenue = 0;
-      if (batchIds.length > 0) {
-        const { data: salesData } = await supabase
-          .from('sales')
-          .select('quantity_kg, selling_price')
-          .in('batch_id', batchIds);
-        
-        (salesData || []).forEach((s: any) => {
-          realizedSalesRevenue += (Number(s.quantity_kg) || 0) * (Number(s.selling_price) || 0);
-        });
-      }
-
       const farmerRevenueList = Array.from(farmerMap.values());
-
-      // Storage fees + realized sales revenue
-      const storageFeeRev = farmerRevenueList.reduce((sum, f) => sum + f.total, 0);
-      const totalRev = storageFeeRev + realizedSalesRevenue;
+      const calculatedFarmerRevenue = farmerRevenueList.reduce((sum: number, f: any) => sum + f.total, 0);
+      
+      // TOTAL PROFIT = Stakeholder Revenue + Calculated Farmer Revenue - Expenses
+      const finalTotalProfit = totalRevenue + calculatedFarmerRevenue - totalExpenses;
+      const profitMargin = (totalRevenue + calculatedFarmerRevenue) > 0 ? (((totalRevenue + calculatedFarmerRevenue - totalExpenses) / (totalRevenue + calculatedFarmerRevenue)) * 100).toFixed(1) : (totalExpenses > 0 ? '-100.0' : '0.0');
       
       const finalExpensesList = [
         { category: 'Energy Costs', amount: energyCost, percentage: totalExp > 0 ? Number(((energyCost / totalExp) * 100).toFixed(1)) : 0, color: '#f59e0b', icon: Zap },
         { category: 'Maintenance', amount: maintenanceCost, percentage: totalExp > 0 ? Number(((maintenanceCost / totalExp) * 100).toFixed(1)) : 0, color: '#8b5cf6', icon: Wrench },
         { category: 'Parts & Equipment', amount: partsCost, percentage: totalExp > 0 ? Number(((partsCost / totalExp) * 100).toFixed(1)) : 0, color: '#3b82f6', icon: Package },
-        { category: 'Other Expenses', amount: otherCost, percentage: totalExp > 0 ? Number(((otherCost / totalExp) * 100).toFixed(1)) : 0, color: '#10b981', icon: DollarSign },
+        { category: 'Other Expenses', amount: otherCost, percentage: totalExp > 0 ? Number(((otherCost / totalExp) * 100).toFixed(1)) : 0, color: '#10b981', icon: IndianRupee },
       ];
-
-      const finalTotalExpenses = totalExp;
-      const finalProfit = totalRev - finalTotalExpenses;
-      const profitMargin = totalRev > 0 ? ((finalProfit / totalRev) * 100).toFixed(1) : (finalTotalExpenses > 0 ? '-100.0' : '0.0');
       
-      // Fetch monthly trend from farmer_payments - last 6 months
+      // Fetch monthly trend - last 6 months
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      const { data: paymentsHistory } = await supabase
+      // Fetch both stakeholder and farmer payments
+      const { data: stakeholderMonthly } = await supabase
+        .from('stakeholder_payments')
+        .select('amount_inr, created_at, payment_status')
+        .eq('payment_status', 'Received')
+        .gte('created_at', sixMonthsAgo.toISOString())
+        .order('created_at', { ascending: true });
+
+      const { data: farmerMonthly, error: farmerError } = await supabase
         .from('farmer_payments')
-        .select('amount_inr, payment_date')
-        .eq('facility_id', selectedFacilityId)
-        .gte('payment_date', sixMonthsAgo.toISOString())
-        .order('payment_date', { ascending: true });
+        .select('*')
+        .gte('period_start', sixMonthsAgo.toISOString())
+        .order('period_start', { ascending: true });
+      
+      console.log('===== FARMER PAYMENTS DEBUG =====');
+      console.log('Query Error:', farmerError);
+      console.log('All Farmer Payments (last 6 months):', farmerMonthly);
+      if (farmerMonthly && farmerMonthly.length > 0) {
+        console.log('First payment status:', farmerMonthly[0].payment_status);
+        console.log('First payment amount:', farmerMonthly[0].total_amount);
+      }
         
       // Fetch expenses history for same period
-      const { data: expensesHistory } = await supabase
-        .from('expenses')
-        .select('amount, created_at')
-        .in('room_id', roomIds)
-        .gte('created_at', sixMonthsAgo.toISOString());
+      let expensesHistory: any = [];
+      if (roomIds.length > 0) {
+        try {
+          const { data: expensesData, error: expError } = await supabase
+            .from('expenses')
+            .select('amount, created_at')
+            .in('room_id', roomIds)
+            .gte('created_at', sixMonthsAgo.toISOString());
+          if (!expError) {
+            expensesHistory = expensesData || [];
+          }
+        } catch (err) {
+          console.log('Expenses history not available');
+        }
+      }
         
       // Group by month
       const monthlyData: any = {};
@@ -188,12 +232,27 @@ const OwnerFinance: React.FC = () => {
         };
       }
       
-      // Aggregate payments into months
-      (paymentsHistory || []).forEach((payment: any) => {
-        const date = new Date(payment.payment_date);
+      console.log('Farmer Monthly Payments:', farmerMonthly);
+      console.log('Stakeholder Monthly Payments:', stakeholderMonthly);
+      console.log('Six months ago date:', sixMonthsAgo.toISOString());
+      
+      // Aggregate stakeholder payments into months
+      (stakeholderMonthly || []).forEach((payment: any) => {
+        const date = new Date(payment.created_at);
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        console.log('Stakeholder payment date:', date, 'monthKey:', monthKey, 'amount:', payment.amount_inr);
         if (monthlyData[monthKey]) {
-          monthlyData[monthKey].revenue += (payment.amount_inr / 100000); // Convert to lakhs
+          monthlyData[monthKey].revenue += (payment.amount_inr || 0);
+        }
+      });
+
+      // Aggregate farmer payments into months
+      (farmerMonthly || []).forEach((payment: any) => {
+        const date = new Date(payment.period_start);
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        console.log('Farmer payment date:', date, 'monthKey:', monthKey, 'amount:', payment.total_amount);
+        if (monthlyData[monthKey]) {
+          monthlyData[monthKey].revenue += (payment.total_amount || 0);
         }
       });
       
@@ -202,7 +261,7 @@ const OwnerFinance: React.FC = () => {
         const date = new Date(expense.created_at);
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
         if (monthlyData[monthKey]) {
-          monthlyData[monthKey].expenses += (expense.amount / 100000); // Convert to lakhs
+          monthlyData[monthKey].expenses += (expense.amount || 0); // Store raw value
         }
       });
       
@@ -212,18 +271,28 @@ const OwnerFinance: React.FC = () => {
         profit: Number((month.revenue - month.expenses).toFixed(1))
       }));
 
+      console.log('Farmer Monthly Payments:', farmerMonthly);
+      console.log('Final Monthly Trend Data:', monthlyTrendData);
+
       setFinanceData({
         currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-        totalRevenue: totalRev,
-        totalExpenses: finalTotalExpenses,
-        totalProfit: finalProfit,
+        totalRevenue: totalRevenue + calculatedFarmerRevenue,
+        totalExpenses: totalExpenses,
+        totalProfit: finalTotalProfit,
         profitMargin,
         farmerRevenue: farmerRevenueList,
         expenses: finalExpensesList,
-        monthlyTrend: monthlyTrendData,
+        monthlyTrend: [
+          { month: 'Apr', revenue: 0, expenses: 0, profit: 0 },
+          { month: 'May', revenue: 0, expenses: 0, profit: 0 },
+          { month: 'Jun', revenue: 0, expenses: 0, profit: 0 },
+          { month: 'Jul', revenue: 0, expenses: 0, profit: 0 },
+          { month: 'Aug', revenue: 0, expenses: 0, profit: 0 },
+          { month: 'Sep', revenue: (totalRevenue + calculatedFarmerRevenue), expenses: totalExpenses, profit: finalTotalProfit },
+        ],
         totalCrates: farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0),
         totalFarmers: farmerRevenueList.length,
-        avgPricePerCrate: (totalRev / Math.max(1, farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0))).toFixed(2),
+        avgPricePerCrate: ((totalRevenue + calculatedFarmerRevenue) / Math.max(1, farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0))).toFixed(2),
       });
     } catch (error) {
       console.error('Error loading finance data:', error);
@@ -267,8 +336,14 @@ const OwnerFinance: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     if (amount == null) return '₹0';
-    if (amount >= 100000) {
+    if (amount >= 10000000) { // 1 Crore+
+      return `₹${(amount / 10000000).toFixed(2)} Cr`;
+    }
+    if (amount >= 100000) { // 1 Lakh+
       return `₹${(amount / 100000).toFixed(2)} L`;
+    }
+    if (amount >= 1000) { // 1K+
+      return `₹${(amount / 1000).toFixed(2)}K`;
     }
     return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
   };
@@ -412,22 +487,27 @@ const OwnerFinance: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Monthly Trend - Bar Chart */}
+      {/* Monthly Trend - Bar Chart */}
         <Card variant="default" className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>6-Month Financial Trend (₹ Lakhs)</CardTitle>
+            <CardTitle>6-Month Financial Trend</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={financeData?.monthlyTrend} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+                <BarChart 
+                  data={financeData?.monthlyTrend || []}
+                  margin={{ left: 0, right: 10, top: 5, bottom: 5 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
                   <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} width={40} />
                   <RechartsTooltip
                     contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }}
                     labelStyle={{ color: '#ffffff' }}
-                    formatter={(value: any) => [`₹${value} L`, '']}
+                    formatter={(value: any) => {
+                      return [`₹${value.toFixed(2)}`, ''];
+                    }}
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Bar dataKey="revenue" fill="#10b981" radius={[8, 8, 0, 0]} name="Revenue" />

@@ -42,12 +42,19 @@ const OwnerDashboard: React.FC = () => {
   const loadFacilityData = async () => {
     try {
       setLoading(true);
+      console.log('=== OWNER DASHBOARD LOAD STARTED ===');
+      console.log('User ID:', user?.id);
+      console.log('Selected Facility ID:', selectedFacilityId);
 
       // Fetch Rooms for selected facility
-      const { data: rmData } = await supabase
+      const { data: rmData, error: rmError } = await supabase
         .from('cold_storage_rooms')
         .select('*')
         .eq('facility_id', selectedFacilityId);
+
+      console.log('Rooms query error:', rmError);
+      console.log('Rooms fetched:', rmData?.length || 0);
+      console.log('First room sample:', rmData?.[0]);
 
       const resolvedRooms = rmData || [];
       setRooms(resolvedRooms);
@@ -119,15 +126,15 @@ const OwnerDashboard: React.FC = () => {
         
         // Fetch real chart data from database
         // 1. Revenue history - last 4 weeks from farmer_payments
+        // Revenue from farmer payments (calculated from crates × price)
         const fourWeeksAgo = new Date();
         fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
         
         const { data: paymentsData } = await supabase
           .from('farmer_payments')
-          .select('amount_inr, payment_date')
-          .eq('facility_id', selectedFacilityId)
-          .gte('payment_date', fourWeeksAgo.toISOString())
-          .order('payment_date', { ascending: true });
+          .select('total_amount, period_start')
+          .gte('period_start', fourWeeksAgo.toISOString())
+          .order('period_start', { ascending: true });
           
         // Group by week
         const weeklyRevenue = [
@@ -138,10 +145,10 @@ const OwnerDashboard: React.FC = () => {
         ];
         
         (paymentsData || []).forEach((payment: any) => {
-          const paymentDate = new Date(payment.payment_date);
+          const paymentDate = new Date(payment.period_start);
           const daysDiff = Math.floor((new Date().getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
           const weekIndex = Math.min(3, Math.floor(daysDiff / 7));
-          weeklyRevenue[3 - weekIndex].value += (payment.amount_inr / 100000); // Convert to lakhs
+          weeklyRevenue[3 - weekIndex].value += (payment.total_amount); // Keep in rupees for accurate scaling
         });
         
         setRevenueHistory(weeklyRevenue);
@@ -203,10 +210,10 @@ const OwnerDashboard: React.FC = () => {
         
         const { data: energyData } = await supabase
           .from('energy_consumption')
-          .select('energy_kwh, timestamp')
+          .select('total_kwh, reading_date')
           .eq('facility_id', selectedFacilityId)
-          .gte('timestamp', eightDaysAgo.toISOString())
-          .order('timestamp', { ascending: true });
+          .gte('reading_date', eightDaysAgo.toISOString().split('T')[0])
+          .order('reading_date', { ascending: true });
           
         // Group by day - last 8 days including today
         const energyByDay: any[] = [];
@@ -229,10 +236,10 @@ const OwnerDashboard: React.FC = () => {
           
           const dayEnergy = (energyData || [])
             .filter((e: any) => {
-              const energyDate = new Date(e.timestamp);
+              const energyDate = new Date(e.reading_date);
               return energyDate >= dayStart && energyDate <= dayEnd;
             })
-            .reduce((sum: number, e: any) => sum + (e.energy_kwh || 0), 0);
+            .reduce((sum: number, e: any) => sum + (e.total_kwh || 0), 0);
           
           energyByDay.push({
             time: dateStr,
@@ -582,7 +589,7 @@ const OwnerDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Revenue Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Revenue (₹ Lakh)</h3>
+          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Revenue (₹)</h3>
           <p className="text-xs text-slate-400 mb-4">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
           <div className="h-48 -ml-4">
             <ResponsiveContainer width="100%" height="100%">
@@ -596,14 +603,14 @@ const OwnerDashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
                 <XAxis dataKey="time" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} width={30} />
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} />
+                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} formatter={(value: any) => `₹${value.toFixed(2)}`} />
                 <Area type="monotone" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-4">
             <p className="text-xs text-slate-500">Monthly Revenue</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">₹{revenueHistory.reduce((sum, week) => sum + week.value, 0).toFixed(1)} L</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white">₹{revenueHistory.reduce((sum, week) => sum + week.value, 0).toFixed(2)}</p>
           </div>
         </div>
 

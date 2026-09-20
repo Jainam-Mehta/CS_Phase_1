@@ -25,6 +25,7 @@ const ActivityAlerts: React.FC = () => {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('ActivityAlerts mounted, user:', user);
     loadActivities();
   }, [user?.id]);
 
@@ -35,17 +36,36 @@ const ActivityAlerts: React.FC = () => {
       const profile = await resolveProfile(user.id);
       if (!profile) return;
 
-      // Get all activities related to this user (as actor or target)
-      const { data } = await supabase
+      console.log('Loading activities for profile:', profile.id);
+
+      // Get activities where user is the actor (owner/approver)
+      const { data: actorActivities, error: actorError } = await supabase
         .from('activity_logs')
         .select('*')
-        .or(`actor_id.eq.${profile.id},target_id.eq.${profile.id}`)
+        .eq('actor_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (data) {
-        setActivities(data as ActivityLog[]);
-      }
+      console.log('Actor activities:', { count: actorActivities?.length, error: actorError });
+
+      // Get activities where user is the target (stakeholder/farmer being acted upon)
+      const { data: targetActivities, error: targetError } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('target_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      console.log('Target activities:', { count: targetActivities?.length, error: targetError });
+
+      // Combine and deduplicate
+      const combined = [...(actorActivities || []), ...(targetActivities || [])];
+      const uniqueActivities = Array.from(
+        new Map(combined.map(a => [a.id, a])).values()
+      ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      console.log('Total unique activities:', uniqueActivities.length);
+      setActivities(uniqueActivities as ActivityLog[]);
     } catch (err) {
       console.error('Failed to load activities:', err);
     } finally {
