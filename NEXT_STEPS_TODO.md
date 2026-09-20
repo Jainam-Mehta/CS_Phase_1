@@ -64,7 +64,39 @@ Month End (e.g., Sept 30)
 
 ---
 
-## 2. Create Expenses Table in Supabase
+## 2. Fix Activity Logs Display for Farmer & Stakeholder (PARTIALLY DONE)
+
+**Status:** In Progress - Owner side working, farmer/stakeholder sides need fixes
+
+**What's Done:**
+- ✅ Created 3 database triggers to auto-log activities:
+  - `farmer_room_access_log_trigger` - logs when owner approves/rejects access
+  - `batch_allocation_log_trigger` - logs when farmer adds batches
+  - `log_stakeholder_investment_change` - logs stakeholder investment status changes
+- ✅ Owner can see activity logs in "Alerts & Insights"
+
+**What's Needed:**
+1. **Farmer Alerts** - Need to load activity logs where farmer is actor OR target
+   - Currently shows only system alerts, not activity logs
+   - Query should: `WHERE actor_id = farmer_id OR target_id = farmer_id`
+   - File: `frontend/src/features/alerts/FarmerAlerts.tsx`
+
+2. **Stakeholder Alerts** - Similar to farmer
+   - Query should: `WHERE actor_id = stakeholder_id OR target_id = stakeholder_id`
+   - File: Need to find/create stakeholder alerts page
+
+3. **Farmer can see owner's approval logs** - When owner approves room access, farmer should get notification
+
+4. **Stakeholder can see owner's investment responses** - When owner approves/rejects investment
+
+**Database Triggers Status:**
+- ✅ All 3 triggers created successfully
+- ✅ Auto-logging working (tested with room access approval)
+- ✅ Activity logs table receiving entries correctly
+
+---
+
+## 3. Create Expenses Table in Supabase
 
 **Status:** Pending
 
