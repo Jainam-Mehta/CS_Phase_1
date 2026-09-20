@@ -27,16 +27,57 @@ const FarmerAlerts: React.FC = () => {
          return;
      }
      
-     const generateRealisticAlerts = async () => {
-         setLoading(true);
-         
-         // Real database queries
-         const generated: AlertItem[] = [];
-         setAlerts(generated);
-         setLoading(false);
+     const loadAlertsAndLogs = async () => {
+         try {
+           setLoading(true);
+           
+           // Get farmer profile
+           const { data: profile } = await supabase
+             .from('profiles')
+             .select('id')
+             .eq('auth_user_id', user.id)
+             .maybeSingle();
+           
+           if (!profile) {
+             setAlerts([]);
+             return;
+           }
+
+           // Fetch activity logs where farmer is actor OR target
+           const { data: logs } = await supabase
+             .from('activity_logs')
+             .select('*')
+             .or(`actor_id.eq.${profile.id},target_id.eq.${profile.id}`)
+             .order('created_at', { ascending: false })
+             .limit(50);
+
+           // Transform logs to alert items
+           const alertItems: AlertItem[] = (logs || []).map((log: any) => ({
+             id: log.id,
+             level: log.action_type.includes('approved') ? 'Info' : 
+                    log.action_type.includes('rejected') ? 'Warning' : 'Info',
+             title: log.action_type === 'farmer_room_access_approved' ? 'Room Access Approved' :
+                    log.action_type === 'farmer_room_access_pending' ? 'Room Access Requested' :
+                    log.action_type === 'batch_added' ? 'Batch Added to Storage' :
+                    log.action_type === 'batch_removed' ? 'Batch Removed from Storage' :
+                    log.action_subtype || 'Activity',
+             message: log.related_data?.status ? 
+                      `${log.actor_name}: ${log.related_data.status}` :
+                      `${log.actor_name}: ${log.action_subtype}`,
+             time: new Date(log.created_at).toLocaleTimeString(),
+             is_acknowledged: true
+           }));
+
+           setAlerts(alertItems);
+         } catch (err) {
+           console.error('Failed to load alerts:', err);
+           setAlerts([]);
+         } finally {
+           setLoading(false);
+         }
      };
 
-     generateRealisticAlerts();
+     loadAlertsAndLogs();
   }, [activeRoomId, activeProductId, user?.id]);
 
   if (!activeRoomId || !activeProductId) {
