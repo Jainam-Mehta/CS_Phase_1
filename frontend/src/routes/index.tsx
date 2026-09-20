@@ -117,6 +117,7 @@ const StakeholderMap = React.lazy(() => import('../features/stakeholder/Stakehol
 const StakeholderState = React.lazy(() => import('../features/stakeholder/StakeholderState'));
 const StakeholderDistrict = React.lazy(() => import('../features/stakeholder/StakeholderDistrict'));
 const StakeholderDashboard = React.lazy(() => import('../features/stakeholder/StakeholderDashboard'));
+const StakeholderAlerts = React.lazy(() => import('../features/stakeholder/StakeholderAlerts'));
 
 // Shared pages
 const Notifications = React.lazy(() => import('../features/notifications/Notifications'));
@@ -581,6 +582,14 @@ export const router = createBrowserRouter([
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
             <Preferences />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: 'alerts',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <StakeholderAlerts />
           </React.Suspense>
         ),
       },
