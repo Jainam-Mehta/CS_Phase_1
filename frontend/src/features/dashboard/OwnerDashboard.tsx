@@ -157,10 +157,10 @@ const OwnerDashboard: React.FC = () => {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
-        // Get batches added to this facility's rooms
+        // Get batches added to this facility's rooms - use harvest_date from batches table (farmer's intended date)
         const { data: batchesAddedData } = await supabase
           .from('batch_room_allocations')
-          .select('assigned_at')
+          .select('batches(harvest_date)')
           .in('room_id', roomIds)
           .gte('assigned_at', sevenDaysAgo.toISOString());
         
@@ -182,7 +182,7 @@ const OwnerDashboard: React.FC = () => {
           const dayEnd = new Date(date.setHours(23, 59, 59, 999));
           
           const batchesAddedCount = (batchesAddedData || []).filter((b: any) => {
-            const batchDate = new Date(b.assigned_at);
+            const batchDate = b.batches?.harvest_date ? new Date(b.batches.harvest_date) : new Date();
             return batchDate >= dayStart && batchDate <= dayEnd;
           }).length;
           
