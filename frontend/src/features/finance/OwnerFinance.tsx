@@ -78,7 +78,7 @@ const OwnerFinance: React.FC = () => {
       console.log('Total Revenue:', totalRevenue);
 
       // 3. Fetch EXPENSES (if table exists)
-      let expData = [];
+      let expData: any[] = [];
       if (roomIds.length > 0) {
         try {
           const { data: expensesData, error: expError } = await supabase
