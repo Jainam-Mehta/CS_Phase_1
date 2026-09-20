@@ -211,6 +211,17 @@ function FarmerDashboardCore() {
     }
   }, [loading]);
 
+  // Load product data when activeProductId changes
+  useEffect(() => {
+    if (!activeProductId || !products.length) return;
+    
+    const product = products.find((p: any) => p.id === activeProductId);
+    if (product) {
+      setActiveProductData(product);
+      console.log('Product data loaded:', product);
+    }
+  }, [activeProductId, products]);
+
   if (loading) {
      return <div className="p-8 flex justify-center pt-24"><RefreshCw className="animate-spin w-8 h-8 text-primary-600" /></div>;
   }
