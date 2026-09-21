@@ -35,6 +35,23 @@ const FarmerFinance: React.FC = () => {
 
      const load = async () => {
          setLoading(true);
+         
+         // FORCE DEMO MODE FOR DEMO EMAILS
+         const userEmail = user?.email?.toLowerCase();
+         if (userEmail === 'roy@coldsense.in') {
+           // Roy's demo financial data
+           setProfileId('demo-farmer-id');
+           setStorageRate(1.4);
+           setBatches([
+             { product: 'Tomatoes', quantity_kg: 300, crates: 12, days_stored: 6, storage_cost: 100.8, market_price_per_kg: 48, estimated_revenue: 14400 },
+             { product: 'Tomatoes', quantity_kg: 275, crates: 11, days_stored: 4, storage_cost: 61.6, market_price_per_kg: 48, estimated_revenue: 13200 },
+             { product: 'Tomatoes', quantity_kg: 200, crates: 8, days_stored: 3, storage_cost: 33.6, market_price_per_kg: 48, estimated_revenue: 9600 },
+             { product: 'Tomatoes', quantity_kg: 350, crates: 14, days_stored: 1, storage_cost: 19.6, market_price_per_kg: 48, estimated_revenue: 16800 },
+           ]);
+           setLoading(false);
+           return;
+         }
+         
          const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
          if (!profile) return;
          setProfileId(profile.id);

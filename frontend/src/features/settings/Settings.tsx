@@ -58,6 +58,27 @@ const SettingsPage: React.FC = () => {
     if (!user?.id) return;
     try {
         setLoadingReqs(true);
+        
+        // FORCE DEMO MODE FOR DEMO EMAILS
+        const userEmail = user?.email?.toLowerCase();
+        if (userEmail === 'roy@coldsense.in') {
+          // Roy's demo storage request - APPROVED
+          setRequests([{
+            id: 'demo-req-1',
+            status: 'Approved',
+            requested_at: '2024-09-16T09:00:00Z',
+            remarks: 'Storage request approved by Owner',
+            cold_storage_rooms: {
+              room_name: 'Kullu Storage A',
+              sites: {
+                facility_name: 'Kullu Storage A'
+              }
+            }
+          }]);
+          setLoadingReqs(false);
+          return;
+        }
+        
         const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) return;
         
@@ -82,6 +103,30 @@ const SettingsPage: React.FC = () => {
      if (!user?.id) return;
      try {
          setLoadingReqs(true);
+         
+         // FORCE DEMO MODE FOR DEMO EMAILS
+         const userEmail = user?.email?.toLowerCase();
+         if (userEmail === 'aman@coldsense.in') {
+           // Aman's demo investments - 6 investments
+           setStakeholderRequests([
+             { id: '1', site_id: 'site-kullu-a', created_at: '2024-09-01', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Kullu Storage A' } },
+             { id: '2', site_id: 'site-hamirpur', created_at: '2024-08-28', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Hamirpur Cold Store' } },
+             { id: '3', site_id: 'site-nashik', created_at: '2024-08-25', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Nashik Mega Storage' } },
+             { id: '4', site_id: 'site-mumbai', created_at: '2024-08-20', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Mumbai Port Storage' } },
+             { id: '5', site_id: 'site-kullu-2', created_at: '2024-08-15', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Kullu Valley Storage' } },
+             { id: '6', site_id: 'site-haryana', created_at: '2024-08-10', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Haryana AgriHub' } },
+           ]);
+           
+           // Demo payments
+           setStakeholderPayments([
+             { id: 'p1', investment_id: '1', amount_inr: 1060, payment_status: 'Received', payment_date: '2024-09-20', remarks: 'ROI payment for September' },
+             { id: 'p2', investment_id: '2', amount_inr: 1060, payment_status: 'Received', payment_date: '2024-09-20', remarks: 'ROI payment for September' },
+           ]);
+           
+           setLoadingReqs(false);
+           return;
+         }
+         
          const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
          if (!profile) return;
          
