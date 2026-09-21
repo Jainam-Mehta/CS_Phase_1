@@ -104,6 +104,53 @@ function FarmerDashboardCore() {
       try {
         setLoading(true);
         
+        // FORCE DEMO MODE FOR DEMO EMAILS - BYPASS ALL CHECKS
+        const userEmail = user?.email?.toLowerCase();
+        if (userEmail === 'roy@coldsense.in' || userEmail === 'rupesh@coldsense.in' || userEmail === 'aman@coldsense.in') {
+          console.log('🎭 DEMO USER DETECTED - FORCING DEMO DATA');
+          
+          // Roy's demo data - hardcoded, no database
+          setProfileId('demo-farmer-id');
+          
+          const demoSite = {
+            id: 'site-kullu-a',
+            facility_name: 'Kullu Storage A',
+            room_id: 'room-kullu-a-1',
+            room_name: 'Kullu Storage A'
+          };
+          
+          setFacilities([{ id: demoSite.id, name: demoSite.facility_name }]);
+          setRooms([{ roomId: demoSite.room_id, roomName: demoSite.room_name, facilityId: demoSite.id, facilityName: demoSite.facility_name }]);
+          setSelectedFacilityId(demoSite.id);
+          setActiveRoomId(demoSite.room_id);
+          
+          const tomatoProduct = { id: 'demo-tomato', name: 'Tomatoes', storage_temp_min: 4, storage_temp_max: 6, storage_humidity_min: 85, storage_humidity_max: 95 };
+          setProducts([tomatoProduct]);
+          setActiveProductId('demo-tomato');
+          setActiveProductData(tomatoProduct);
+          
+          setLiveConditions({ temp: 5.8, hum: 89.5, ambientTemp: 22.3, ambientHum: 65.8, date: new Date().toISOString() });
+          
+          const demoReadings = [
+            { time: '14:00', value: 5.8, humidity: 89.5 },
+            { time: '10:00', value: 5.5, humidity: 88.9 },
+            { time: '18:00', value: 5.7, humidity: 89.8 },
+            { time: '14:00', value: 5.4, humidity: 88.5 },
+          ];
+          setTemperatureHistory(demoReadings);
+          
+          setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
+          setEnergyData([{ total_kwh: 52 }]);
+          setAlerts([
+            { id: '1', severity: 'info', message: 'Storage approved', status: 'resolved', created_at: '2024-09-16' },
+          ]);
+          
+          setHasAnyApproved(true);
+          setHasAnyPending(false);
+          setLoading(false);
+          return; // EXIT - NO DATABASE CALLS
+        }
+        
         // CHECK DEMO MODE FIRST
         if (isDemoMode && demoData) {
           // Use demo data for Roy (Farmer)
