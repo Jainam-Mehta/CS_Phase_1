@@ -312,7 +312,8 @@ function FarmerDashboardCore() {
     );
   }
 
-  if (!hasAnyApproved) {
+  // Skip approval check entirely for demo mode
+  if (!isDemoMode && !hasAnyApproved) {
      if (hasAnyPending) {
          return (
              <div className="flex items-center justify-center min-h-screen">
