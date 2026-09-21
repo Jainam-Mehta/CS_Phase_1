@@ -3,6 +3,7 @@ import { Zap, Sun, IndianRupee, BarChart3, Building } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 
 
 interface FacilityEnergy {
@@ -16,6 +17,8 @@ interface FacilityEnergy {
 const OwnerEnergy: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
 
   const [loading, setLoading] = useState(true);
   const [facilityEnergy, setFacilityEnergy] = useState<FacilityEnergy[]>([]);
@@ -28,7 +31,7 @@ const OwnerEnergy: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadEnergyData();
     }
-  }, [user?.id, selectedFacilityId, selectedRoomId]);
+  }, [user?.id, selectedFacilityId, selectedRoomId, isDemoMode]);
 
   const loadEnergyData = async () => {
     try {
@@ -37,6 +40,49 @@ const OwnerEnergy: React.FC = () => {
       if (!selectedFacilityId) {
         setFacilityEnergy([]);
         setTotals({ solar: 0, grid: 0, saved: 0 });
+        setLoading(false);
+        return;
+      }
+
+      // Demo mode: use hardcoded data
+      if (isDemoMode && demoData) {
+        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
+        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
+
+        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
+        setRooms(demoRooms);
+
+        // Set default room if not selected
+        if (demoRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(demoRooms[0].id);
+        }
+
+        const roomToUse = selectedRoomId || (demoRooms.length > 0 ? demoRooms[0].id : null);
+
+        // Use energy data for the selected site
+        const siteEnergyData = demoData.energy.filter(e => e.site_id === selectedFacilityId);
+        
+        if (siteEnergyData.length > 0) {
+          // Calculate totals from last 7 days
+          const totalSolar = siteEnergyData.reduce((sum, e) => sum + e.solar_kwh, 0);
+          const totalGrid = siteEnergyData.reduce((sum, e) => sum + e.grid_kwh, 0);
+          const totalKwh = totalSolar + totalGrid;
+
+          const facilityData: FacilityEnergy = {
+            facility_id: selectedFacilityId,
+            facility_name: demoSite?.facility_name || 'Kullu Storage A',
+            solar_kwh: totalSolar,
+            grid_kwh: totalGrid,
+            total_kwh: totalKwh
+          };
+
+          setFacilityEnergy([facilityData]);
+          setTotals({ solar: totalSolar, grid: totalGrid, saved: Math.round(totalSolar * 8) });
+        } else {
+          setFacilityEnergy([]);
+          setTotals({ solar: 0, grid: 0, saved: 0 });
+        }
+
         setLoading(false);
         return;
       }

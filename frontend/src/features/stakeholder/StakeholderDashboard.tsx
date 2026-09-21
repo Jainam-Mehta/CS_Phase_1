@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
+import { useDemoData } from '../../hooks/useDemoData';
 import { 
   Loader2, ArrowLeft, Building2, TrendingUp, AlertCircle, 
   Leaf, Activity, Thermometer, Droplets, Zap, DoorOpen, 
@@ -15,12 +16,14 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
   const { facilityId } = useParams<{ facilityId: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { isDemoMode, getStakeholderData } = useDemoData();
+  const demoData = getStakeholderData();
   
   const [loading, setLoading] = useState(true);
   const [facility, setFacility] = useState<any>(null);
   const [investment, setInvestment] = useState<any>(null);
   
-  // Real-time telemetry from database - NO HARDCODED VALUES
+  // Real-time telemetry from database - Demo mode supported
   const [telemetry, setTelemetry] = useState({
      temperature: 0,
      humidity: 0,
@@ -35,11 +38,63 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
     if (user && facilityId) {
        loadFacilityData();
     }
-  }, [user, facilityId]);
+  }, [user, facilityId, isDemoMode]);
 
   const loadFacilityData = async () => {
     try {
       setLoading(true);
+      
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        // Find the investment for this facility from demo data
+        const invest = demoData.investments.find((inv: any) => inv.id === facilityId || inv.site_name.toLowerCase().includes(facilityId?.toLowerCase()));
+        
+        if (invest) {
+          // Mock facility data from investment
+          setFacility({
+            id: invest.id,
+            facility_name: invest.site_name,
+            total_capacity_kg: 5000,
+            current_utilization_kg: 1125,
+            address: `${invest.district}, ${invest.state}`,
+            owner_profile_id: 'demo-owner-id',
+            status: invest.status === 'active' ? 'Active' : 'Inactive',
+            localities: {
+              districts: {
+                name: invest.district,
+                states: {
+                  name: invest.state
+                }
+              }
+            }
+          });
+          
+          setInvestment({
+            stakeholder_id: 'demo-stakeholder-id',
+            site_id: invest.id,
+            investment_amount_inr: invest.amount,
+            roi_percentage_estimate: invest.roi,
+            status: 'Active'
+          });
+          
+          // Set demo telemetry (using hardcoded realistic values)
+          setTelemetry({
+            temperature: 5.6,
+            humidity: 89,
+            energyKwh: 52,
+            doorStatus: 'Closed',
+            status: 'Optimal'
+          });
+          
+          // No alerts for demo
+          setAlerts([]);
+          
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // NORMAL DATABASE FLOW for non-demo users
       const profile = await resolveProfile(user!.id);
       if (!profile) {
         setLoading(false);

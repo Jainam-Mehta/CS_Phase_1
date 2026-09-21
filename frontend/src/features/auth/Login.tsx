@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import { Mail, Lock, AlertCircle, ArrowLeft, Sprout, BarChart3, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthLoading } from '../../providers/AuthProvider';
+import { isDemoUser } from '../../data/demoData';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -124,6 +125,16 @@ const Login: React.FC = () => {
       }
 
       console.log('Login successful:', { user: data.user, session: data.session });
+
+      // Check if this is a demo user and store in localStorage
+      if (isDemoUser(email)) {
+        localStorage.setItem('isDemoUser', 'true');
+        localStorage.setItem('demoEmail', email.toLowerCase());
+        console.log('🎭 Demo user detected:', email);
+      } else {
+        localStorage.removeItem('isDemoUser');
+        localStorage.removeItem('demoEmail');
+      }
 
       // Do NOT manually call setUser here — AuthProvider's onAuthStateChange
       // will fire a SIGNED_IN event and set the user with the correct profile + role.

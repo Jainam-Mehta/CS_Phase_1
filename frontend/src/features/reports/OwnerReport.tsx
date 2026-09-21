@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { FileText, Download, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { useDemoData } from '../../hooks/useDemoData';
 
 interface ReportData {
   facilityName: string;
@@ -37,12 +38,54 @@ interface ReportData {
 const OwnerReport: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [loading, setLoading] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [siteName, setSiteName] = useState<string>('');
 
   const fetchReportData = async (): Promise<ReportData> => {
+    // Demo mode: use hardcoded data
+    if (isDemoMode && demoData) {
+      const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
+      const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
+      const demoSensors = demoData.sensors;
+
+      return {
+        facilityName: demoSite?.facility_name || 'Kullu Storage A',
+        generatedAt: new Date().toLocaleString(),
+        totalSensors: demoSensors.length,
+        onlineSensors: demoSensors.filter((s: any) => s.status === 'Online').length,
+        offlineSensors: 0,
+        maintenanceSensors: 0,
+        sensorList: demoSensors.map((s: any) => ({
+          name: s.sensor_name,
+          type: s.sensor_type,
+          status: s.status,
+          lastReading: `${s.last_reading} ${s.unit}`,
+        })),
+        totalRooms: demoRooms.length,
+        totalCapacityKg: demoSite?.total_capacity_kg || 5000,
+        usedCapacityKg: demoSite?.current_utilization_kg || 1125,
+        utilizationPct: demoSite?.utilization_percentage || 22.5,
+        uniqueFarmers: 1,
+        activeBatches: demoData.inventory.filter((i: any) => i.status === 'stored').length,
+        latestTemp: '5.6°C',
+        latestHumidity: '89.2%',
+        latestAmbientTemp: '22.3°C',
+        compressorHealth: '87.5%',
+        energyKwh: demoData.energy.reduce((sum: number, e: any) => sum + e.kwh, 0),
+        solarPct: 35,
+        recentAlerts: demoData.alerts.map((a: any) => ({
+          message: a.message,
+          severity: a.severity,
+          created_at: a.created_at,
+        })),
+      };
+    }
+
     // Fetch Site Name and Rooms
     const { data: siteData } = await supabase
       .from('sites')

@@ -24,7 +24,7 @@ const FarmerMarketIntelligence: React.FC = () => {
      if (!user?.id) return;
      const load = async () => {
         setLoading(true);
-        const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+        const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) return;
         setProfileId(profile.id);
 

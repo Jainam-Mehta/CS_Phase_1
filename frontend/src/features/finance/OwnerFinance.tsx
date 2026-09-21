@@ -6,11 +6,15 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTo
 import { TrendingUp, TrendingDown, DollarSign, Users, IndianRupee, Zap, Wrench, Package, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { convertKgToCrates } from '../../utils/units';
+import { useDemoData } from '../../hooks/useDemoData';
 
 
 const OwnerFinance: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [loading, setLoading] = useState(true);
   const [financeData, setFinanceData] = useState<any>(null);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -21,12 +25,59 @@ const OwnerFinance: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadFinanceData();
     }
-  }, [user?.id, selectedFacilityId, selectedRoomId]);
+  }, [user?.id, selectedFacilityId, selectedRoomId, isDemoMode]);
 
   const loadFinanceData = async () => {
     try {
       setLoading(true);
       console.log('=== FINANCE DATA LOAD STARTED ===');
+
+      // Demo mode: use hardcoded data
+      if (isDemoMode && demoData) {
+        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
+        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
+
+        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
+        setRooms(demoRooms);
+
+        if (demoRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(demoRooms[0].id);
+        }
+
+        // Calculate totals from demo data
+        const totalRevenue = demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
+        const totalExpenses = demoData.expenses.reduce((sum: number, e: any) => sum + e.amount, 0);
+        const totalProfit = totalRevenue - totalExpenses;
+        const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0.0';
+
+        setFinanceData({
+          currentMonth: 'September 2024',
+          totalRevenue: totalRevenue,
+          totalExpenses: totalExpenses,
+          totalProfit: totalProfit,
+          profitMargin: profitMargin,
+          farmerRevenue: demoData.farmerPayments.map((p: any) => ({
+            farmer_name: p.farmer_name,
+            total_amount: p.amount,
+            crates: p.crates,
+          })),
+          expenses: demoData.expenses.map((e: any) => ({
+            category: e.category,
+            amount: e.amount,
+            description: e.description,
+            date: e.date,
+          })),
+          monthlyTrend: [
+            { month: 'Sep', revenue: totalRevenue, expenses: totalExpenses, profit: totalProfit },
+          ],
+          totalCrates: demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.crates, 0),
+          totalFarmers: 1,
+          avgPricePerCrate: (totalRevenue / demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.crates, 0)).toFixed(2),
+        });
+
+        setLoading(false);
+        return;
+      }
 
       // Fetch Site Name
       const { data: siteData } = await supabase
@@ -77,7 +128,7 @@ const OwnerFinance: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', authUser.id)
+        .eq('id', authUser.id)
         .single();
 
       if (!profile) return;

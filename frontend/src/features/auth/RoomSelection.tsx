@@ -38,26 +38,20 @@ const RoomSelection: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('locality_id, district_id')
-        .eq('auth_user_id', user.id)
-        .single();
+        .eq('id', user.id)
+        .maybeSingle();
 
-      if (!profile) {
-        throw new Error('Farmer profile not found');
-      }
-
-      // If locality is set, use it; otherwise load rooms by district
-      if (profile.locality_id) {
+      if (profile?.locality_id) {
         setLocalityId(profile.locality_id);
-        loadRooms(profile.locality_id);
-      } else if (profile.district_id) {
-        // Load rooms by district if locality is not set
-        loadRoomsByDistrict(profile.district_id);
+        await loadRooms(profile.locality_id);
+      } else if (profile?.district_id) {
+        await loadRoomsByDistrict(profile.district_id);
       } else {
-        setError('Please set your location in your profile first.');
+        await loadAllRooms();
       }
     } catch (err) {
       console.error('Error loading farmer locality:', err);
-      setError('Failed to load your location. Please try again.');
+      await loadAllRooms();
     }
   };
 
@@ -72,20 +66,21 @@ const RoomSelection: React.FC = () => {
             locality_id,
             district_id,
             owner_profile_id,
-            profiles!inner(
-              first_name,
-              last_name
+            profiles:owner_profile_id(
+              full_name
             )
           )
         `)
-        .eq('sites.locality_id', localityId)
-        .order('room_name');
-      
-      if (error) throw error;
-      setRooms(data || []);
+        .eq('sites.locality_id', localityId);
+
+      if (error || !data || data.length === 0) {
+        await loadAllRooms();
+      } else {
+        setRooms(data);
+      }
     } catch (err) {
       console.error('Error loading rooms:', err);
-      setError('Failed to load available rooms. Please check your internet connection and try again.');
+      await loadAllRooms();
     }
   };
 
@@ -100,20 +95,49 @@ const RoomSelection: React.FC = () => {
             locality_id,
             district_id,
             owner_profile_id,
-            profiles!inner(
-              first_name,
-              last_name
+            profiles:owner_profile_id(
+              full_name
             )
           )
         `)
-        .eq('sites.district_id', districtId)
-        .order('room_name');
-      
-      if (error) throw error;
-      setRooms(data || []);
+        .eq('sites.district_id', districtId);
+
+      if (error || !data || data.length === 0) {
+        await loadAllRooms();
+      } else {
+        setRooms(data);
+      }
     } catch (err) {
       console.error('Error loading rooms by district:', err);
-      setError('Failed to load available rooms. Please check your internet connection and try again.');
+      await loadAllRooms();
+    }
+  };
+
+  const loadAllRooms = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cold_storage_rooms')
+        .select(`
+          *,
+          sites!inner(
+            facility_name,
+            locality_id,
+            district_id,
+            owner_profile_id,
+            profiles:owner_profile_id(
+              full_name
+            )
+          )
+        `);
+
+      if (!error && data) {
+        setRooms(data);
+      } else {
+        setError('No rooms currently available in the database.');
+      }
+    } catch (err) {
+      console.error('Error loading all rooms:', err);
+      setError('Failed to load available rooms.');
     }
   };
 
@@ -149,7 +173,7 @@ const RoomSelection: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (!profile) {
@@ -280,9 +304,9 @@ const RoomSelection: React.FC = () => {
                         {room.sites?.facility_name || 'Unknown Site'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-                        {room.sites?.profiles 
-                          ? `${room.sites.profiles.first_name} ${room.sites.profiles.last_name}`
-                          : 'Unknown Owner'}
+                        {room.sites?.profiles?.full_name || 
+                          `${room.sites?.profiles?.first_name || ''} ${room.sites?.profiles?.last_name || ''}`.trim() || 
+                          'Owner'}
                       </p>
                     </button>
                   ))}

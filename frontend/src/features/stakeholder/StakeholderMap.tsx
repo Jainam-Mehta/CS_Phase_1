@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
 import { Search, Map as MapIcon, Loader2, AlertCircle, TrendingUp, Building2, MapPin, Leaf, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDemoData } from '../../hooks/useDemoData';
 
 // The topological data downloaded locally
 const geoUrl = '/india.topo.json';
@@ -43,6 +44,8 @@ interface StateSummary {
 const StakeholderMap: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { isDemoMode, getStakeholderData } = useDemoData();
+  const demoData = getStakeholderData();
   
   const [loading, setLoading] = useState(true);
   const [geoData, setGeoData] = useState<any | null>(null);
@@ -91,6 +94,29 @@ const StakeholderMap: React.FC = () => {
       setLoading(true);
 
       if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // Demo mode: use hardcoded data
+      if (isDemoMode && demoData) {
+        const demoFacilities: FacilityData[] = demoData.investments.map((inv: any) => ({
+          id: inv.site_id,
+          facility_name: inv.facility_name,
+          stateId: inv.state.toLowerCase().replace(/\s+/g, '-'),
+          stateName: inv.state,
+          districtName: inv.district,
+          cityName: inv.locality || inv.district,
+        }));
+
+        setFacilities(demoFacilities);
+        setInvestments(demoData.investments.map((inv: any) => ({
+          site_id: inv.site_id,
+          investment_amount_inr: inv.investment_amount,
+          roi_percentage_estimate: inv.roi_percentage,
+          carbon_credits: 45,
+        })));
+
         setLoading(false);
         return;
       }

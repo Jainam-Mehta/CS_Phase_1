@@ -58,7 +58,7 @@ const SettingsPage: React.FC = () => {
     if (!user?.id) return;
     try {
         setLoadingReqs(true);
-        const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+        const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) return;
         
         const { data } = await supabase
@@ -82,7 +82,7 @@ const SettingsPage: React.FC = () => {
      if (!user?.id) return;
      try {
          setLoadingReqs(true);
-         const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+         const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
          if (!profile) return;
          
          // Get both pending interests AND approved investments
@@ -159,7 +159,7 @@ const SettingsPage: React.FC = () => {
 
     setPaymentLoading(true);
     try {
-      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+      const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
       if (!profile) throw new Error('Profile not found');
 
       const { error } = await supabase
@@ -202,7 +202,7 @@ const SettingsPage: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', authUser.id)
+        .eq('id', authUser.id)
         .single();
 
       if (!profile) return;

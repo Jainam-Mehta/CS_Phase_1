@@ -3,6 +3,7 @@ import { Package, TrendingUp, Archive, AlertCircle, HardDrive, MapPin, Layers } 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
 import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 
@@ -10,6 +11,8 @@ import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
   
   const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -21,12 +24,49 @@ const OwnerInventory: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadFacilityData();
     }
-  }, [user?.id, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId, isDemoMode]);
 
   const loadFacilityData = async () => {
     try {
       setLoading(true);
       
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        // Use demo data for Rupesh (Owner)
+        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
+        setSiteName(currentSite.facility_name);
+        
+        // Set rooms for selected facility
+        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
+        setRooms(siteRooms);
+        
+        if (siteRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(siteRooms[0].id);
+        }
+        
+        // Transform demo inventory to match expected format
+        const roomToUse = selectedRoomId || siteRooms[0]?.id;
+        const roomInventory = demoData.inventory.filter((inv: any) => inv.room_id === roomToUse);
+        
+        const transformedInventory = roomInventory.map((inv: any) => ({
+          batch_id: inv.id,
+          batch_code: `BATCH-${inv.id}`,
+          farmer_name: inv.farmer_name,
+          product_name: inv.product,
+          quantity_kg: inv.quantity_kg,
+          quality_grade: 'A',
+          harvest_date: inv.date,
+          expiry_date: new Date(new Date(inv.date).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
+          assigned_at: inv.date,
+          status: inv.status
+        }));
+        
+        setInventory(transformedInventory);
+        setLoading(false);
+        return;
+      }
+      
+      // NORMAL DATABASE FLOW for non-demo users
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')

@@ -3,6 +3,7 @@ import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 
 
 interface Sensor {
@@ -37,6 +38,9 @@ const AVAILABLE_SENSOR_TYPES = [
 const OwnerMonitoring: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [loading, setLoading] = useState(true);
 
   const [dbSensors, setDbSensors] = useState<Sensor[]>([]);
@@ -54,12 +58,45 @@ const OwnerMonitoring: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadMonitoringData();
     }
-  }, [user?.id, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId, isDemoMode]);
 
   const loadMonitoringData = async () => {
     try {
       setLoading(true);
 
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
+        setSiteName(currentSite.facility_name);
+        
+        // Set rooms
+        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
+        setRooms(siteRooms);
+        
+        if (siteRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(siteRooms[0].id);
+        }
+        
+        // Transform demo sensors to match expected format (all 13 sensors)
+        const demoSensors: Sensor[] = demoData.sensors.map((s: any) => ({
+          id: s.id,
+          sensor_type: s.sensor_type,
+          sensor_name: s.sensor_name,
+          status: s.status,
+          battery_percentage: s.sensor_type === 'battery' ? s.last_reading : 92,
+          last_reading_value: s.last_reading,
+          last_reading_unit: s.unit,
+          last_seen: new Date().toISOString(),
+          room_id: s.room_id
+        }));
+        
+        setDbSensors(demoSensors);
+        setInventory(demoData.inventory);
+        setLoading(false);
+        return;
+      }
+
+      // NORMAL DATABASE FLOW
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')

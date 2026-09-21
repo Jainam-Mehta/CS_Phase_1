@@ -53,7 +53,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, roles(name)')
-        .eq('auth_user_id', session.user.id)
+        .eq('id', session.user.id)
         .single();
 
       if (!profile || (profile.roles as any)?.name !== 'Stakeholder') {
@@ -213,7 +213,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', session.user.id)
+        .eq('id', session.user.id)
         .single();
 
       if (!profile) {

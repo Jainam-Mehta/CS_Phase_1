@@ -180,7 +180,7 @@ const FarmerProfileSetup: React.FC = () => {
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (existingProfile) {

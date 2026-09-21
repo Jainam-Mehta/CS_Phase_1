@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
@@ -9,6 +10,8 @@ import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { activeRoomId, setActiveRoomId } = useFarmerStore();
+  const { isDemoMode, getFarmerData } = useDemoData();
+  const demoData = getFarmerData();
   
   const [profileId, setProfileId] = useState<string | null>(null);
   const [batches, setBatches] = useState<any[]>([]);
@@ -85,7 +88,61 @@ const FarmerInventory: React.FC = () => {
        setLoading(true);
        try {
            if (!user?.id) return;
-           const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+           
+           // CHECK DEMO MODE FIRST
+           if (isDemoMode && demoData) {
+             // Use demo data for Roy (Farmer)
+             setProfileId('demo-farmer-id');
+             
+             // Set approved site and room
+             const approvedSite = demoData.approvedSites[0];
+             setApprovedSites([{
+               id: approvedSite.id,
+               name: approvedSite.facility_name,
+               rooms: [{
+                 id: approvedSite.room_id,
+                 name: approvedSite.room_name
+               }]
+             }]);
+             setSelectedSiteId(approvedSite.id);
+             setApprovedRooms([{
+               id: approvedSite.room_id,
+               name: approvedSite.room_name
+             }]);
+             
+             // Set room name map
+             setRoomNameMap({
+               [approvedSite.room_id]: `${approvedSite.room_name} - ${approvedSite.facility_name}`
+             });
+             
+             // Set farmer products (Tomatoes)
+             setFarmerProducts(['Tomatoes']);
+             
+             // Transform demo inventory to batch format
+             const demoBatches = demoData.inventory.map((inv: any, idx: number) => ({
+               id: inv.id,
+               batch_code: `BATCH-${Date.now()}-${idx}`,
+               farmer_id: 'demo-farmer-id',
+               product_id: 'demo-tomato-id',
+               harvest_date: inv.date,
+               expiry_date: new Date(new Date(inv.date).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString(),
+               initial_quantity_kg: inv.quantity_kg,
+               remaining_quantity_kg: inv.quantity_kg,
+               quality_grade: inv.quality || 'A',
+               room_id: approvedSite.room_id,
+               quantity_kg: inv.quantity_kg,
+               assigned_at: inv.date,
+               product: inv.product,
+               created_at: inv.date
+             }));
+             
+             setBatches(demoBatches);
+             setLoading(false);
+             return;
+           }
+           
+           // NORMAL DATABASE FLOW for non-demo users
+           const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
            if (!profile) return;
            setProfileId(profile.id);
 
@@ -172,7 +229,7 @@ const FarmerInventory: React.FC = () => {
 
   useEffect(() => {
     initialize();
-  }, [user?.id]);
+  }, [user?.id, isDemoMode]);
 
   useEffect(() => {
      if (activeRoomId) setTargetRoom(activeRoomId);

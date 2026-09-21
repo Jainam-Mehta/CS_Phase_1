@@ -56,7 +56,7 @@ const OwnerProfile: React.FC = () => {
           localities(name),
           roles(name)
         `)
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (fetchError) throw fetchError;

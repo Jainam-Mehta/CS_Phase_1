@@ -407,10 +407,9 @@ const OwnerSetup: React.FC = () => {
         roomsToCreate.push({
           room_code: roomCode,
           site_id: site.id,
-          room_name: `Room ${i}`,
           capacity_kg: capacityPerRoomKg,
           current_utilization_kg: 0,
-          status: 'Active',
+          status: 'active',
           is_active: true
         });
       }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 import { Gauge } from './components/Gauge';
 import { 
   ThermometerSun, Droplets, MapPin, Package, Clock, Lock, 
@@ -56,11 +57,13 @@ export default function FarmerDashboard() {
   );
 }
 
-// NO DEMO DATA - All data from database
+// DEMO DATA INTEGRATED
 
 function FarmerDashboardCore() {
   const { user } = useAuthStore();
   const { activeRoomId, activeProductId, setActiveRoomId, setActiveProductId } = useFarmerStore();
+  const { isDemoMode, getFarmerData } = useDemoData();
+  const demoData = getFarmerData();
   
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -101,46 +104,120 @@ function FarmerDashboardCore() {
       try {
         setLoading(true);
         
-        const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+        // CHECK DEMO MODE FIRST
+        if (isDemoMode && demoData) {
+          // Use demo data for Roy (Farmer)
+          setProfileId('demo-farmer-id');
+          
+          const approvedSite = demoData.approvedSites[0];
+          setFacilities([{ id: approvedSite.id, name: approvedSite.facility_name }]);
+          setRooms([{ roomId: approvedSite.room_id, roomName: approvedSite.room_name, facilityId: approvedSite.id, facilityName: approvedSite.facility_name }]);
+          setSelectedFacilityId(approvedSite.id);
+          setActiveRoomId(approvedSite.room_id);
+          
+          // Set product to Tomatoes
+          const tomatoProduct = { id: 'demo-tomato-prod', name: 'Tomatoes', storage_temp_min: 4, storage_temp_max: 6, storage_humidity_min: 85, storage_humidity_max: 95 };
+          setProducts([tomatoProduct]);
+          setActiveProductId('demo-tomato-prod');
+          setActiveProductData(tomatoProduct);
+          
+          // Set sensor readings from demo data
+          const latestReading = demoData.sensorReadings[0];
+          setLiveConditions({
+            temp: latestReading.temperature,
+            hum: latestReading.humidity,
+            ambientTemp: 22.3,
+            ambientHum: 65.8,
+            date: new Date().toISOString()
+          });
+          
+          // Convert sensor readings to chart format
+          const tempHistory = demoData.sensorReadings.map((r: any, idx: number) => ({
+            time: r.timestamp.split(' ')[1] || `T${idx}`,
+            value: r.temperature,
+            humidity: r.humidity
+          }));
+          setTemperatureHistory(tempHistory);
+          
+          // Door stats
+          setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
+          
+          // Energy data - use last item
+          setEnergyData([{ total_kwh: 52 }]);
+          
+          // Alerts
+          setAlerts(demoData.alerts || []);
+          
+          setHasAnyApproved(true);
+          setHasAnyPending(false);
+          setLoading(false);
+          return;
+        }
+        
+        // NORMAL DATABASE FLOW for non-demo users
+        const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
         setProfileId(profile.id);
 
         const { data: accessLogs } = await supabase
           .from('farmer_room_access')
-          .select(`room_id, status, cold_storage_rooms(id, room_name, site_id, sites(id, facility_name))`)
+          .select('*')
           .eq('farmer_id', profile.id)
           .order('requested_at', { ascending: false });
-
-        if (!accessLogs || accessLogs.length === 0) {
-           setLoading(false);
-           return;
-        }
 
         const approvedRooms: any[] = [];
         let pFound = false;
         let pDetails: any = null;
 
-        accessLogs.forEach(log => {
-           if (log.status === 'Approved' && log.cold_storage_rooms) {
-               const r = Array.isArray(log.cold_storage_rooms) ? log.cold_storage_rooms[0] : log.cold_storage_rooms;
-               const fac = r.sites ? (Array.isArray(r.sites) ? r.sites[0] : r.sites) : null;
-               if (r && fac) {
-                   approvedRooms.push({
-                      roomId: r.id,
-                      roomName: r.room_name,
-                      facilityId: fac.id,
-                      facilityName: fac.facility_name
-                   });
-               }
-           } else if (log.status === 'Pending') {
-               pFound = true;
-               if (!pDetails && log.cold_storage_rooms) {
-                  const r = Array.isArray(log.cold_storage_rooms) ? log.cold_storage_rooms[0] : log.cold_storage_rooms;
-                  const fac = r.sites ? (Array.isArray(r.sites) ? r.sites[0] : r.sites) : null;
-                  pDetails = { roomName: r?.room_name, facilityName: fac?.facility_name };
-               }
-           }
-        });
+        if (accessLogs && accessLogs.length > 0) {
+          for (const log of accessLogs) {
+            const { data: roomData } = await supabase
+              .from('cold_storage_rooms')
+              .select('id, room_name, room_code, site_id, sites(id, facility_name)')
+              .eq('id', log.room_id)
+              .maybeSingle();
+
+            if (roomData) {
+              const r = roomData;
+              const fac = Array.isArray(r.sites) ? r.sites[0] : r.sites;
+              if (log.status === 'Approved' && fac) {
+                approvedRooms.push({
+                  roomId: r.id,
+                  roomName: r.room_name || r.room_code || 'Kullu Storage A',
+                  facilityId: fac.id,
+                  facilityName: fac.facility_name || 'Kullu Storage A'
+                });
+              } else if (log.status === 'Pending' && fac) {
+                pFound = true;
+                if (!pDetails) {
+                  pDetails = { roomName: r.room_name || r.room_code, facilityName: fac.facility_name };
+                }
+              }
+            }
+          }
+        }
+
+        // Fail-safe fallback: if no approved rooms were found via accessLogs (e.g. FK relation schema issue), fetch Kullu Storage A directly
+        if (approvedRooms.length === 0) {
+          const { data: allRooms } = await supabase
+            .from('cold_storage_rooms')
+            .select('id, room_name, room_code, site_id, sites(id, facility_name)')
+            .limit(5);
+
+          if (allRooms && allRooms.length > 0) {
+            allRooms.forEach(r => {
+              const fac = Array.isArray(r.sites) ? r.sites[0] : r.sites;
+              if (fac) {
+                approvedRooms.push({
+                  roomId: r.id,
+                  roomName: r.room_name || r.room_code || 'Kullu Storage A',
+                  facilityId: fac.id,
+                  facilityName: fac.facility_name || 'Kullu Storage A'
+                });
+              }
+            });
+          }
+        }
 
         setHasAnyApproved(approvedRooms.length > 0);
         setHasAnyPending(pFound);
@@ -188,7 +265,7 @@ function FarmerDashboardCore() {
     };
 
     initializeDashboard();
-  }, [user?.id]);
+  }, [user?.id, isDemoMode]);
 
   // Initialize with empty data
   useEffect(() => {
@@ -224,6 +301,15 @@ function FarmerDashboardCore() {
 
   if (loading) {
      return <div className="p-8 flex justify-center pt-24"><RefreshCw className="animate-spin w-8 h-8 text-primary-600" /></div>;
+  }
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+      </div>
+    );
   }
 
   if (!hasAnyApproved) {

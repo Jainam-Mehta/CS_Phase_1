@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
+import { useDemoData } from '../../hooks/useDemoData';
 import { resolveProfile } from '../../lib/profileUtils';
 
 
@@ -35,6 +36,9 @@ const OwnerAlerts: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,11 +51,30 @@ const OwnerAlerts: React.FC = () => {
       loadAlerts();
       loadActivityLogs();
     }
-  }, [user?.id, selectedFacilityId, selectedRoomId]);
+  }, [user?.id, selectedFacilityId, selectedRoomId, isDemoMode]);
 
   const loadActivityLogs = async () => {
     if (!user?.id) return;
     try {
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        // Transform demo activity logs to match expected format
+        const demoLogs = demoData.activityLogs.map((log: any, idx: number) => ({
+          id: `log-${idx}`,
+          actor_name: 'Suresh Kumar',
+          action_type: 'inventory',
+          action_subtype: 'batch_added',
+          target_type: 'farmer',
+          target_name: log.action.split(' ')[1] || 'Roy',
+          facility_name: demoData.sites[0].facility_name,
+          related_data: {},
+          created_at: log.timestamp
+        }));
+        setActivityLogs(demoLogs);
+        return;
+      }
+      
+      // NORMAL DATABASE FLOW
       const profile = await resolveProfile(user.id);
       if (!profile) return;
 
@@ -76,6 +99,38 @@ const OwnerAlerts: React.FC = () => {
     try {
       setLoading(true);
       
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
+        setSiteName(currentSite.facility_name);
+        
+        // Set rooms
+        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
+        setRooms(siteRooms);
+        
+        if (siteRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(siteRooms[0].id);
+        }
+        
+        // Transform demo alerts to match expected format
+        const demoAlerts = demoData.alerts.map((alert: any) => ({
+          id: alert.id,
+          room_id: siteRooms[0]?.id || 'room-kullu-a-1',
+          alert_type: alert.message.includes('Temperature') ? 'temperature' : 'info',
+          severity: alert.severity as 'critical' | 'warning' | 'info',
+          title: alert.message.split('-')[0] || alert.message,
+          description: alert.message,
+          status: alert.status as 'unresolved' | 'resolved',
+          resolved_at: alert.status === 'resolved' ? alert.created_at : undefined,
+          created_at: alert.created_at
+        }));
+        
+        setAlerts(demoAlerts);
+        setLoading(false);
+        return;
+      }
+      
+      // NORMAL DATABASE FLOW
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')

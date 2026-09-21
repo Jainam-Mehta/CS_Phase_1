@@ -3,6 +3,7 @@ import { Wrench, CheckCircle, Calendar, Settings, AlertTriangle, PenTool, Drople
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 
 // Facility maintenance items with their schedules
 const FACILITY_MAINTENANCE_ITEMS = [
@@ -83,6 +84,9 @@ interface MaintenanceRecord {
 const OwnerMaintenance: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [loading, setLoading] = useState(true);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -107,12 +111,32 @@ const OwnerMaintenance: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadMaintenanceData();
     }
-  }, [user?.id, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId, isDemoMode]);
 
   const loadMaintenanceData = async () => {
     try {
       setLoading(true);
       
+      // Demo mode: use hardcoded data
+      if (isDemoMode && demoData) {
+        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
+        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
+
+        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
+        setRooms(demoRooms);
+
+        if (demoRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(demoRooms[0].id);
+        }
+
+        // Use maintenance data
+        const siteMaintenance = demoData.maintenance.filter(m => m.site_id === selectedFacilityId);
+        setMaintenanceRecords(siteMaintenance);
+        
+        setLoading(false);
+        return;
+      }
+
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')

@@ -31,7 +31,7 @@ const Maintenance: React.FC = () => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (!profile) {

@@ -104,7 +104,7 @@ const StakeholderProfile: React.FC = () => {
       const { data, error: fetchError } = await supabase
         .from('profiles')
         .select(`*, states(name), districts(name), localities(name), roles(name)`)
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (fetchError) throw fetchError;

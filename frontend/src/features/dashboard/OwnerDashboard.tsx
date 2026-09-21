@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
+import { useDemoData } from '../../hooks/useDemoData';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
@@ -10,6 +11,9 @@ import OwnerReport from '../reports/OwnerReport';
 const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
+  const { isDemoMode, getOwnerData } = useDemoData();
+  const demoData = getOwnerData();
+  
   const [loading, setLoading] = useState(true);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
@@ -22,7 +26,7 @@ const OwnerDashboard: React.FC = () => {
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleTimeString());
   const [latestCondition, setLatestCondition] = useState<any>(null);
   
-  // Real database data for charts - NO DEMO DATA
+  // Real database data for charts - Demo mode supported
   const [revenueHistory, setRevenueHistory] = useState<any[]>([]);
   const [farmerActivity, setFarmerActivity] = useState<any[]>([]);
   const [energyHistory, setEnergyHistory] = useState<any[]>([]);
@@ -39,7 +43,7 @@ const OwnerDashboard: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadFacilityData();
     }
-  }, [user?.id, selectedFacilityId]); // Only depend on user.id, not entire user object
+  }, [user?.id, selectedFacilityId, isDemoMode]); // Added isDemoMode dependency
 
   const loadFacilityData = async () => {
     try {
@@ -47,7 +51,81 @@ const OwnerDashboard: React.FC = () => {
       console.log('=== OWNER DASHBOARD LOAD STARTED ===');
       console.log('User ID:', user?.id);
       console.log('Selected Facility ID:', selectedFacilityId);
+      console.log('Demo Mode:', isDemoMode);
 
+      // CHECK DEMO MODE FIRST
+      if (isDemoMode && demoData) {
+        // Use demo data for Rupesh (Owner)
+        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
+        setSiteName(currentSite.facility_name);
+        
+        // Set rooms for selected facility
+        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
+        setRooms(siteRooms);
+        
+        if (siteRooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(siteRooms[0].id);
+        }
+        
+        // Set sensors - all 13 sensors
+        setDbSensors(demoData.sensors);
+        
+        // Set latest conditions from the first sensor reading
+        const latestReading = demoData.sensorReadings[0];
+        setLatestCondition({
+          temperature: latestReading.temperature,
+          humidity: latestReading.humidity,
+          ambient_temperature: 22.3,
+          ambient_humidity: 65.8,
+          suction_pressure: 145,
+          discharge_pressure: 210,
+          compressor_status: 'Optimal',
+          door_status: 'Closed',
+          solar_percentage: 40,
+          energy_consumption_kwh: 52,
+          recorded_at: new Date().toISOString()
+        });
+        
+        // Set inventory
+        setInventory(demoData.inventory);
+        
+        // Set stakeholders (empty for demo)
+        setStakeholders([]);
+        
+        // Revenue history - last 4 weeks from farmer payments (Roy's storage charges)
+        const weeklyRevenue = [
+          { time: 'Week 1', value: 50 },
+          { time: 'Week 2', value: 65 },
+          { time: 'Week 3', value: 80 },
+          { time: 'Week 4', value: 216.2 } // Total storage charges from Roy
+        ];
+        setRevenueHistory(weeklyRevenue);
+        
+        // Farmer activity - last 7 days (Roy's inventory additions)
+        const activityByDay = [
+          { day: 'Mon', checkIns: 0, batchesAdded: 0 },
+          { day: 'Tue', checkIns: 0, batchesAdded: 1 }, // 16th - 12 crates
+          { day: 'Wed', checkIns: 0, batchesAdded: 0 },
+          { day: 'Thu', checkIns: 0, batchesAdded: 1 }, // 18th - 11 crates
+          { day: 'Fri', checkIns: 0, batchesAdded: 1 }, // 19th - 8 crates
+          { day: 'Sat', checkIns: 0, batchesAdded: 0 },
+          { day: 'Sun', checkIns: 1, batchesAdded: 1 } // 21st - 14 crates added, 25 crates removed/sold
+        ];
+        setFarmerActivity(activityByDay);
+        
+        // Energy consumption - last 8 days from demo data
+        const energyForSite = demoData.energy.filter((e: any) => e.site_id === currentSite.id);
+        const energyByDay = energyForSite.slice(0, 8).reverse().map((e: any) => ({
+          time: e.date.split('-').slice(1).join('/'), // Format as MM/DD
+          value: e.kwh
+        }));
+        setEnergyHistory(energyByDay);
+        
+        setLoading(false);
+        return;
+      }
+
+      // NORMAL DATABASE FLOW for non-demo users
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')
@@ -126,7 +204,7 @@ const OwnerDashboard: React.FC = () => {
         const { data: ownerProfile } = await supabase
           .from('profiles')
           .select('owner_company_id')
-          .eq('auth_user_id', user?.id)
+          .eq('id', user?.id)
           .single();
         
         let stakeholdersList: any[] = [];
