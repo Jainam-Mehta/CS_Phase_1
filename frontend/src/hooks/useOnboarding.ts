@@ -64,6 +64,22 @@ export const useOnboarding = () => {
         return;
       }
       
+      // FORCE DEMO USERS TO SKIP ALL ONBOARDING
+      const userEmail = user?.email?.toLowerCase();
+      if (userEmail === 'roy@coldsense.in' || userEmail === 'rupesh@coldsense.in' || userEmail === 'aman@coldsense.in') {
+        console.log('🎭 DEMO USER - SKIP ALL ONBOARDING - GO TO DASHBOARD');
+        setState(prev => ({
+          ...prev,
+          step: 'dashboard',
+          loading: false,
+          hasProfile: true,
+          hasSite: true,
+          hasRooms: true,
+          hasProducts: true,
+        }));
+        return;
+      }
+      
       // 1. Check if profile exists
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
