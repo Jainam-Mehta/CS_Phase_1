@@ -55,7 +55,7 @@ const StakeholderProfileSetup: React.FC = () => {
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', session.user.id)
+        .eq('id', session.user.id)
         .maybeSingle();
 
       if (existingProfile) {
@@ -171,22 +171,19 @@ const StakeholderProfileSetup: React.FC = () => {
         throw new Error('Stakeholder role not found in database');
       }
 
+      const fullName = `${formData.firstName} ${formData.lastName || ''}`.trim();
+
       // Create profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          auth_user_id: session.user.id,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formData.phoneNumber,
-          date_of_birth: formData.dateOfBirth || null,
-          gender: formData.gender || null,
-          state_id: selectedStateId,
-          district_id: selectedDistrictId,
-          locality_id: selectedLocalityId || null,
-          role_id: stakeholderRoleId,
-          owner_company_id: null, // Stakeholders don't have owner_company_id
-        })
+        .upsert({
+          id: session.user.id,
+          email: session.user.email || '',
+          full_name: fullName,
+          role: 'stakeholder',
+          phone: formData.phoneNumber || null,
+          is_active: true,
+        }, { onConflict: 'id' })
         .select()
         .single();
 

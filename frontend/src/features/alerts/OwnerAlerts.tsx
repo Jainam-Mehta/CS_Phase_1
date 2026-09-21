@@ -3,6 +3,7 @@ import { Bell, ShieldCheck, AlertCircle, Clock, CheckCircle, User, Wrench, Check
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useSiteStore } from '../../stores/useSiteStore';
 import { resolveProfile } from '../../lib/profileUtils';
 
 
@@ -33,16 +34,20 @@ interface ActivityLog {
 const OwnerAlerts: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { selectedFacilityId } = useSiteStore();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && selectedFacilityId) {
       loadAlerts();
       loadActivityLogs();
     }
-  }, [user?.id]);
+  }, [user?.id, selectedFacilityId, selectedRoomId]);
 
   const loadActivityLogs = async () => {
     if (!user?.id) return;
@@ -71,43 +76,40 @@ const OwnerAlerts: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get owner's profile
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', authUser.id)
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
         .single();
 
-      if (!profile) return;
+      setSiteName(siteData?.facility_name || 'Your Site');
 
-      // Get all facilities for this owner
-      const { data: facilitiesData } = await supabase
-        .from('facilities')
-        .select('id')
-        .eq('owner_profile_id', profile.id);
-
-      if (!facilitiesData || facilitiesData.length === 0) {
-        setAlerts([]);
-        return;
-      }
-
-      const facilityIds = facilitiesData.map(f => f.id);
-
-      // Get all rooms for these facilities
-      const { data: roomsData } = await supabase
+      // Fetch Rooms for selected facility
+      const { data: rmData, error: rmError } = await supabase
         .from('cold_storage_rooms')
-        .select('id')
-        .in('facility_id', facilityIds);
+        .select('*')
+        .eq('site_id', selectedFacilityId);
 
-      if (!roomsData || roomsData.length === 0) {
+      console.log('Rooms query error:', rmError);
+      console.log('Rooms fetched:', rmData?.length || 0);
+
+      const resolvedRooms = rmData || [];
+      setRooms(resolvedRooms);
+
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
+
+      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
+      
+      if (!roomToUse || resolvedRooms.length === 0) {
         setAlerts([]);
         return;
       }
 
-      const roomIds = roomsData.map(r => r.id);
+      const roomIds = [roomToUse];
 
       // Get all alerts for these rooms
       const { data: alertsData } = await supabase
@@ -211,7 +213,7 @@ const OwnerAlerts: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            System Alerts
+            {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
             Review incidents, warnings, and maintenance notifications.
@@ -225,165 +227,194 @@ const OwnerAlerts: React.FC = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
-          <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-xl">
-            <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Critical Alerts</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{criticalCount}</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{criticalSolved} Solved</p>
-          </div>
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
         </div>
+      )}
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
-          <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
-            <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Unresolved Warnings</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{warningCount}</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Needs Attention</p>
-          </div>
+      {!selectedFacilityId ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-200px)]">
+          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+          <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            Please select a facility from the dropdown in the top header.
+          </p>
         </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-            <Bell className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Information Logs</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{infoCount}</p>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">System Updates</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recent Activity & Alerts</h2>
-        </div>
-        
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
-          </div>
-        ) : alerts.length === 0 && activityLogs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-16 text-center">
-            <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
-              <Bell className="w-8 h-8 text-slate-400" />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
+              <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-xl">
+                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Critical Alerts</h3>
+                <p className="text-3xl font-bold text-slate-900 dark:text-white">{criticalCount}</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{criticalSolved} Solved</p>
+              </div>
             </div>
-            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No alerts or activity yet</h3>
-            <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-              You'll see system alerts, warnings, and activity logs here when they occur.
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {/* Activity Logs */}
-            {activityLogs.length > 0 && (
-              <>
-                {activityLogs.map((log) => {
-                  let Icon = Bell;
-                  let badgeColor = 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400';
-                  
-                  if (log.action_type === 'stakeholder_approved') {
-                    Icon = CheckCircle;
-                    badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
-                  } else if (log.action_type === 'stakeholder_requested') {
-                    Icon = Clock;
-                    badgeColor = 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400';
-                  } else if (log.action_type === 'payment_received') {
-                    Icon = CreditCard;
-                    badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
-                  }
-                  
-                  return (
-                    <div key={log.id} className="p-6 flex items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                      <div className={`p-3 ${badgeColor.split(' text-')[0]} rounded-xl`}>
-                        <Icon className={`w-6 h-6 ${badgeColor.split('bg-')[1]}`} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">
-                            {log.action_type === 'stakeholder_approved' ? '✓ Investment Approved' : 
-                             log.action_type === 'stakeholder_requested' ? 'Investment Request' :
-                             log.action_type === 'payment_received' ? 'Payment Received' :
-                             log.action_type}
-                          </h3>
-                          <span className={`text-xs font-semibold uppercase tracking-widest ${badgeColor} px-2 py-1 rounded`}>
-                            {log.related_data?.status || 'Activity'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300">
-                          <strong>{log.actor_name}</strong> {
-                            log.action_type === 'stakeholder_approved' ? 'approved investment from' :
-                            log.action_type === 'payment_received' ? 'received payment from' :
-                            'requested investment from'
-                          } <strong>{log.target_name}</strong> for {log.facility_name}
-                        </p>
-                        {log.related_data?.investment_amount_inr && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            Amount: ₹{log.related_data.investment_amount_inr.toLocaleString()}
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                          {getTimeAgo(log.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
 
-            {/* System Alerts */}
-            {alerts.length > 0 && (
-              <>
-                {alerts.map((alert) => {
-                  const Icon = alert.status === 'resolved' ? CheckCircle : getSeverityIcon(alert.severity);
-                  const colors = getSeverityColor(alert.severity, alert.status);
-                  
-                  return (
-                    <div key={alert.id} className="p-6 flex items-start gap-4">
-                      <div className={`p-3 ${colors.bg} rounded-xl`}>
-                        <Icon className={`w-6 h-6 ${colors.text}`} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">{alert.title}</h3>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-semibold uppercase tracking-widest ${colors.badge} px-2 py-1 rounded`}>
-                              {alert.status === 'resolved' ? 'Resolved' : alert.severity}
-                            </span>
-                            {alert.status === 'unresolved' && (
-                              <button
-                                onClick={() => handleResolveAlert(alert.id)}
-                                className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg transition-colors"
-                              >
-                                <Check className="w-3 h-3" />
-                                Mark Resolved
-                              </button>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
+                <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Unresolved Warnings</h3>
+                <p className="text-3xl font-bold text-slate-900 dark:text-white">{warningCount}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Needs Attention</p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+                <Bell className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Information Logs</h3>
+                <p className="text-3xl font-bold text-slate-900 dark:text-white">{infoCount}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">System Updates</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recent Activity & Alerts</h2>
+            </div>
+            
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+              </div>
+            ) : alerts.length === 0 && activityLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-16 text-center">
+                <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
+                  <Bell className="w-8 h-8 text-slate-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No alerts or activity yet</h3>
+                <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  You'll see system alerts, warnings, and activity logs here when they occur.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                {/* Activity Logs */}
+                {activityLogs.length > 0 && (
+                  <>
+                    {activityLogs.map((log) => {
+                      let Icon = Bell;
+                      let badgeColor = 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400';
+                      
+                      if (log.action_type === 'stakeholder_approved') {
+                        Icon = CheckCircle;
+                        badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
+                      } else if (log.action_type === 'stakeholder_requested') {
+                        Icon = Clock;
+                        badgeColor = 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400';
+                      } else if (log.action_type === 'payment_received') {
+                        Icon = CreditCard;
+                        badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
+                      }
+                      
+                      return (
+                        <div key={log.id} className="p-6 flex items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                          <div className={`p-3 ${badgeColor.split(' text-')[0]} rounded-xl`}>
+                            <Icon className={`w-6 h-6 ${badgeColor.split('bg-')[1]}`} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">
+                                {log.action_type === 'stakeholder_approved' ? '✓ Investment Approved' : 
+                                 log.action_type === 'stakeholder_requested' ? 'Investment Request' :
+                                 log.action_type === 'payment_received' ? 'Payment Received' :
+                                 log.action_type}
+                              </h3>
+                              <span className={`text-xs font-semibold uppercase tracking-widest ${badgeColor} px-2 py-1 rounded`}>
+                                {log.related_data?.status || 'Activity'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-300">
+                              <strong>{log.actor_name}</strong> {
+                                log.action_type === 'stakeholder_approved' ? 'approved investment from' :
+                                log.action_type === 'payment_received' ? 'received payment from' :
+                                'requested investment from'
+                              } <strong>{log.target_name}</strong> for {log.facility_name}
+                            </p>
+                            {log.related_data?.investment_amount_inr && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Amount: ₹{log.related_data.investment_amount_inr.toLocaleString()}
+                              </p>
                             )}
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                              {getTimeAgo(log.created_at)}
+                            </p>
                           </div>
                         </div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{alert.description}</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                          {alert.status === 'resolved' && alert.resolved_at 
-                            ? `Resolved ${getTimeAgo(alert.resolved_at)}`
-                            : getTimeAgo(alert.created_at)
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* System Alerts */}
+                {alerts.length > 0 && (
+                  <>
+                    {alerts.map((alert) => {
+                      const Icon = alert.status === 'resolved' ? CheckCircle : getSeverityIcon(alert.severity);
+                      const colors = getSeverityColor(alert.severity, alert.status);
+                      
+                      return (
+                        <div key={alert.id} className="p-6 flex items-start gap-4">
+                          <div className={`p-3 ${colors.bg} rounded-xl`}>
+                            <Icon className={`w-6 h-6 ${colors.text}`} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">{alert.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-semibold uppercase tracking-widest ${colors.badge} px-2 py-1 rounded`}>
+                                  {alert.status === 'resolved' ? 'Resolved' : alert.severity}
+                                </span>
+                                {alert.status === 'unresolved' && (
+                                  <button
+                                    onClick={() => handleResolveAlert(alert.id)}
+                                    className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg transition-colors"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Mark Resolved
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{alert.description}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                              {alert.status === 'resolved' && alert.resolved_at 
+                                ? `Resolved ${getTimeAgo(alert.resolved_at)}`
+                                : getTimeAgo(alert.created_at)
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

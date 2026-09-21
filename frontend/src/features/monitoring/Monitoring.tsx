@@ -42,7 +42,7 @@ interface SensorDevice {
 interface ColdStorageRoom {
   id: string;
   room_code: string;
-  facility_id: string;
+  site_id: string;
   room_name: string;
   capacity_kg: number;
   current_utilization_kg: number;
@@ -50,7 +50,6 @@ interface ColdStorageRoom {
   created_at: string;
   updated_at: string;
   is_active: boolean;
-  site_id: string;
 }
 
 const Monitoring: React.FC = () => {
@@ -82,7 +81,7 @@ const Monitoring: React.FC = () => {
       const { data: roomsData, error: roomsError } = await supabase
         .from('cold_storage_rooms')
         .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
 
       if (roomsError) throw roomsError;
 

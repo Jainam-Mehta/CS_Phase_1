@@ -38,22 +38,43 @@ const OwnerReport: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
   const [loading, setLoading] = useState(false);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
 
   const fetchReportData = async (): Promise<ReportData> => {
-    // Facility name
-    const { data: facilityData } = await supabase
-      .from('facilities')
+    // Fetch Site Name and Rooms
+    const { data: siteData } = await supabase
+      .from('sites')
       .select('facility_name')
       .eq('id', selectedFacilityId)
-      .maybeSingle();
+      .single();
+
+    setSiteName(siteData?.facility_name || 'Cold Storage Site');
+
+    // Fetch Rooms for selected facility
+    const { data: rmData } = await supabase
+      .from('cold_storage_rooms')
+      .select('*')
+      .eq('site_id', selectedFacilityId);
+
+    const resolvedRooms = rmData || [];
+    setRooms(resolvedRooms);
+
+    // Set default room if not already selected
+    if (resolvedRooms.length > 0 && !selectedRoomId) {
+      setSelectedRoomId(resolvedRooms[0].id);
+    }
+
+    const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
 
     // Rooms
     const { data: rooms } = await supabase
       .from('cold_storage_rooms')
       .select('*')
-      .eq('facility_id', selectedFacilityId);
+      .eq('site_id', selectedFacilityId);
 
-    const roomIds = (rooms || []).map((r: any) => r.id);
+    const roomIds = roomToUse ? [roomToUse] : [];
     const totalCapacityKg = (rooms || []).reduce((s: number, r: any) => s + (r.capacity_kg || 0), 0);
     const usedCapacityKg = (rooms || []).reduce((s: number, r: any) => s + (r.current_utilization_kg || 0), 0);
 
@@ -119,12 +140,12 @@ const OwnerReport: React.FC = () => {
     const { data: alerts } = await supabase
       .from('alerts')
       .select('message, severity, created_at')
-      .eq('facility_id', selectedFacilityId)
+      .eq('site_id', selectedFacilityId)
       .order('created_at', { ascending: false })
       .limit(5);
 
     return {
-      facilityName: facilityData?.facility_name || 'Cold Storage Facility',
+      facilityName: siteData?.facility_name || 'Cold Storage Site',
       generatedAt: new Date().toLocaleString('en-IN'),
       totalSensors: sensorList.length,
       onlineSensors,

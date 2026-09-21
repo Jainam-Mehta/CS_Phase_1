@@ -107,7 +107,7 @@ function FarmerDashboardCore() {
 
         const { data: accessLogs } = await supabase
           .from('farmer_room_access')
-          .select(`room_id, status, cold_storage_rooms(id, room_name, facility_id, facilities(id, facility_name))`)
+          .select(`room_id, status, cold_storage_rooms(id, room_name, site_id, sites(id, facility_name))`)
           .eq('farmer_id', profile.id)
           .order('requested_at', { ascending: false });
 
@@ -123,7 +123,7 @@ function FarmerDashboardCore() {
         accessLogs.forEach(log => {
            if (log.status === 'Approved' && log.cold_storage_rooms) {
                const r = Array.isArray(log.cold_storage_rooms) ? log.cold_storage_rooms[0] : log.cold_storage_rooms;
-               const fac = r.facilities ? (Array.isArray(r.facilities) ? r.facilities[0] : r.facilities) : null;
+               const fac = r.sites ? (Array.isArray(r.sites) ? r.sites[0] : r.sites) : null;
                if (r && fac) {
                    approvedRooms.push({
                       roomId: r.id,
@@ -136,7 +136,7 @@ function FarmerDashboardCore() {
                pFound = true;
                if (!pDetails && log.cold_storage_rooms) {
                   const r = Array.isArray(log.cold_storage_rooms) ? log.cold_storage_rooms[0] : log.cold_storage_rooms;
-                  const fac = r.facilities ? (Array.isArray(r.facilities) ? r.facilities[0] : r.facilities) : null;
+                  const fac = r.sites ? (Array.isArray(r.sites) ? r.sites[0] : r.sites) : null;
                   pDetails = { roomName: r?.room_name, facilityName: fac?.facility_name };
                }
            }

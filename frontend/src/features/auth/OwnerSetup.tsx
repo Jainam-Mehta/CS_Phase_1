@@ -34,8 +34,12 @@ interface OwnerSetupData {
   // Storage capacity data (in tons, will be converted to kg for rooms)
   storageCapacityTons: number; // Default 1 ton, user can increase
   
-  // Sensor data
-  sensorQuantities: Record<string, number>; // sensor type -> quantity
+  // Number of rooms
+  numRooms: number; // Default 1, can be 1-20
+  
+  // Sensor data - per-room if multiple rooms, otherwise global
+  sensorQuantities: Record<string, number>; // sensor type -> quantity (for single room or all rooms)
+  roomSensorQuantities?: Record<string, Record<string, number>>; // room_index -> sensor_type -> quantity (for multi-room)
 }
 
 // Icon mapping for sensor registry
@@ -73,6 +77,7 @@ const OwnerSetup: React.FC = () => {
   const [error, setError] = useState('');
   const [profileVerified, setProfileVerified] = useState(false); // Track verification status
   const [verificationAttempted, setVerificationAttempted] = useState(false); // Prevent re-verification
+  const [currentRoomIndex, setCurrentRoomIndex] = useState(0); // Track which room's sensors we're configuring
   
   // Location data from Supabase
   const [states, setStates] = useState<State[]>([]);
@@ -91,6 +96,7 @@ const OwnerSetup: React.FC = () => {
     contactEmail: '',
     phone: '',
     storageCapacityTons: 1, // Default 1 ton
+    numRooms: 1, // Default 1 room
     sensorQuantities: {}, // No defaults - owner must select
   });
   
@@ -158,8 +164,8 @@ const OwnerSetup: React.FC = () => {
       while (retries > 0 && !profile) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('*, roles!inner(name)')
-          .eq('auth_user_id', session.user.id)
+          .select('*')
+          .eq('id', session.user.id)
           .maybeSingle();
         
         if (profileError) {
@@ -288,37 +294,41 @@ const OwnerSetup: React.FC = () => {
       return;
     }
 
+    if (!setupData.numRooms || setupData.numRooms < 1 || setupData.numRooms > 20) {
+      setError('Number of rooms must be between 1 and 20');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      // Get owner profile to get their email
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, auth_user_id, owner_company_id')
-        .eq('auth_user_id', user?.id)
-        .single();
+        .select('id, owner_company_id')
+        .eq('id', user?.id)
+        .maybeSingle();
 
       if (!profile) throw new Error('Owner profile not found');
 
-      // Check for duplicate facilities under this owner profile
-      const facilityName = `${setupData.siteName} Facility`;
-      const { data: existingFacility, error: existingFacilityError } = await supabase
-        .from('facilities')
+      // Check for duplicate sites under this owner profile
+      const siteName = `${setupData.siteName} Facility`;
+      const { data: existingSite, error: existingSiteError } = await supabase
+        .from('sites')
         .select('id')
         .eq('owner_profile_id', profile.id)
-        .eq('facility_name', facilityName)
+        .eq('facility_name', siteName)
         .eq('state_id', selectedStateId)
         .eq('district_id', selectedDistrictId)
         .maybeSingle();
 
-      if (existingFacilityError) {
-        console.error('Error checking for existing facility:', existingFacilityError);
-        throw existingFacilityError;
+      if (existingSiteError) {
+        console.error('Error checking for existing site:', existingSiteError);
+        throw existingSiteError;
       }
 
-      if (existingFacility) {
-        setError('A facility with this name already exists in this location.');
+      if (existingSite) {
+        setError('A site with this name already exists in this location.');
         setLoading(false);
         return;
       }
@@ -361,10 +371,10 @@ const OwnerSetup: React.FC = () => {
         }
       }
 
-      // Create facility linked centrally manually via owner_profile_id
-      const facilityPayload = {
+      // Create site linked centrally manually via owner_profile_id
+      const sitePayload = {
         owner_profile_id: profile.id,
-        facility_name: facilityName,
+        facility_name: siteName,
         address: '',
         state_id: selectedStateId,
         district_id: selectedDistrictId,
@@ -374,40 +384,46 @@ const OwnerSetup: React.FC = () => {
         is_active: true,
       };
 
-      const { data: facility, error: facilityError } = await supabase
-        .from('facilities')
-        .insert(facilityPayload)
+      const { data: site, error: siteError } = await supabase
+        .from('sites')
+        .insert(sitePayload)
         .select()
         .single();
 
-      if (facilityError) {
-        console.error('Facility creation error:', facilityError);
-        throw facilityError;
+      if (siteError) {
+        console.error('Site creation error:', siteError);
+        throw siteError;
       }
 
-      setCreatedFacilityId(facility.id);
+      setCreatedFacilityId(site.id);
 
-      // Create single room with storage capacity
-      const capacityKg = setupData.storageCapacityTons * 1000; // Convert tons to kg
-      const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
-      const { data: room, error: roomError } = await supabase
-        .from('cold_storage_rooms')
-        .insert({
+      // Create multiple rooms with distributed capacity
+      const totalCapacityKg = setupData.storageCapacityTons * 1000; // Convert tons to kg
+      const capacityPerRoomKg = Math.floor(totalCapacityKg / setupData.numRooms); // Distribute equally
+      
+      const roomsToCreate = [];
+      for (let i = 1; i <= setupData.numRooms; i++) {
+        const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
+        roomsToCreate.push({
           room_code: roomCode,
-          facility_id: facility.id,
-          room_name: 'Facility',
-          capacity_kg: capacityKg,
+          site_id: site.id,
+          room_name: `Room ${i}`,
+          capacity_kg: capacityPerRoomKg,
           current_utilization_kg: 0,
           status: 'Active',
           is_active: true
-        })
-        .select()
-        .single();
+        });
+      }
+      
+      const { data: rooms, error: roomError } = await supabase
+        .from('cold_storage_rooms')
+        .insert(roomsToCreate)
+        .select();
 
       if (roomError) throw roomError;
       
-      console.log(`✓ Created facility room with ${setupData.storageCapacityTons} ton(s) capacity`);
-      setCreatedRoomId(room.id);
+      console.log(`✓ Created ${setupData.numRooms} rooms with ${capacityPerRoomKg}kg capacity each`);
+      setCreatedRoomId(rooms?.[0]?.id || null); // Store first room ID for sensors
       setCurrentStep('sensors');
     } catch (err) {
       console.error('Error creating site:', err);
@@ -419,16 +435,25 @@ const OwnerSetup: React.FC = () => {
 
   const handleConfigureSensors = async () => {
     // Validation: at least one sensor selected
-    const totalSensors = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
-    if (totalSensors === 0) {
-      setError('Please select at least one sensor type');
-      return;
-    }
-
-    // Validation: all selected sensors must have quantity >= 1
-    for (const [sensorKey, quantity] of Object.entries(setupData.sensorQuantities)) {
-      if (quantity > 0 && quantity < 1) {
-        setError(`Quantity for ${getDisplayName(sensorKey)} must be at least 1`);
+    let totalSensors = 0;
+    
+    if (setupData.numRooms > 1) {
+      // For multi-room: check at least one sensor per room
+      const roomSensors = setupData.roomSensorQuantities || {};
+      for (let i = 0; i < setupData.numRooms; i++) {
+        const roomKey = `room_${i}`;
+        const roomTotal = Object.values(roomSensors[roomKey] || {}).reduce((sum: number, qty: number) => sum + qty, 0);
+        totalSensors += roomTotal;
+      }
+      if (totalSensors === 0) {
+        setError('Please select at least one sensor for each room');
+        return;
+      }
+    } else {
+      // For single room: use sensorQuantities
+      totalSensors = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
+      if (totalSensors === 0) {
+        setError('Please select at least one sensor type');
         return;
       }
     }
@@ -437,26 +462,32 @@ const OwnerSetup: React.FC = () => {
     setError('');
 
     try {
-      // Create sensor devices for the room with quantities
-      for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
-        if (quantity === 0) continue;
+      const createdRoomIds = Array.isArray(createdRoomId) ? createdRoomId : [createdRoomId].filter(Boolean);
+      
+      if (setupData.numRooms > 1) {
+        // Multi-room: create sensors for each room separately
+        const roomSensors = setupData.roomSensorQuantities || {};
+        for (let roomIndex = 0; roomIndex < createdRoomIds.length; roomIndex++) {
+          const roomId = createdRoomIds[roomIndex];
+          const roomKey = `room_${roomIndex}`;
+          const sensorsForRoom = roomSensors[roomKey] || {};
+          
+          for (const [internalKey, quantity] of Object.entries(sensorsForRoom)) {
+            if (quantity === 0) continue;
 
-        // Handle combined sensors - split into individual sensors
-        const isCombined = internalKey.includes('+');
+            const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
+            if (!sensorDef) continue;
 
-        if (isCombined) {
-          const subTypes = internalKey.split('+');
-          for (const subType of subTypes) {
-            const subDef = SENSOR_REGISTRY.find(s => s.internalKey === subType);
             for (let i = 0; i < quantity; i++) {
               const serialNumber = generateSerialNumber();
-              const mqttTopic = generateMQTTTopic(createdRoomId!, subType, i + 1);
+              const mqttTopic = generateMQTTTopic(roomId, internalKey, i + 1);
+              
               const { error: sensorError } = await supabase
                 .from('sensor_devices')
                 .insert({
-                  room_id: createdRoomId,
-                  sensor_name: subDef?.displayName || subType,
-                  sensor_type: subType,
+                  room_id: roomId,
+                  sensor_name: sensorDef.displayName,
+                  sensor_type: internalKey,
                   serial_number: serialNumber,
                   mqtt_topic: mqttTopic,
                   firmware_version: '1.0.0',
@@ -470,52 +501,51 @@ const OwnerSetup: React.FC = () => {
               if (sensorError) throw sensorError;
             }
           }
-          continue;
         }
+      } else {
+        // Single room: use existing logic
+        for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
+          if (quantity === 0) continue;
 
-        // Regular single sensor
-        const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
-        if (!sensorDef) {
-          console.error(`Sensor definition not found for key: ${internalKey}`);
-          continue;
-        }
+          const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
+          if (!sensorDef) continue;
 
-        for (let i = 0; i < quantity; i++) {
-          const displayName = sensorDef.displayName;
-          const serialNumber = generateSerialNumber();
-          const mqttTopic = generateMQTTTopic(createdRoomId!, internalKey, i + 1);
-          
-          const { error: sensorError } = await supabase
-            .from('sensor_devices')
-            .insert({
-              room_id: createdRoomId,
-              sensor_name: displayName,
-              sensor_type: internalKey,
-              serial_number: serialNumber,
-              mqtt_topic: mqttTopic,
-              firmware_version: '1.0.0',
-              installation_date: new Date().toISOString(),
-              last_calibration: new Date().toISOString(),
-              status: 'Online',
-              last_seen: new Date().toISOString(),
-              battery_percentage: 100,
-              remarks: '',
-            });
-          if (sensorError) throw sensorError;
+          for (let i = 0; i < quantity; i++) {
+            const serialNumber = generateSerialNumber();
+            const mqttTopic = generateMQTTTopic(createdRoomIds[0], internalKey, i + 1);
+            
+            const { error: sensorError } = await supabase
+              .from('sensor_devices')
+              .insert({
+                room_id: createdRoomIds[0],
+                sensor_name: sensorDef.displayName,
+                sensor_type: internalKey,
+                serial_number: serialNumber,
+                mqtt_topic: mqttTopic,
+                firmware_version: '1.0.0',
+                installation_date: new Date().toISOString(),
+                last_calibration: new Date().toISOString(),
+                status: 'Online',
+                last_seen: new Date().toISOString(),
+                battery_percentage: 100,
+                remarks: '',
+              });
+            if (sensorError) throw sensorError;
+          }
         }
       }
 
-      const totalSensorsCreated = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
-      console.log(`✓ Created ${totalSensorsCreated} sensor devices for facility room`);
+      const totalSensorsCreated = totalSensors;
+      console.log(`✓ Created ${totalSensorsCreated} sensor devices`);
 
       // Mark onboarding as complete
       completeStep('profile');
       
-      // Clear selected facility to force reload of facilities list
+      // Clear selected site to force reload of sites list
       setSelectedFacilityId(null);
       
       // Navigate to dashboard
-      navigate('/owner/dashboard');
+      navigate('/owner/dashboard', { replace: true });
     } catch (err) {
       console.error('Error configuring sensors:', err);
       setError('Failed to configure sensors. Please try again.');
@@ -609,6 +639,27 @@ const OwnerSetup: React.FC = () => {
           </p>
         </div>
 
+        {/* Number of Rooms */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Number of Rooms *
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            step="1"
+            value={setupData.numRooms}
+            onChange={(e) => setSetupData(prev => ({ ...prev, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
+            placeholder="1"
+            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            required
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Number of cold storage rooms (1-20 rooms)
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             State *
@@ -654,7 +705,7 @@ const OwnerSetup: React.FC = () => {
         className="w-full"
         loading={loading}
         onClick={handleCreateSite}
-        disabled={!setupData.state || !setupData.district || !setupData.siteName || setupData.storageCapacityTons < 1}
+        disabled={!setupData.state || !setupData.district || !setupData.siteName || setupData.storageCapacityTons < 1 || setupData.numRooms < 1 || setupData.numRooms > 20}
       >
         Continue to Sensor Setup
         <ChevronRight className="h-4 w-4 ml-2" />
@@ -662,117 +713,183 @@ const OwnerSetup: React.FC = () => {
     </div>
   );
 
-  const renderSensorsStep = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Configure Sensors
-        </h2>
-        <p className="text-gray-500 dark:text-gray-400">
-          Select sensor types and specify quantities for each room
-        </p>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {error}
+  const renderSensorsStep = () => {
+    const isMultiRoom = setupData.numRooms > 1;
+    const roomSensors = setupData.roomSensorQuantities || {};
+    const currentRoomKey = `room_${currentRoomIndex}`;
+    
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Configure Sensors
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400">
+            {isMultiRoom 
+              ? `Select sensor types for each room (${setupData.numRooms} rooms total)`
+              : 'Select sensor types and quantities'}
+          </p>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {SENSOR_REGISTRY.map((sensor) => {
-          const Icon = ICON_MAP[sensor.defaultIcon] || Thermometer;
-          const quantity = setupData.sensorQuantities[sensor.internalKey] || 0;
-          const isSelected = quantity > 0;
-          
-          return (
-            <div
-              key={sensor.internalKey}
-              className={`p-4 rounded-lg border-2 transition-all ${
-                isSelected
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-slate-700'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                    {sensor.displayName}
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={(e) => {
-                    const newSelected = e.target.checked;
-                    setSetupData(prev => ({
-                      ...prev,
-                      sensorQuantities: {
-                        ...prev.sensorQuantities,
-                        [sensor.internalKey]: newSelected ? 1 : 0 // Reset to 0 when unchecked, default to 1 when checked
-                      }
-                    }));
-                  }}
-                  className="h-5 w-5 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Unit: {sensor.unit} • Category: {sensor.category}
-              </p>
-              {isSelected && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-gray-600 dark:text-gray-400">Quantity:</label>
+        {/* Room Tabs - Only show if multiple rooms */}
+        {isMultiRoom && (
+          <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700 mb-4">
+            {Array.from({ length: setupData.numRooms }).map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentRoomIndex(index)}
+                className={`px-4 py-2 font-medium text-sm transition-colors ${
+                  currentRoomIndex === index
+                    ? 'border-b-2 border-primary-600 text-primary-600 dark:text-primary-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Room {index + 1}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {SENSOR_REGISTRY.map((sensor) => {
+            const Icon = ICON_MAP[sensor.defaultIcon] || Thermometer;
+            let quantity = 0;
+            
+            if (isMultiRoom) {
+              quantity = roomSensors[currentRoomKey]?.[sensor.internalKey] || 0;
+            } else {
+              quantity = setupData.sensorQuantities[sensor.internalKey] || 0;
+            }
+            
+            const isSelected = quantity > 0;
+            
+            return (
+              <div
+                key={sensor.internalKey}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-slate-700'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                      {sensor.displayName}
+                    </span>
+                  </div>
                   <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={quantity}
+                    type="checkbox"
+                    checked={isSelected}
                     onChange={(e) => {
-                      const newQuantity = parseInt(e.target.value) || 0;
-                      setSetupData(prev => ({
-                        ...prev,
-                        sensorQuantities: {
-                          ...prev.sensorQuantities,
-                          [sensor.internalKey]: newQuantity
-                        }
-                      }));
+                      const newSelected = e.target.checked;
+                      if (isMultiRoom) {
+                        const updatedRoomSensors = {
+                          ...roomSensors,
+                          [currentRoomKey]: {
+                            ...(roomSensors[currentRoomKey] || {}),
+                            [sensor.internalKey]: newSelected ? 1 : 0
+                          }
+                        };
+                        setSetupData(prev => ({
+                          ...prev,
+                          roomSensorQuantities: updatedRoomSensors
+                        }));
+                      } else {
+                        setSetupData(prev => ({
+                          ...prev,
+                          sensorQuantities: {
+                            ...prev.sensorQuantities,
+                            [sensor.internalKey]: newSelected ? 1 : 0
+                          }
+                        }));
+                      }
                     }}
-                    className="w-20 px-2 py-1 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="h-5 w-5 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Unit: {sensor.unit} • Category: {sensor.category}
+                </p>
+                {isSelected && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Quantity:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={quantity}
+                      onChange={(e) => {
+                        const newQuantity = parseInt(e.target.value) || 0;
+                        if (isMultiRoom) {
+                          const updatedRoomSensors = {
+                            ...roomSensors,
+                            [currentRoomKey]: {
+                              ...(roomSensors[currentRoomKey] || {}),
+                              [sensor.internalKey]: newQuantity
+                            }
+                          };
+                          setSetupData(prev => ({
+                            ...prev,
+                            roomSensorQuantities: updatedRoomSensors
+                          }));
+                        } else {
+                          setSetupData(prev => ({
+                            ...prev,
+                            sensorQuantities: {
+                              ...prev.sensorQuantities,
+                              [sensor.internalKey]: newQuantity
+                            }
+                          }));
+                        }
+                      }}
+                      className="w-20 px-2 py-1 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          className="flex-1"
-          onClick={handleBack}
-          disabled={loading}
-        >
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          className="flex-1"
-          loading={loading}
-          onClick={handleConfigureSensors}
-          disabled={Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0) === 0}
-        >
-          Complete Setup
-          <Check className="h-4 w-4 ml-2" />
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            className="flex-1"
+            onClick={handleBack}
+            disabled={loading}
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="flex-1"
+            loading={loading}
+            onClick={handleConfigureSensors}
+            disabled={
+              isMultiRoom
+                ? false // Don't disable for multi-room, validation happens in handleConfigureSensors
+                : Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0) === 0
+            }
+          >
+            Complete Setup
+            <Check className="h-4 w-4 ml-2" />
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">

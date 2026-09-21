@@ -36,24 +36,24 @@ const OwnerBatchHistory: React.FC = () => {
 
       if (!profile) return;
 
-      // Get all facilities for this owner
-      const { data: facilitiesData } = await supabase
-        .from('facilities')
+      // Get all sites for this owner
+      const { data: sitesData } = await supabase
+        .from('sites')
         .select('id, facility_name')
         .eq('owner_profile_id', profile.id);
 
-      if (!facilitiesData || facilitiesData.length === 0) {
+      if (!sitesData || sitesData.length === 0) {
         setInventory([]);
         return;
       }
 
-      const facilityIds = facilitiesData.map(f => f.id);
+      const siteIds = sitesData.map(s => s.id);
 
-      // Get all rooms for all facilities
+      // Get all rooms for all sites
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
-        .select('id, facility_id, room_name')
-        .in('facility_id', facilityIds);
+        .select('id, site_id, room_name')
+        .in('site_id', siteIds);
 
       const resolvedRooms = rmData || [];
       
@@ -82,7 +82,7 @@ const OwnerBatchHistory: React.FC = () => {
             assigned_at,
             removed_at,
             room_id,
-            cold_storage_rooms(room_name, facility_id),
+            cold_storage_rooms(room_name, site_id),
             batches!inner(
               id,
               batch_code,
@@ -96,19 +96,19 @@ const OwnerBatchHistory: React.FC = () => {
               remarks,
               created_at,
               products(name),
-              profiles(first_name, last_name)
+              profiles(full_name)
             )
           `)
           .in('batches.farmer_id', farmerIds)
           .is('removed_at', null)
           .order('assigned_at', { ascending: false });
           
-        // Transform to match expected structure and add facility name
+        // Transform to match expected structure and add site name
         const transformedInventory = allocationData?.map(allocation => {
           const roomData = allocation.cold_storage_rooms;
           const room = Array.isArray(roomData) ? roomData[0] : roomData;
-          const facilityId = room?.facility_id;
-          const facility = facilitiesData.find(f => f.id === facilityId);
+          const siteId = room?.site_id;
+          const site = sitesData.find(s => s.id === siteId);
           
           return {
             ...allocation.batches,
@@ -116,7 +116,7 @@ const OwnerBatchHistory: React.FC = () => {
             quantity_kg: allocation.quantity_kg,
             assigned_at: allocation.assigned_at,
             room_name: room?.room_name,
-            facility_name: facility?.facility_name || 'Unknown Facility',
+            facility_name: site?.facility_name || 'Unknown Site',
             product_name: (() => {
               const products = (allocation.batches as any)?.products;
               if (Array.isArray(products)) {

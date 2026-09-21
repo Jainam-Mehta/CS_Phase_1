@@ -45,16 +45,16 @@ async def get_room_condition(room_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to fetch condition for room {room_id}: {e}")
 
 
-@router.get("/rooms/facility/{facility_id}")
-async def get_facility_rooms(facility_id: str):
-    """Fetch all cold storage rooms in a given facility."""
+@router.get("/rooms/site/{site_id}")
+async def get_site_rooms(site_id: str):
+    """Fetch all cold storage rooms in a given site."""
     try:
         resp = (
             supabase.table("cold_storage_rooms")
             .select("*")
-            .eq("facility_id", facility_id)
+            .eq("site_id", site_id)
             .execute()
         )
         return resp.data or []
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch rooms for facility {facility_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch rooms for site {site_id}: {e}")

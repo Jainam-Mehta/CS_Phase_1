@@ -57,7 +57,7 @@ const Dashboard: React.FC = () => {
 
       const { data: invs } = await supabase
         .from('stakeholder_investments')
-        .select('*, facilities(id, facility_name, localities(districts(states(name))))')
+        .select('*, sites(id, facility_name, localities(districts(states(name))))')
         .eq('stakeholder_id', profile.id)
         .eq('status', 'Active');
 

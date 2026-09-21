@@ -1,37 +1,37 @@
 id,name,code
-dab50c8c-834d-4cf6-be8f-1589ed789123,Andaman And Nicobar Islands,35
-9662746b-f234-4305-9f0c-f2d35eb9e4ff,Andhra Pradesh,28
-9395ff9d-e68f-41f2-9115-332d7d874d9c,Arunachal Pradesh,12
-40be93b2-340b-496d-a8bb-49b8f5a37ac3,Assam,18
-e7a4bb49-6bac-4913-8d45-bf93e829a05b,Bihar,10
-e08bc223-df06-4466-87f2-ea8bd5ba73b0,Chandigarh,4
-92527b19-58e5-47f4-ad97-e4cab6947bd8,Chhattisgarh,22
-e4ab04ce-3750-4900-8b5a-d32c76015525,Delhi,7
-f568eea0-d55d-403d-9fb4-e714192ec99a,Goa,30
-22a7b210-0ef4-4717-b2e7-a8196c055fd5,Gujarat,24
-5c11ee74-84db-4c3b-8569-60f2b9c17ed6,Haryana,6
-f9aeedfc-dd5e-438a-aea8-811186765bd4,Himachal Pradesh,2
-d48ca676-3808-4e90-aa59-1f629a31d131,Jammu And Kashmir,1
-3018c4f2-7395-4419-9eb8-f1af11d33f86,Jharkhand,20
-a94f6c49-11d8-467a-a9c4-e834ea469631,Karnataka,29
-7947891f-88e2-430d-a46a-3459b2457a13,Kerala,32
-30123749-1c3c-4b5e-8265-6bbf731f93cc,Ladakh,37
-ba545e6d-c742-4755-a8da-fcc0ed98c7ca,Lakshadweep,31
-7b0135bb-6770-4ff9-bfc5-e769fc24c7e1,Madhya Pradesh,23
-30378acd-4154-4398-aa68-2bcd095f9db1,Maharashtra,27
-d2027132-0759-4063-8593-b3159c458f6e,Manipur,14
-902cd081-624c-4fda-be0e-8d344d473ee6,Meghalaya,17
-0e9d571e-6b9a-4736-a851-5f0ef6b4d0ef,Mizoram,15
-cc31cc08-bf86-494d-a5c1-356fbf8f4209,Nagaland,13
-2a78de6d-f771-4988-9abf-bf702d38dedf,Odisha,21
-232504a9-781f-4bd9-9821-536d7a337ea8,Puducherry,34
-f5ffb95c-fca1-4481-a5df-5fd125b1e60e,Punjab,3
-5b851db3-f461-467c-a928-ab18b80c430f,Rajasthan,8
-d670605a-07bb-434c-b8b3-e9afe1c0dfdb,Sikkim,11
-6f7e0263-71f2-438e-9349-adba78288219,Tamil Nadu,33
-3a630569-d879-4c3e-bf34-cf72ef9db775,Telangana,36
-4a814e11-6f4f-4a81-b279-a10960308152,The Dadra And Nagar Haveli And Daman And Diu,38
-5e764a04-076e-4272-a2c5-7eaaa940738e,Tripura,16
-853fe546-d0df-4b52-91fd-52f01194fdf5,Uttarakhand,5
-a75d16e3-b728-4158-8c32-1c615f84f111,Uttar Pradesh,9
-af80398a-0451-479e-9c71-52bb202c2760,West Bengal,19
+28a72607-6e5d-4b2d-80a9-ba73421f4d33,Andaman And Nicobar Islands,35
+165e0b57-2fa1-44a4-b9e0-910cde6290c8,Andhra Pradesh,28
+f26c4802-5a03-4d3f-8d20-44f876dc7b37,Arunachal Pradesh,12
+692946f1-8f9e-4c21-8529-5b31ceb0439a,Assam,18
+b9de4cb7-0106-4266-88f0-b1b791435603,Bihar,10
+f66df6f6-8c90-4ef8-89e6-2cb1d43eb423,Chandigarh,4
+d4104800-8b7b-4246-8fc9-5f8ad2667f7a,Chhattisgarh,22
+22e5933d-fefe-4098-80ee-46c7e37b74b2,Delhi,7
+ba5cafea-855b-4008-8f4a-383958fc406d,Goa,30
+afa301bc-b8fb-4927-a047-16e8a50a22da,Gujarat,24
+e076145d-4224-42fc-be2e-3600d5afab7a,Haryana,6
+1b10ae89-04ac-460f-a98a-40b97615ec66,Himachal Pradesh,2
+38bcb835-462d-4bb7-a804-bd2e398985a0,Jammu And Kashmir,1
+6b329f41-db37-49bd-a6d9-211f2ac5f795,Jharkhand,20
+7f9d1beb-75b7-44a0-ac06-fb3ad29042ac,Karnataka,29
+4a148464-dbba-469c-82f6-44d3ec24fd8c,Kerala,32
+21e9b89a-b5ce-4793-bf19-53cd59949ce8,Ladakh,37
+4fdc0293-d3b4-4079-a651-633422360a65,Lakshadweep,31
+a7084865-6f6a-48a2-a332-9a77182ba9f3,Madhya Pradesh,23
+c752ed46-ec25-402e-a3db-6f55655fba6c,Maharashtra,27
+e96a7eb1-f673-462a-996e-dc43f4bdb53e,Manipur,14
+73b826dc-d88e-4f10-9f4b-42f24d26fe27,Meghalaya,17
+65f5a7e1-ad2d-4d86-95ea-4cd1f5d375a5,Mizoram,15
+cddc5a70-cf8b-4e8d-a003-02b5008cfae8,Nagaland,13
+5e24480a-f4da-43c3-a7df-f74bb87772c2,Odisha,21
+81630edf-800e-40ae-ac23-3cc04a5e4ba4,Puducherry,34
+7d65ec7b-797d-4ea3-826c-c370538563c8,Punjab,3
+fc1959de-9609-4540-9c2b-df564ecae17d,Rajasthan,8
+8bb69b3d-1a87-4394-8365-16f6cb2f7928,Sikkim,11
+f203405a-2180-40a1-8c33-15256292b0e2,Tamil Nadu,33
+2888719b-51d7-4ee0-ab6c-6ff19295fa31,Telangana,36
+ab9adc85-6abb-4ba6-98ac-b06500b5aa0e,The Dadra And Nagar Haveli And Daman And Diu,38
+68f44fc2-208e-4fbd-a6bd-3afd0b035198,Tripura,16
+4c97eb44-8094-40ec-a5ef-c9938d269641,Uttarakhand,5
+23903a7c-fe2a-466a-affe-dd5289bc5c83,Uttar Pradesh,9
+4f29f067-44d7-4e05-9080-b05f47ca9717,West Bengal,19

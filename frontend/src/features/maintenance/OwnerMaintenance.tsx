@@ -70,7 +70,7 @@ const FACILITY_MAINTENANCE_ITEMS = [
 
 interface MaintenanceRecord {
   id: string;
-  facility_id: string | null;
+  site_id: string | null;
   maintenance_type: string;
   last_service_date: string;
   next_due_date: string;
@@ -85,6 +85,9 @@ const OwnerMaintenance: React.FC = () => {
   const { selectedFacilityId } = useSiteStore();
   const [loading, setLoading] = useState(true);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
   
   // Modal states
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -110,20 +113,51 @@ const OwnerMaintenance: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get facility creation date
-      const { data: facilityData } = await supabase
-        .from('facilities')
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
+        .single();
+
+      setSiteName(siteData?.facility_name || 'Your Site');
+
+      // Fetch Rooms for selected facility
+      const { data: rmData } = await supabase
+        .from('cold_storage_rooms')
+        .select('*')
+        .eq('site_id', selectedFacilityId);
+
+      const resolvedRooms = rmData || [];
+      setRooms(resolvedRooms);
+
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
+
+      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
+      
+      if (!roomToUse) {
+        setMaintenanceRecords([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Get site creation date
+      const { data: siteCreationData } = await supabase
+        .from('sites')
         .select('created_at')
         .eq('id', selectedFacilityId)
         .single();
       
-      const facilityCreatedDate = facilityData?.created_at ? new Date(facilityData.created_at) : new Date();
+      const siteCreatedDate = siteCreationData?.created_at ? new Date(siteCreationData.created_at) : new Date();
       
       // Try to fetch from maintenance table, if not found, initialize with defaults
       const { data: existingRecords } = await supabase
         .from('facility_maintenance')
         .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
       
       if (existingRecords && existingRecords.length > 0) {
         // Use existing records and calculate their status
@@ -156,7 +190,7 @@ const OwnerMaintenance: React.FC = () => {
       } else {
         // Initialize new maintenance records based on facility creation date
         const demoRecords: MaintenanceRecord[] = FACILITY_MAINTENANCE_ITEMS.map(item => {
-          const lastServiceDate = facilityCreatedDate; // Use facility creation date as last service
+          const lastServiceDate = siteCreatedDate; // Use site creation date as last service
           const nextDueDate = new Date(lastServiceDate);
           
           // Calculate next due date based on frequency
@@ -182,7 +216,7 @@ const OwnerMaintenance: React.FC = () => {
           
           return {
             id: item.id,
-            facility_id: selectedFacilityId,
+            site_id: selectedFacilityId,
             maintenance_type: item.id,
             last_service_date: lastServiceDate.toISOString(),
             next_due_date: nextDueDate.toISOString(),
@@ -251,7 +285,7 @@ const OwnerMaintenance: React.FC = () => {
       const { error: logError } = await supabase
         .from('facility_maintenance_logs')
         .insert({
-          facility_id: selectedFacilityId,
+          site_id: selectedFacilityId,
           maintenance_type: scheduleForm.maintenance_type,
           service_date: scheduledDate.toISOString(),
           performed_by: scheduleForm.performed_by,
@@ -266,7 +300,7 @@ const OwnerMaintenance: React.FC = () => {
       const { error: statusError } = await supabase
         .from('facility_maintenance')
         .upsert({
-          facility_id: selectedFacilityId,
+          site_id: selectedFacilityId,
           maintenance_type: scheduleForm.maintenance_type,
           last_service_date: scheduledDate.toISOString(),
           next_due_date: nextDueDate.toISOString(),
@@ -274,7 +308,7 @@ const OwnerMaintenance: React.FC = () => {
           notes: scheduleForm.notes,
           performed_by: scheduleForm.performed_by
         }, {
-          onConflict: 'facility_id,maintenance_type'
+          onConflict: 'site_id,maintenance_type'
         });
 
       if (statusError) throw statusError;
@@ -295,7 +329,7 @@ const OwnerMaintenance: React.FC = () => {
       const { data, error } = await supabase
         .from('facility_maintenance_logs')
         .select('*')
-        .eq('facility_id', selectedFacilityId)
+        .eq('site_id', selectedFacilityId)
         .eq('maintenance_type', maintenanceType)
         .order('service_date', { ascending: false });
 
@@ -330,7 +364,7 @@ const OwnerMaintenance: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Facility Maintenance
+            {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
             Track and manage cold storage facility maintenance schedules.
@@ -344,6 +378,24 @@ const OwnerMaintenance: React.FC = () => {
           Schedule Maintenance
         </button>
       </div>
+
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">

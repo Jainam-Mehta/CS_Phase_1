@@ -9,86 +9,62 @@ import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
+  const { selectedFacilityId } = useSiteStore();
   
   const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
-    if (user?.id) {
-      loadAllInventory();
+    if (user?.id && selectedFacilityId) {
+      loadFacilityData();
     }
-  }, [user?.id]);
+  }, [user?.id, selectedFacilityId]);
 
-  const loadAllInventory = async () => {
+  const loadFacilityData = async () => {
     try {
       setLoading(true);
       
-      // Get owner's profile
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', authUser.id)
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
         .single();
 
-      if (!profile) return;
+      setSiteName(siteData?.facility_name || 'Your Site');
 
-      console.log('🔍 DEBUG Owner: Profile ID:', profile.id);
-
-      // Get ALL facilities for this owner
-      const { data: facilitiesData } = await supabase
-        .from('facilities')
-        .select('id, facility_name, total_capacity_kg, current_utilization_kg')
-        .eq('owner_profile_id', profile.id);
-
-      console.log('🔍 DEBUG Owner: Facilities found:', facilitiesData?.length || 0, facilitiesData);
-
-      if (!facilitiesData || facilitiesData.length === 0) {
-        setInventory([]);
-        setLoading(false);
-        return;
-      }
-
-      const facilityIds = facilitiesData.map(f => f.id);
-
-      // Get all rooms for all facilities
-      const { data: rmData } = await supabase
+      // Fetch Rooms for selected facility
+      const { data: rmData, error: rmError } = await supabase
         .from('cold_storage_rooms')
-        .select('id, facility_id, room_name')
-        .in('facility_id', facilityIds);
+        .select('*')
+        .eq('site_id', selectedFacilityId);
 
-      const rooms = rmData || [];
-      console.log('🔍 DEBUG Owner: Rooms found:', rooms.length, rooms);
+      console.log('Rooms query error:', rmError);
+      console.log('Rooms fetched:', rmData?.length || 0);
 
-      if (rooms.length === 0) {
+      const resolvedRooms = rmData || [];
+      setRooms(resolvedRooms);
+
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
+
+      // Use the currently selected room or the first room
+      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
+      
+      if (!roomToUse || resolvedRooms.length === 0) {
         setInventory([]);
         setLoading(false);
         return;
       }
 
-      const roomIds = rooms.map(r => r.id);
+      const roomIds = [roomToUse];
 
-      // Find farmers that have APPROVED access to these rooms
-      const { data: accessData } = await supabase
-        .from('farmer_room_access')
-        .select('farmer_id')
-        .in('room_id', roomIds)
-        .eq('status', RoomRequestStatus.Approved);
-
-      console.log('🔍 DEBUG Owner: Approved farmers:', accessData?.length || 0, accessData);
-
-      if (!accessData || accessData.length === 0) {
-        setInventory([]);
-        setLoading(false);
-        return;
-      }
-
-      const farmerIds = accessData.map(a => a.farmer_id);
-      console.log('🔍 DEBUG Owner: Farmer IDs to query:', farmerIds);
-
-      // Query batch_room_allocations -> batches -> products -> profiles for farmer name
+      // Query batch_room_allocations for the selected room
       const { data: allocationData } = await supabase
         .from('batch_room_allocations')
         .select(`
@@ -109,10 +85,10 @@ const OwnerInventory: React.FC = () => {
             remarks,
             created_at,
             products(name),
-            profiles(first_name, last_name)
+            profiles(full_name)
           )
         `)
-        .in('batches.farmer_id', farmerIds)
+        .eq('room_id', roomToUse)
         .is('removed_at', null)
         .order('assigned_at', { ascending: false });
 
@@ -171,56 +147,38 @@ const OwnerInventory: React.FC = () => {
 
   const maxCrates = productAggregates.length > 0 ? Math.max(...productAggregates.map(p => p.crates)) : 0;
 
-  // Room Capacity - using occupied kg (red) vs available (green)
-  // Since we're showing all facilities, let's aggregate all facility capacity
   const [capacityData, setCapacityData] = useState({ total: 0, used: 0 });
 
   useEffect(() => {
     const loadCapacityData = async () => {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (!authUser) return;
+        if (!selectedFacilityId) return;
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('auth_user_id', authUser.id)
-          .single();
+        // Get all rooms for this facility
+        const { data: roomsData } = await supabase
+          .from('cold_storage_rooms')
+          .select('id, capacity_kg')
+          .eq('site_id', selectedFacilityId);
 
-        if (!profile) return;
-
-        // Get all facilities for owner
-        const { data: facilitiesData } = await supabase
-          .from('facilities')
-          .select('id, total_capacity_kg')
-          .eq('owner_profile_id', profile.id);
-
-        if (!facilitiesData || facilitiesData.length === 0) {
+        if (!roomsData || roomsData.length === 0) {
           setCapacityData({ total: 0, used: 0 });
           return;
         }
 
-        const facilityIds = facilitiesData.map(f => f.id);
-        const totalCapacity = facilitiesData.reduce((sum, f) => sum + (Number(f.total_capacity_kg) || 0), 0);
+        const totalCapacity = roomsData.reduce((sum, r) => sum + (Number(r.capacity_kg) || 0), 0);
+        const roomIds = roomsData.map(r => r.id);
 
-        // Get all rooms for these facilities
-        const { data: roomsData } = await supabase
-          .from('cold_storage_rooms')
-          .select('id')
-          .in('facility_id', facilityIds);
-
-        if (!roomsData || roomsData.length === 0) {
+        // Calculate actual occupancy from batch_room_allocations for selected room only
+        const roomIdToQuery = selectedRoomId || (roomIds.length > 0 ? roomIds[0] : null);
+        if (!roomIdToQuery) {
           setCapacityData({ total: totalCapacity, used: 0 });
           return;
         }
 
-        const roomIds = roomsData.map(r => r.id);
-
-        // Calculate actual occupancy from batch_room_allocations
         const { data: allocationsData } = await supabase
           .from('batch_room_allocations')
           .select('quantity_kg')
-          .in('room_id', roomIds)
+          .eq('room_id', roomIdToQuery)
           .is('removed_at', null);
 
         const usedCapacity = (allocationsData || []).reduce((sum, alloc) => sum + (Number(alloc.quantity_kg) || 0), 0);
@@ -232,10 +190,10 @@ const OwnerInventory: React.FC = () => {
       }
     };
     
-    if (user?.id) {
+    if (selectedFacilityId) {
       loadCapacityData();
     }
-  }, [user?.id]);
+  }, [selectedFacilityId, selectedRoomId]);
 
   const occupiedPct = capacityData.total > 0 ? (capacityData.used / capacityData.total) * 100 : 0;
   const availablePct = Math.max(0, 100 - occupiedPct);
@@ -243,19 +201,44 @@ const OwnerInventory: React.FC = () => {
   return (
     <div className="p-8 max-w-[1400px] mx-auto min-h-[calc(100vh-64px)] overflow-hidden">
       
-      {/* Header - Remove Room Selector */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Inventory Management
+            {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
-            Overview of all products currently stored across all your facilities.
+            Overview of all products currently stored in this room.
           </p>
         </div>
       </div>
 
-      {loading ? (
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {!selectedFacilityId ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
+          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+          <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
+            Please select a facility from the dropdown in the top header.
+          </p>
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
         </div>

@@ -89,8 +89,8 @@ const AuthCallback: React.FC = () => {
             // Check if user already has a profile
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
-              .select('*, roles!inner(name)')
-              .eq('auth_user_id', session.user.id)
+              .select('*')
+              .eq('id', session.user.id)
               .maybeSingle();
             
             // Clear the hash from URL

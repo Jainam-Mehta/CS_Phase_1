@@ -67,7 +67,7 @@ const RoomSelection: React.FC = () => {
         .from('cold_storage_rooms')
         .select(`
           *,
-          facilities!inner(
+          sites!inner(
             facility_name,
             locality_id,
             district_id,
@@ -78,7 +78,7 @@ const RoomSelection: React.FC = () => {
             )
           )
         `)
-        .eq('facilities.locality_id', localityId)
+        .eq('sites.locality_id', localityId)
         .order('room_name');
       
       if (error) throw error;
@@ -95,7 +95,7 @@ const RoomSelection: React.FC = () => {
         .from('cold_storage_rooms')
         .select(`
           *,
-          facilities!inner(
+          sites!inner(
             facility_name,
             locality_id,
             district_id,
@@ -106,7 +106,7 @@ const RoomSelection: React.FC = () => {
             )
           )
         `)
-        .eq('facilities.district_id', districtId)
+        .eq('sites.district_id', districtId)
         .order('room_name');
       
       if (error) throw error;
@@ -277,11 +277,11 @@ const RoomSelection: React.FC = () => {
                         )}
                       </div>
                       <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 line-clamp-1">
-                        {room.facilities?.facility_name || 'Unknown Facility'}
+                        {room.sites?.facility_name || 'Unknown Site'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-                        {room.facilities?.profiles 
-                          ? `${room.facilities.profiles.first_name} ${room.facilities.profiles.last_name}`
+                        {room.sites?.profiles 
+                          ? `${room.sites.profiles.first_name} ${room.sites.profiles.last_name}`
                           : 'Unknown Owner'}
                       </p>
                     </button>

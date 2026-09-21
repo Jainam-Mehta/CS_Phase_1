@@ -126,9 +126,9 @@ const StorageSelection: React.FC = () => {
       const localityName = locality?.name || '';
       
       // Load facilities by locality (owner-created facilities)
-      // Facilities table has city field that matches locality name
+      // Sites table has city field that matches locality name
       const { data, error } = await supabase
-        .from('facilities')
+        .from('sites')
         .select('*')
         .eq('city', localityName)
         .order('facility_name');
@@ -148,9 +148,9 @@ const StorageSelection: React.FC = () => {
       const districtName = district?.name || '';
       
       // Load facilities by district_id (owner-created facilities)
-      // Facilities table has district_id foreign key to districts table
+      // Sites table has district_id foreign key to districts table
       const { data, error } = await supabase
-        .from('facilities')
+        .from('sites')
         .select('*')
         .eq('district_id', districtId)
         .order('facility_name');

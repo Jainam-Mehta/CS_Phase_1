@@ -127,7 +127,7 @@ const StakeholderProfile: React.FC = () => {
       // Extract Portfolio Values natively calculating Arrays smoothly checking tables efficiently!
       const { data: interests } = await supabase
          .from('stakeholder_interest')
-         .select('facility_id')
+         .select('site_id')
          .eq('stakeholder_id', data.id);
       
       let facCount = 0, activeCount = 0;
@@ -136,8 +136,8 @@ const StakeholderProfile: React.FC = () => {
       if (interests && interests.length > 0) {
          facCount = interests.length;
          activeCount = interests.length; // Basic active interpretation based exclusively via valid records
-         const facIds = interests.map(i => i.facility_id);
-         const { data: rooms } = await supabase.from('cold_storage_rooms').select('id').in('facility_id', facIds);
+         const siteIds = interests.map(i => i.site_id);
+         const { data: rooms } = await supabase.from('cold_storage_rooms').select('id').in('site_id', siteIds);
          if (rooms) roomCount = rooms.length;
       }
 

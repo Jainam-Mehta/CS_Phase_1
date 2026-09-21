@@ -89,38 +89,38 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       setLoading(true);
       setError('');
 
-      // Fetch facilities in this state directly mapped
-      const { data: facilitiesData, error: facilitiesError } = await supabase
-        .from('facilities')
-        .select('id, facility_name, owner_profile_id, state_id, district_id, profiles(first_name, last_name, owner_company_id)')
+      // Fetch sites in this state directly mapped
+      const { data: sitesData, error: sitesError } = await supabase
+        .from('sites')
+        .select('id, facility_name, owner_profile_id, state_id, district_id, profiles(full_name, owner_company_id)')
         .eq('state_id', stateId)
         .eq('is_active', true);
 
-      if (facilitiesError) throw facilitiesError;
-      if (!facilitiesData || facilitiesData.length === 0) {
+      if (sitesError) throw sitesError;
+      if (!sitesData || sitesData.length === 0) {
         setFacilities([]);
         return;
       }
 
-      // Fetch room counts and capacity for each facility
-      const facilityIds = facilitiesData.map((f: any) => f.id);
+      // Fetch room counts and capacity for each site
+      const siteIds = sitesData.map((s: any) => s.id);
       const { data: rooms } = await supabase
         .from('cold_storage_rooms')
-        .select('facility_id, capacity_kg')
-        .in('facility_id', facilityIds);
+        .select('site_id, capacity_kg')
+        .in('site_id', siteIds);
 
       const roomData = rooms?.reduce((acc, room) => {
-        if (!acc.has(room.facility_id)) {
-          acc.set(room.facility_id, { count: 0, capacity: 0 });
+        if (!acc.has(room.site_id)) {
+          acc.set(room.site_id, { count: 0, capacity: 0 });
         }
-        const data = acc.get(room.facility_id)!;
+        const data = acc.get(room.site_id)!;
         data.count++;
         data.capacity += room.capacity_kg || 0;
         return acc;
       }, new Map<string, { count: number; capacity: number }>()) || new Map();
 
       // Fetch district names
-      const districtIds = [...new Set(facilitiesData.map((f: any) => f.district_id).filter(Boolean))];
+      const districtIds = [...new Set(sitesData.map((s: any) => s.district_id).filter(Boolean))];
       const { data: districts } = await supabase
         .from('districts')
         .select('id, name')
@@ -129,7 +129,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       const districtMap = new Map(districts?.map((d) => [d.id, d.name]) || []);
 
       // Build native facility array
-      const facilityList: Facility[] = facilitiesData.map((f: any) => {
+      const facilityList: Facility[] = sitesData.map((f: any) => {
         const roomInfo = roomData.get(f.id) || { count: 0, capacity: 0 };
         const districtName = districtMap.get(f.district_id) || 'Unknown';
         

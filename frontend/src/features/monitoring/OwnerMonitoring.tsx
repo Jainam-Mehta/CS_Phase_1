@@ -46,6 +46,9 @@ const OwnerMonitoring: React.FC = () => {
     sensor_type: '',
     quantity: 1
   });
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
@@ -57,54 +60,75 @@ const OwnerMonitoring: React.FC = () => {
     try {
       setLoading(true);
 
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
+        .single();
+
+      setSiteName(siteData?.facility_name || 'Your Site');
+
+      // Fetch Rooms for selected facility
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
         .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
 
       const resolvedRooms = rmData || [];
-      if (resolvedRooms.length > 0) {
-        const roomIds = resolvedRooms.map((r) => r.id);
+      setRooms(resolvedRooms);
 
-        // Fetch sensors from sensor_devices table
-        const { data: sensorData } = await supabase
-          .from('sensor_devices')
-          .select('*')
-          .in('room_id', roomIds)
-          .order('sensor_type', { ascending: true });
-        
-        // Group sensors by type and add numbering (Temperature 1, Temperature 2, etc.)
-        const sensorsByType: Record<string, number> = {};
-        const numberedSensors = (sensorData || []).map(sensor => {
-          const type = sensor.sensor_type || 'Unknown';
-          sensorsByType[type] = (sensorsByType[type] || 0) + 1;
-          const number = sensorsByType[type];
-          
-          return {
-            ...sensor,
-            display_name: number > 1 || sensorsByType[type] > 1 
-              ? `${type} ${number}` 
-              : type,
-            sensor_number: number
-          };
-        });
-        
-        setDbSensors(numberedSensors);
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
 
-        // Get unique farmers count
-        const { data: allocationData } = await supabase
-          .from('batch_room_allocations')
-          .select(`
-            batches!inner(farmer_id)
-          `)
-          .in('room_id', roomIds)
-          .is('removed_at', null);
+      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
 
-        setInventory(allocationData || []);
-      } else {
+      if (!roomToUse || resolvedRooms.length === 0) {
         setDbSensors([]);
         setInventory([]);
+        setLoading(false);
+        return;
       }
+
+      const roomIds = [roomToUse];
+
+      // Fetch sensors from sensor_devices table
+      const { data: sensorData } = await supabase
+        .from('sensor_devices')
+        .select('*')
+        .in('room_id', roomIds)
+        .order('sensor_type', { ascending: true });
+      
+      // Group sensors by type and add numbering (Temperature 1, Temperature 2, etc.)
+      const sensorsByType: Record<string, number> = {};
+      const numberedSensors = (sensorData || []).map(sensor => {
+        const type = sensor.sensor_type || 'Unknown';
+        sensorsByType[type] = (sensorsByType[type] || 0) + 1;
+        const number = sensorsByType[type];
+        
+        return {
+          ...sensor,
+          display_name: number > 1 || sensorsByType[type] > 1 
+            ? `${type} ${number}` 
+            : type,
+          sensor_number: number
+        };
+      });
+      
+      setDbSensors(numberedSensors);
+
+      // Get unique farmers count
+      const { data: allocationData } = await supabase
+        .from('batch_room_allocations')
+        .select(`
+          batches!inner(farmer_id)
+        `)
+        .in('room_id', roomIds)
+        .is('removed_at', null);
+
+      setInventory(allocationData || []);
     } catch (error) {
       console.error('Error loading monitoring data:', error);
     } finally {
@@ -146,7 +170,7 @@ const OwnerMonitoring: React.FC = () => {
       const { data: roomData, error: roomError } = await supabase
         .from('cold_storage_rooms')
         .select('id')
-        .eq('facility_id', selectedFacilityId)
+        .eq('site_id', selectedFacilityId)
         .limit(1)
         .single();
 
@@ -323,7 +347,7 @@ const OwnerMonitoring: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Facilities Monitoring
+            {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
             Real-time telemetry and active client monitoring across all sites.
@@ -334,6 +358,24 @@ const OwnerMonitoring: React.FC = () => {
           MQTT Data Connected
         </div>
       </div>
+
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* KPI Cards */}

@@ -67,8 +67,8 @@ export const useOnboarding = () => {
       // 1. Check if profile exists
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*, roles!inner(name)')
-        .eq('auth_user_id', user.id)
+        .select('*')
+        .eq('id', user.id)
         .maybeSingle();
 
       if (profileError || !profile) {

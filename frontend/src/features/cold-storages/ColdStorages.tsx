@@ -16,6 +16,7 @@ const ColdStorages: React.FC = () => {
     name: '',
     capacity: 1000,
     location: '',
+    numRooms: 1,
   });
   const [selectedSensors, setSelectedSensors] = useState<{ type: AdminSensor['type']; units: number }[]>([]);
 
@@ -71,6 +72,8 @@ const ColdStorages: React.FC = () => {
       }))
     );
 
+    // Create site with multiple rooms
+    const roomCapacity = newStorage.capacity / newStorage.numRooms;
     addStorage({
       name: newStorage.name,
       type: selectedStorageType,
@@ -87,7 +90,7 @@ const ColdStorages: React.FC = () => {
 
     setShowAddModal(false);
     setSelectedStorageType(null);
-    setNewStorage({ name: '', capacity: 1000, location: '' });
+    setNewStorage({ name: '', capacity: 1000, location: '', numRooms: 1 });
     setSelectedSensors([]);
   };
 
@@ -213,7 +216,7 @@ const ColdStorages: React.FC = () => {
         onClose={() => {
           setShowAddModal(false);
           setSelectedStorageType(null);
-          setNewStorage({ name: '', capacity: 1000, location: '' });
+          setNewStorage({ name: '', capacity: 1000, location: '', numRooms: 1 });
           setSelectedSensors([]);
         }}
         title="Add New Cold Storage"
@@ -284,6 +287,20 @@ const ColdStorages: React.FC = () => {
                     placeholder="Enter capacity"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Number of Rooms
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={newStorage.numRooms}
+                    onChange={(e) => setNewStorage({ ...newStorage, numRooms: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Number of rooms"
+                  />
+                </div>
               </div>
 
               {/* Sensor Configuration */}
@@ -339,7 +356,7 @@ const ColdStorages: React.FC = () => {
                   variant="outline"
                   onClick={() => {
                     setSelectedStorageType(null);
-                    setNewStorage({ name: '', capacity: 1000, location: '' });
+                    setNewStorage({ name: '', capacity: 1000, location: '', numRooms: 1 });
                     setSelectedSensors([]);
                   }}
                 >

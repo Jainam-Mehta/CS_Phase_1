@@ -22,7 +22,8 @@ interface FacilityData {
 }
 
 interface InvestmentData {
-  facility_id: string;
+  facility_id?: string;
+  site_id: string;
   investment_amount_inr: number;
   roi_percentage_estimate: number;
   carbon_credits?: number;
@@ -100,9 +101,9 @@ const StakeholderMap: React.FC = () => {
         return;
       }
 
-      // Fetch all facilities with location context
+      // Fetch all sites with location context
       const { data: facs, error: facErr } = await supabase
-        .from('facilities')
+        .from('sites')
         .select(`
           id, facility_name,
           localities (
@@ -140,7 +141,7 @@ const StakeholderMap: React.FC = () => {
 
   const stateSummaries = useMemo(() => {
     const sums: Record<string, StateSummary> = {};
-    const invMap = new Map(investments.map(i => [i.facility_id, i]));
+    const invMap = new Map(investments.map(i => [i.site_id, i]));
 
     facilities.forEach(f => {
       const sName = f.stateName;
@@ -190,7 +191,7 @@ const StakeholderMap: React.FC = () => {
       totalRoiRaw += Number(i.roi_percentage_estimate) || 0;
       totalCredits += Number(i.carbon_credits) || 241;
       
-      const f = facilities.find(fac => fac.id === i.facility_id);
+      const f = facilities.find(fac => fac.id === i.site_id);
       if (f) {
         totCities.add(f.cityName);
       }

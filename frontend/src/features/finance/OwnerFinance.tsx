@@ -13,17 +13,62 @@ const OwnerFinance: React.FC = () => {
   const { selectedFacilityId } = useSiteStore();
   const [loading, setLoading] = useState(true);
   const [financeData, setFinanceData] = useState<any>(null);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadFinanceData();
     }
-  }, [user?.id, selectedFacilityId]);
+  }, [user?.id, selectedFacilityId, selectedRoomId]);
 
   const loadFinanceData = async () => {
     try {
       setLoading(true);
       console.log('=== FINANCE DATA LOAD STARTED ===');
+
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
+        .single();
+
+      setSiteName(siteData?.facility_name || 'Your Site');
+
+      // Fetch Rooms for selected facility
+      const { data: rmData } = await supabase
+        .from('cold_storage_rooms')
+        .select('*')
+        .eq('site_id', selectedFacilityId);
+
+      const resolvedRooms = rmData || [];
+      setRooms(resolvedRooms);
+
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
+
+      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
+
+      if (!roomToUse) {
+        setFinanceData({
+          currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          totalRevenue: 0,
+          totalExpenses: 0,
+          totalProfit: 0,
+          profitMargin: '0.0',
+          farmerRevenue: [],
+          expenses: [],
+          monthlyTrend: [],
+          totalCrates: 0,
+          totalFarmers: 0,
+          avgPricePerCrate: '0',
+        });
+        return;
+      }
 
       // Get owner profile
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -37,14 +82,8 @@ const OwnerFinance: React.FC = () => {
 
       if (!profile) return;
 
-      // 1. Get rooms for selected facility
-      const { data: rmData } = await supabase
-        .from('cold_storage_rooms')
-        .select('id')
-        .eq('facility_id', selectedFacilityId);
-
-      const resolvedRooms = rmData || [];
-      const roomIds = resolvedRooms.map((r) => r.id);
+      // 1. Get rooms for selected facility (only the selected room)
+      const roomIds = [roomToUse];
 
       // 2. Fetch STAKEHOLDER INVESTMENT REVENUE (new)
       const { data: stakeholderPayments } = await supabase
@@ -120,7 +159,7 @@ const OwnerFinance: React.FC = () => {
             id,
             farmer_id,
             remaining_quantity_kg,
-            profiles(first_name, last_name)
+            profiles(full_name)
           )
         `)
         .in('room_id', roomIds)
@@ -357,12 +396,30 @@ const OwnerFinance: React.FC = () => {
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          Financial Overview
+          {siteName}
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">
           Complete breakdown of revenue, expenses, and profits for {financeData?.currentMonth}
         </p>
       </div>
+
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Top KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">

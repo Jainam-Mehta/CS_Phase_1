@@ -8,7 +8,7 @@ for server-side profile lookups — it does NOT replace Supabase Auth.
 Real tables used:
   profiles (auth_user_id, first_name, last_name, role_id, ...)
   roles    (id, name)
-  facilities (owner_profile_id → profiles.id)
+  sites (owner_profile_id → profiles.id)
 """
 
 from fastapi import APIRouter, HTTPException
@@ -172,16 +172,16 @@ async def get_profile_by_id(profile_id: str):
             raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(fallback_error)}")
 
 
-@router.get("/facilities/{profile_id}")
-async def get_owner_facilities(profile_id: str):
-    """Return all facilities owned by a given owner profile ID."""
+@router.get("/sites/{profile_id}")
+async def get_owner_sites(profile_id: str):
+    """Return all sites owned by a given owner profile ID."""
     try:
         resp = (
-            supabase.table("facilities")
+            supabase.table("sites")
             .select("id, facility_name, address, is_active, created_at, total_capacity_kg, current_utilization_kg")
             .eq("owner_profile_id", profile_id)
             .execute()
         )
         return resp.data or []
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch facilities: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch sites: {e}")

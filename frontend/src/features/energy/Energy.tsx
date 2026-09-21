@@ -40,7 +40,7 @@ const Energy: React.FC = () => {
       const { data: roomsData, error: roomsError } = await supabase
         .from('cold_storage_rooms')
         .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
 
       if (roomsError) throw roomsError;
 

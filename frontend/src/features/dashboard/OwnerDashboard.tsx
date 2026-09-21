@@ -11,9 +11,11 @@ const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
   const [loading, setLoading] = useState(true);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
   // States
   const [rooms, setRooms] = useState<any[]>([]);
+  const [siteName, setSiteName] = useState<string>('');
   const [dbSensors, setDbSensors] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [stakeholders, setStakeholders] = useState<any[]>([]);
@@ -46,11 +48,20 @@ const OwnerDashboard: React.FC = () => {
       console.log('User ID:', user?.id);
       console.log('Selected Facility ID:', selectedFacilityId);
 
+      // Fetch Site Name
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('facility_name')
+        .eq('id', selectedFacilityId)
+        .single();
+
+      setSiteName(siteData?.facility_name || 'Your Site');
+
       // Fetch Rooms for selected facility
       const { data: rmData, error: rmError } = await supabase
         .from('cold_storage_rooms')
         .select('*')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
 
       console.log('Rooms query error:', rmError);
       console.log('Rooms fetched:', rmData?.length || 0);
@@ -59,8 +70,15 @@ const OwnerDashboard: React.FC = () => {
       const resolvedRooms = rmData || [];
       setRooms(resolvedRooms);
 
+      // Set default room if not already selected
+      if (resolvedRooms.length > 0 && !selectedRoomId) {
+        setSelectedRoomId(resolvedRooms[0].id);
+      }
+
       if (resolvedRooms.length > 0) {
-        const roomIds = resolvedRooms.map((r) => r.id);
+        const roomIds = resolvedRooms.length > 1 && selectedRoomId 
+          ? [selectedRoomId]  // Filter by selected room if multiple rooms
+          : resolvedRooms.map((r) => r.id);  // Use all rooms if only 1 room
 
         // Fetch Sensors
         const { data: sensorData } = await supabase
@@ -211,7 +229,7 @@ const OwnerDashboard: React.FC = () => {
         const { data: energyData } = await supabase
           .from('energy_consumption')
           .select('total_kwh, reading_date')
-          .eq('facility_id', selectedFacilityId)
+          .eq('site_id', selectedFacilityId)
           .gte('reading_date', eightDaysAgo.toISOString().split('T')[0])
           .order('reading_date', { ascending: true });
           
@@ -518,12 +536,30 @@ const OwnerDashboard: React.FC = () => {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-            System Overview
+            {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time industrial cold storage analytics</p>
         </div>
         <OwnerReport />
       </div>
+
+      {/* Room Selector - Show if multiple rooms */}
+      {rooms.length > 1 && (
+        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
+          <select
+            value={selectedRoomId || ''}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+          >
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.room_name} (Capacity: {room.capacity_kg}kg)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       
       {/* 2. HVAC System Map on Top */}
       <div className="w-full mb-10">

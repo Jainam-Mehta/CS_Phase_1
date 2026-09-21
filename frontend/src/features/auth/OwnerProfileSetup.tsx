@@ -75,7 +75,7 @@ const OwnerProfileSetup: React.FC = () => {
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
-        .eq('auth_user_id', session.user.id)
+        .eq('id', session.user.id)
         .maybeSingle();
 
       if (existingProfile) {
@@ -201,21 +201,20 @@ const OwnerProfileSetup: React.FC = () => {
         throw new Error('Owner role not found in database. Please contact administrator.');
       }
 
-      // Save profile to Supabase
+      const fullName = `${formData.firstName} ${formData.lastName || ''}`.trim();
+      const userEmail = signupData.email || user.email || '';
+
+      // Save profile to Supabase using canonical profiles schema (id = user.id)
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          auth_user_id: user.id,
-          first_name: formData.firstName,
-          last_name: formData.lastName || null,
+        .upsert({
+          id: user.id,
+          email: userEmail,
+          full_name: fullName,
+          role: 'owner',
           phone: formData.phoneNumber || null,
-          date_of_birth: formData.dateOfBirth || null,
-          gender: formData.gender || null,
-          state_id: selectedStateId,
-          district_id: selectedDistrictId,
-          locality_id: selectedLocalityId || null,
-          role_id: ownerRoleId,
-        });
+          is_active: true,
+        }, { onConflict: 'id' });
 
       if (profileError) {
         console.error('Owner profile creation error:', profileError);

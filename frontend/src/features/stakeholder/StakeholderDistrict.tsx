@@ -66,9 +66,9 @@ const StakeholderDistrict: React.FC = () => {
       }
       setStateNameStr(stateNameFromDb);
 
-      // 2. Fetch facilities in this district
+      // 2. Fetch sites in this district
       const { data: facs, error: facErr } = await supabase
-        .from('facilities')
+        .from('sites')
         .select(`
           id, facility_name, total_capacity_kg, current_utilization_kg, address,
           localities (
@@ -92,10 +92,10 @@ const StakeholderDistrict: React.FC = () => {
         .from('stakeholder_investments')
         .select('*')
         .eq('stakeholder_id', profile.id)
-        .in('facility_id', facIds)
+        .in('site_id', facIds)
         .eq('status', 'Active')).data : [];
 
-      const invMap = new Map((invs || []).map((i: any) => [i.facility_id, i]));
+      const invMap = new Map((invs || []).map((i: any) => [i.site_id, i]));
       
       const res: FacilityDisplay[] = [];
       distFacilities.forEach((f: any) => {

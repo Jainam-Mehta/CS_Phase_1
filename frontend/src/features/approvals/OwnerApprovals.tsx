@@ -64,40 +64,40 @@ const OwnerApprovals: React.FC = () => {
 
       console.log('Owner Profile ID:', profile.id);
 
-      // 1. Resolve owned Facilities mapped natively across owner_profile_id
-      const { data: facilities, error: facErr } = await supabase
-        .from('facilities')
+      // 1. Resolve owned Sites mapped natively across owner_profile_id
+      const { data: sites, error: facErr } = await supabase
+        .from('sites')
         .select('id, facility_name, owner_profile_id')
         .eq('owner_profile_id', profile.id);
 
-      console.log('3. Supabase Facilities Query:', { data: facilities, error: facErr, executedProfileId: profile.id });
+      console.log('3. Supabase Sites Query:', { data: sites, error: facErr, executedProfileId: profile.id });
 
-      if (!facilities || facilities.length === 0) {
-        console.warn('EARLY RETURN: No facilities found for this owner_profile_id.');
+      if (!sites || sites.length === 0) {
+        console.warn('EARLY RETURN: No sites found for this owner_profile_id.');
         setRequests([]);
         return;
       }
       
-      const facilityIds = facilities.map(f => f.id);
-      const facilityMap = new Map(facilities.map(f => [f.id, f.facility_name]));
+      const siteIds = sites.map(f => f.id);
+      const siteMap = new Map(sites.map(f => [f.id, f.facility_name]));
 
       // 2. Resolve matching Cold Storage Rooms recursively under strict foreign mappings
       const { data: rooms, error: roomErr } = await supabase
         .from('cold_storage_rooms')
-        .select('id, room_name, facility_id')
-        .in('facility_id', facilityIds);
+        .select('id, room_name, site_id')
+        .in('site_id', siteIds);
 
-      console.log('4. Supabase Rooms Query:', { data: rooms, error: roomErr, executedFacilityIds: facilityIds });
+      console.log('4. Supabase Rooms Query:', { data: rooms, error: roomErr, executedSiteIds: siteIds });
 
       if (!rooms || rooms.length === 0) {
-        console.warn('EARLY RETURN: No rooms found inside the owned facilities.');
+        console.warn('EARLY RETURN: No rooms found inside the owned sites.');
         setRequests([]);
         return;
       }
 
       const roomIds = rooms.map(r => r.id);
       const roomMap = new Map(rooms.map(r => [r.id, r.room_name]));
-      const roomToFacilityMap = new Map(rooms.map(r => [r.id, r.facility_id]));
+      const roomToSiteMap = new Map(rooms.map(r => [r.id, r.site_id]));
 
       // 3. Extract purely Pending room access parameters targeting isolated farmers
       const { data: accessRequests, error: reqError } = await supabase
@@ -109,9 +109,7 @@ const OwnerApprovals: React.FC = () => {
           remarks,
           room_id,
           profiles!farmer_room_access_farmer_id_fkey (
-            first_name,
-            last_name,
-            auth_user_id
+            full_name
           )
         `)
         .in('room_id', roomIds)
@@ -132,12 +130,10 @@ const OwnerApprovals: React.FC = () => {
       for (const req of accessRequests as any) {
          const roomId = req.room_id;
          const roomName = roomMap.get(roomId) || 'Unknown Room';
-         const facilityId = roomToFacilityMap.get(roomId);
-         const facilityName = facilityId ? facilityMap.get(facilityId) || 'Unknown Facility' : 'Unknown Facility';
+         const siteId = roomToSiteMap.get(roomId);
+         const siteName = siteId ? siteMap.get(siteId) || 'Unknown Site' : 'Unknown Site';
          
-         const firstName = req.profiles?.first_name || '';
-         const lastName = req.profiles?.last_name || '';
-         const name = `${firstName} ${lastName}`.trim() || 'Unknown Farmer';
+         const name = req.profiles?.full_name || 'Unknown Farmer';
 
          formattedRequests.push({
            id: req.id,
@@ -146,7 +142,7 @@ const OwnerApprovals: React.FC = () => {
            remarks: req.remarks,
            farmerName: name,
            farmerEmail: 'Validated User Account', // Email requires hitting Auth users, avoiding RPC blocks gracefully
-           facilityName,
+           facilityName: siteName,
            roomName
          });
       }
@@ -166,35 +162,34 @@ const OwnerApprovals: React.FC = () => {
       const profile = await resolveProfile(user.id);
       if (!profile) return;
 
-      // Get facilities owned by this owner
-      const { data: facilities } = await supabase
-        .from('facilities')
+      // Get sites owned by this owner
+      const { data: sites } = await supabase
+        .from('sites')
         .select('id, facility_name')
         .eq('owner_profile_id', profile.id);
 
-      if (!facilities || facilities.length === 0) {
+      if (!sites || sites.length === 0) {
         setInvestmentRequests([]);
         return;
       }
 
-      const facilityIds = facilities.map(f => f.id);
-      const facilityMap = new Map(facilities.map(f => [f.id, f.facility_name]));
+      const siteIds = sites.map(f => f.id);
+      const siteMap = new Map(sites.map(f => [f.id, f.facility_name]));
 
-      // Get pending investment interests for these facilities
+      // Get pending investment interests for these sites
       const { data: interests } = await supabase
         .from('stakeholder_interest')
         .select(`
           id,
           stakeholder_id,
-          facility_id,
+          site_id,
           created_at,
           interest_status,
           profiles!stakeholder_id (
-            first_name,
-            last_name
+            full_name
           )
         `)
-        .in('facility_id', facilityIds)
+        .in('site_id', siteIds)
         .eq('interest_status', 'Interested');
 
       if (!interests) {
@@ -205,9 +200,9 @@ const OwnerApprovals: React.FC = () => {
       const formatted = interests.map((interest: any) => ({
         id: interest.id,
         stakeholder_id: interest.stakeholder_id,
-        stakeholder_name: `${interest.profiles?.first_name || ''} ${interest.profiles?.last_name || ''}`.trim() || 'Unknown Stakeholder',
-        facility_id: interest.facility_id,
-        facility_name: facilityMap.get(interest.facility_id) || 'Unknown Facility',
+        stakeholder_name: interest.profiles?.full_name || 'Unknown Stakeholder',
+        facility_id: interest.site_id,
+        facility_name: siteMap.get(interest.site_id) || 'Unknown Site',
         created_at: interest.created_at,
         interest_status: interest.interest_status
       }));
@@ -224,24 +219,24 @@ const OwnerApprovals: React.FC = () => {
       const profile = await resolveProfile(user.id);
       if (!profile) return;
 
-      // Get all approved investments for this owner's facilities
-      const { data: facilities } = await supabase
-        .from('facilities')
+      // Get all approved investments for this owner's sites
+      const { data: sites } = await supabase
+        .from('sites')
         .select('id')
         .eq('owner_profile_id', profile.id);
 
-      if (!facilities || facilities.length === 0) {
+      if (!sites || sites.length === 0) {
         setPaymentRequests([]);
         return;
       }
 
-      const facilityIds = facilities.map(f => f.id);
+      const siteIds = sites.map(f => f.id);
 
-      // Get investments for these facilities
+      // Get investments for these sites
       const { data: investments } = await supabase
         .from('stakeholder_investments')
-        .select('id, stakeholder_id, facility_id')
-        .in('facility_id', facilityIds);
+        .select('id, stakeholder_id, site_id')
+        .in('site_id', siteIds);
 
       if (!investments || investments.length === 0) {
         setPaymentRequests([]);
@@ -282,16 +277,16 @@ const OwnerApprovals: React.FC = () => {
         `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown'
       ]));
 
-      const facilityMap = new Map(facilities.map(f => [f.id, `Facility ${facilityIds.indexOf(f.id) + 1}`]));
+      const siteMap = new Map(sites.map(f => [f.id, `Site ${siteIds.indexOf(f.id) + 1}`]));
 
-      // Get facility names
-      const { data: facilitiesData } = await supabase
-        .from('facilities')
+      // Get site names
+      const { data: sitesData } = await supabase
+        .from('sites')
         .select('id, facility_name')
-        .in('id', facilityIds);
+        .in('id', siteIds);
 
-      if (facilitiesData) {
-        facilitiesData.forEach(f => facilityMap.set(f.id, f.facility_name));
+      if (sitesData) {
+        sitesData.forEach(f => siteMap.set(f.id, f.facility_name));
       }
 
       const formatted = payments.map((p: any) => {
@@ -301,7 +296,7 @@ const OwnerApprovals: React.FC = () => {
           investment_id: p.investment_id,
           stakeholder_id: p.stakeholder_id,
           stakeholder_name: stakeholderMap.get(p.stakeholder_id) || 'Unknown',
-          facility_name: investment ? facilityMap.get(investment.facility_id) || 'Unknown Facility' : 'Unknown Facility',
+          facility_name: investment ? siteMap.get(investment.site_id) || 'Unknown Site' : 'Unknown Site',
           amount_inr: p.amount_inr,
           payment_status: p.payment_status,
           created_at: p.created_at,
@@ -349,7 +344,7 @@ const OwnerApprovals: React.FC = () => {
       if (action === 'Approved' && req && profile) {
         await logFarmerApproved(
           profile.id,
-          `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          profile.full_name || 'Owner',
           req.id, // farmer_id would be in the request but we use the request id as reference
           req.farmerName,
           req.id, // roomId
@@ -387,7 +382,7 @@ const OwnerApprovals: React.FC = () => {
         // Create entry in stakeholder_investments
         const investmentData: any = {
           stakeholder_id: stakeholderId,
-          facility_id: facilityId,
+          site_id: facilityId,
           owner_company_id: profile?.owner_company_id
         };
         
@@ -407,7 +402,7 @@ const OwnerApprovals: React.FC = () => {
           try {
             await logStakeholderApproved(
               profile.id,
-              `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+              profile.full_name || 'Owner',
               stakeholderId,
               req.stakeholder_name,
               facilityId,
@@ -463,7 +458,7 @@ const OwnerApprovals: React.FC = () => {
       if (profile && payment) {
         await logPaymentReceived(
           profile.id,
-          `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          profile.full_name || 'Owner',
           payment.stakeholder_id,
           payment.stakeholder_name,
           '', // We don't have facilityId directly, but it's in the investment
@@ -631,7 +626,7 @@ const OwnerApprovals: React.FC = () => {
                         <Building2 className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Facility</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Site</p>
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{req.facility_name}</p>
                       </div>
                     </div>

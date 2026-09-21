@@ -21,7 +21,7 @@ const OwnerCarbonCredits: React.FC = () => {
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
         .select('id')
-        .eq('facility_id', selectedFacilityId);
+        .eq('site_id', selectedFacilityId);
 
       const roomIds = (rmData || []).map(r => r.id);
       if (roomIds.length > 0) {

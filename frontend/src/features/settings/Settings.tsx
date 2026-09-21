@@ -65,7 +65,7 @@ const SettingsPage: React.FC = () => {
           .from('farmer_room_access')
           .select(`
             id, status, requested_at, remarks,
-            cold_storage_rooms(room_name, facilities(facility_name))
+            cold_storage_rooms(room_name, sites(facility_name))
           `)
           .eq('farmer_id', profile.id)
           .order('requested_at', { ascending: false });
@@ -90,8 +90,8 @@ const SettingsPage: React.FC = () => {
          const { data: interests } = await supabase
             .from('stakeholder_interest')
             .select(`
-               id, facility_id, created_at, interest_status,
-               facilities(facility_name)
+               id, site_id, created_at, interest_status,
+               sites(facility_name)
             `)
             .eq('stakeholder_id', profile.id)
             .eq('interest_status', 'Interested')
@@ -101,8 +101,8 @@ const SettingsPage: React.FC = () => {
          const { data: investments } = await supabase
             .from('stakeholder_investments')
             .select(`
-               id, facility_id, investment_amount, investment_date,
-               facilities(facility_name)
+               id, site_id, investment_amount, investment_date,
+               sites(facility_name)
             `)
             .eq('stakeholder_id', profile.id)
             .order('investment_date', { ascending: false });
@@ -207,35 +207,35 @@ const SettingsPage: React.FC = () => {
 
       if (!profile) return;
       
-      // Get all facilities owned by this owner using owner_profile_id
-      const { data: facilitiesData, error: facilityError } = await supabase
-        .from('facilities')
+      // Get all sites owned by this owner using owner_profile_id
+      const { data: sitesData, error: siteError } = await supabase
+        .from('sites')
         .select('id, facility_name, created_at')
         .eq('owner_profile_id', profile.id)
         .order('facility_name');
       
-      if (facilityError) throw facilityError;
-      if (!facilitiesData || facilitiesData.length === 0) {
+      if (siteError) throw siteError;
+      if (!sitesData || sitesData.length === 0) {
         setFacilities([]);
         return;
       }
       
-      // For each facility, get approved farmers with their pricing
+      // For each site, get approved farmers with their pricing
       const facilitiesWithFarmers = await Promise.all(
-        facilitiesData.map(async (facility: any) => {
-          console.log('Processing facility:', facility.facility_name);
+        sitesData.map(async (facility: any) => {
+          console.log('Processing site:', facility.facility_name);
           
-          // Get rooms for this facility
+          // Get rooms for this site
           const { data: rooms, error: roomError } = await supabase
             .from('cold_storage_rooms')
             .select('id')
-            .eq('facility_id', facility.id);
+            .eq('site_id', facility.id);
           
-          console.log('Rooms query result:', { rooms, roomError, facilityId: facility.id });
+          console.log('Rooms query result:', { rooms, roomError, siteId: facility.id });
           
-          // If no rooms, show facility anyway (empty farmers list)
+          // If no rooms, show site anyway (empty farmers list)
           if (!rooms || rooms.length === 0) {
-            console.log('No rooms found for facility, returning empty farmers');
+            console.log('No rooms found for site, returning empty farmers');
             return { ...facility, farmers: [] };
           }
           

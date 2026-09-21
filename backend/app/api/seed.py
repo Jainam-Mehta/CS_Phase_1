@@ -49,8 +49,8 @@ async def create_demo_data(owner_email: str = "demo@coldsense.in"):
         owner_profile_id = owner_profile['id']
         print(f"✅ Created owner profile: {owner_profile_id}")
         
-        # Step 2: Create facility
-        facility_data = {
+        # Step 2: Create site
+        site_data = {
             "facility_name": "Site_A Facility",
             "owner_profile_id": owner_profile_id,
             "capacity_kg": 5000,
@@ -58,32 +58,32 @@ async def create_demo_data(owner_email: str = "demo@coldsense.in"):
             "total_capacity_kg": 5000
         }
         
-        facility_resp = supabase.table("facilities").insert([facility_data]).execute()
-        if not facility_resp.data:
-            raise HTTPException(status_code=500, detail="Failed to create facility")
+        site_resp = supabase.table("sites").insert([site_data]).execute()
+        if not site_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to create site")
         
-        facility = facility_resp.data[0]
-        facility_id = facility['id']
-        print(f"✅ Created facility: {facility_id}")
+        site = site_resp.data[0]
+        site_id = site['id']
+        print(f"✅ Created site: {site_id}")
         
         # Step 3: Create 3 cold storage rooms
         rooms_data = [
             {
-                "facility_id": facility_id,
+                "site_id": site_id,
                 "room_name": "Room A1",
                 "capacity_kg": 1500,
                 "current_utilization_kg": 0,
                 "storage_rate_per_kg_month": 2.5
             },
             {
-                "facility_id": facility_id,
+                "site_id": site_id,
                 "room_name": "Room A2",
                 "capacity_kg": 1500,
                 "current_utilization_kg": 0,
                 "storage_rate_per_kg_month": 2.5
             },
             {
-                "facility_id": facility_id,
+                "site_id": site_id,
                 "room_name": "Room A3",
                 "capacity_kg": 2000,
                 "current_utilization_kg": 0,
@@ -229,17 +229,17 @@ async def create_demo_data(owner_email: str = "demo@coldsense.in"):
             "success": True,
             "message": "Demo data created successfully",
             "owner_id": owner_profile_id,
-            "facility_id": facility_id,
+            "site_id": site_id,
             "farmer_id": farmer_id,
             "rooms": len(rooms),
             "batches": len(batches),
             "details": {
                 "owner_profile_id": owner_profile_id,
-                "facility_name": "Site_A Facility",
+                "site_name": "Site_A Facility",
                 "farmer_name": f"{farmer['first_name']} {farmer['last_name']}",
                 "rooms_created": len(rooms),
                 "batches_created": len(batches),
-                "instruction": "1. Login as owner\n2. Go to Settings → Facilities\n3. See 'Site_A Facility' with farmers\n4. Go to Inventory → See all batches"
+                "instruction": "1. Login as owner\n2. Go to Settings → Sites\n3. See 'Site_A Facility' with farmers\n4. Go to Inventory → See all batches"
             }
         }
         

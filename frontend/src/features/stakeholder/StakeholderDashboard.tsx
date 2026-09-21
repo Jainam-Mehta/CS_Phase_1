@@ -47,7 +47,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
       }
 
       const { data: fac, error: facError } = await supabase
-        .from('facilities')
+        .from('sites')
         .select(`
           id, facility_name, total_capacity_kg, current_utilization_kg, address,
           owner_profile_id, status,
@@ -64,7 +64,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
         .from('stakeholder_investments')
         .select('*')
         .eq('stakeholder_id', profile.id)
-        .eq('facility_id', facilityId)
+        .eq('site_id', fac?.id)
         .eq('status', 'Active')
         .maybeSingle();
 
@@ -82,7 +82,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
           const { data: rooms } = await supabase
             .from('cold_storage_rooms')
             .select('id')
-            .eq('facility_id', fac.id);
+            .eq('site_id', fac.id);
 
           if (rooms && rooms.length > 0) {
             const roomIds = rooms.map(r => r.id);
@@ -104,7 +104,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
               const { data: energyData } = await supabase
                 .from('energy_consumption')
                 .select('total_kwh')
-                .eq('facility_id', fac.id)
+                .eq('site_id', fac.id)
                 .gte('reading_date', new Date(new Date().setHours(0,0,0,0)).toISOString().split('T')[0])
                 .order('reading_date', { ascending: false })
                 .limit(1);

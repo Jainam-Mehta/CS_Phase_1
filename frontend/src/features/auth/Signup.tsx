@@ -144,19 +144,19 @@ const Signup: React.FC = () => {
     setLoading(true);
 
     try {
-      // Determine role ID
-      const roleId = selectedRole === 'owner' ? 1 : selectedRole === 'farmer' ? 2 : 3;
+      const fullName = `${firstName} ${lastName || ''}`.trim();
 
       // Create profile in database and WAIT for confirmation
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          auth_user_id: userId,
-          first_name: firstName,
-          last_name: lastName,
-          mobile_number: mobile,
-          role_id: roleId,
-        })
+        .upsert({
+          id: userId,
+          email: email,
+          full_name: fullName,
+          role: selectedRole,
+          phone: mobile || null,
+          is_active: true,
+        }, { onConflict: 'id' })
         .select()
         .single();
 

@@ -48,18 +48,18 @@ async def get_room_energy(room_id: str, limit: int = 24):
         raise HTTPException(status_code=500, detail=f"Failed to fetch room energy: {e}")
 
 
-@router.get("/facility/{facility_id}/summary")
-async def get_facility_energy_summary(facility_id: str):
+@router.get("/site/{site_id}/summary")
+async def get_site_energy_summary(site_id: str):
     """
-    Aggregate energy across all rooms of a facility.
+    Aggregate energy across all rooms of a site.
     Returns totals: solar_kwh, grid_kwh, total_kwh, cost_saved (₹8/kWh solar).
     """
     try:
-        # Get rooms for this facility
+        # Get rooms for this site
         rooms_resp = (
             supabase.table("cold_storage_rooms")
             .select("id")
-            .eq("facility_id", facility_id)
+            .eq("site_id", site_id)
             .execute()
         )
         room_ids = [r["id"] for r in (rooms_resp.data or [])]
@@ -92,7 +92,7 @@ async def get_facility_energy_summary(facility_id: str):
             "cost_saved": round(solar_total * 8, 2),  # ₹8/kWh solar saving
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch facility energy: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch site energy: {e}")
 
 
 @router.post("/", response_model=EnergyUsageResponse)

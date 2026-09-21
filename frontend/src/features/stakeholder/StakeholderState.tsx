@@ -46,9 +46,9 @@ const StakeholderState: React.FC = () => {
       const profile = await resolveProfile(user!.id);
       if (!profile) throw new Error('Profile not found');
 
-      // 1. Fetch facilities in this state
+      // 1. Fetch sites in this state
       const { data: facs, error: facErr } = await supabase
-        .from('facilities')
+        .from('sites')
         .select(`
           id, facility_name,
           localities (
@@ -78,10 +78,10 @@ const StakeholderState: React.FC = () => {
         .from('stakeholder_investments')
         .select('*')
         .eq('stakeholder_id', profile.id)
-        .in('facility_id', facIds)
+        .in('site_id', facIds)
         .eq('status', 'Active')).data : [];
 
-      const invMap = new Map((invs || []).map((i: any) => [i.facility_id, i]));
+      const invMap = new Map((invs || []).map((i: any) => [i.site_id, i]));
       
       // Calculate District Aggregates
       const distAgg: Record<string, DistrictSummary> = {};

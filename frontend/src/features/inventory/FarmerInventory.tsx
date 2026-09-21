@@ -14,6 +14,10 @@ const FarmerInventory: React.FC = () => {
   const [batches, setBatches] = useState<any[]>([]);
   const [roomNameMap, setRoomNameMap] = useState<Record<string, string>>({});
   
+  // Site and Room selection
+  const [approvedSites, setApprovedSites] = useState<any[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  
   const [loading, setLoading] = useState(true);
   
   // Modal states
@@ -85,23 +89,57 @@ const FarmerInventory: React.FC = () => {
            if (!profile) return;
            setProfileId(profile.id);
 
-           // 1. Fetch Approved Rooms from farmer_room_access -> cold_storage_rooms
+           // 1. Fetch Approved Rooms from farmer_room_access -> cold_storage_rooms with sites
            const { data: accessLogs } = await supabase
              .from('farmer_room_access')
-             .select(`room_id, cold_storage_rooms(room_name, facilities(facility_name))`)
+             .select(`room_id, cold_storage_rooms(room_name, site_id, sites(facility_name))`)
              .eq('farmer_id', profile.id)
              .eq('status', 'Approved');
 
+           // Group rooms by site and build site list
+           const siteMap = new Map<string, any>();
            const globalRoomMap: Record<string, string> = {};
+           
            if (accessLogs) {
-              const rooms = accessLogs.map((log: any) => {
+              accessLogs.forEach((log: any) => {
                  const roomData = log.cold_storage_rooms;
-                 const n = `${roomData?.room_name || 'Room'} - ${roomData?.facilities ? (Array.isArray(roomData.facilities) ? roomData.facilities[0]?.facility_name : roomData.facilities?.facility_name) : 'Facility'}`;
-                 globalRoomMap[log.room_id] = n;
-                 return { id: log.room_id, name: n };
+                 const siteId = roomData?.site_id;
+                 const siteName = roomData?.sites ? (Array.isArray(roomData.sites) ? roomData.sites[0]?.facility_name : roomData.sites?.facility_name) : 'Site';
+                 const roomName = roomData?.room_name || 'Room';
+                 
+                 // Build site map
+                 if (siteId && !siteMap.has(siteId)) {
+                    siteMap.set(siteId, {
+                      id: siteId,
+                      name: siteName,
+                      rooms: []
+                    });
+                 }
+                 
+                 // Add room to site
+                 const site = siteMap.get(siteId);
+                 if (site) {
+                    site.rooms.push({
+                      id: log.room_id,
+                      name: roomName
+                    });
+                 }
+                 
+                 // Global room map for display
+                 globalRoomMap[log.room_id] = `${roomName} - ${siteName}`;
               });
-              setApprovedRooms(rooms);
+              
+              const sites = Array.from(siteMap.values());
+              setApprovedSites(sites);
+              if (sites.length > 0) {
+                 setSelectedSiteId(sites[0].id);
+              }
               setRoomNameMap(globalRoomMap);
+              
+              // Initialize approved rooms from first site
+              if (sites.length > 0) {
+                 setApprovedRooms(sites[0].rooms);
+              }
            }
 
            // 2. Fetch Farmer Selected Products
@@ -139,6 +177,16 @@ const FarmerInventory: React.FC = () => {
   useEffect(() => {
      if (activeRoomId) setTargetRoom(activeRoomId);
   }, [activeRoomId]);
+
+  const handleSiteChange = (siteId: string) => {
+    setSelectedSiteId(siteId);
+    const site = approvedSites.find(s => s.id === siteId);
+    if (site) {
+      setApprovedRooms(site.rooms);
+      // Auto-select first room (whether single or multiple)
+      setTargetRoom(site.rooms.length > 0 ? site.rooms[0].id : '');
+    }
+  };
 
   const handleAddInventory = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -348,19 +396,37 @@ const FarmerInventory: React.FC = () => {
 
                       <div className="space-y-5">
                           <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Facility</label>
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Site</label>
                               <select 
                                   required 
-                                  value={targetRoom} 
-                                  onChange={(e) => setTargetRoom(e.target.value)}
+                                  value={selectedSiteId} 
+                                  onChange={(e) => handleSiteChange(e.target.value)}
                                   className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                               >
-                                  <option value="" disabled>Select a facility...</option>
-                                  {approvedRooms.map(r => (
-                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                  <option value="" disabled>Select a site...</option>
+                                  {approvedSites.map(s => (
+                                      <option key={s.id} value={s.id}>{s.name}</option>
                                   ))}
                               </select>
                           </div>
+
+                          {/* Show room selector only if site has multiple rooms */}
+                          {approvedRooms.length > 1 && (
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Room</label>
+                                <select 
+                                    required 
+                                    value={targetRoom} 
+                                    onChange={(e) => setTargetRoom(e.target.value)}
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                                >
+                                    <option value="" disabled>Select a room...</option>
+                                    {approvedRooms.map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                          )}
 
                           <div>
                               <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Product Type</label>

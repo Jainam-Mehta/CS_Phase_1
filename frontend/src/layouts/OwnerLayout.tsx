@@ -90,9 +90,9 @@ const OwnerLayout: React.FC = () => {
           return;
         }
         
-        // Query facilities by owner_profile_id (primary method)
+        // Query sites by owner_profile_id (primary method)
         const { data, error } = await supabase
-          .from('facilities')
+          .from('sites')
           .select('*')
           .eq('owner_profile_id', profile.id);
           

@@ -38,10 +38,10 @@ class SiteCreate(BaseModel):
     humidity: Optional[float] = 85.0
 
 
-def _get_facility_telemetry(facility_id: str) -> tuple[float, float, int]:
-    """Fetch live average temperature, humidity, and calculated health score for facility."""
+def _get_site_telemetry(site_id: str) -> tuple[float, float, int]:
+    """Fetch live average temperature, humidity, and calculated health score for site."""
     try:
-        rooms_resp = supabase.table("cold_storage_rooms").select("id").eq("facility_id", facility_id).execute()
+        rooms_resp = supabase.table("cold_storage_rooms").select("id").eq("site_id", site_id).execute()
         room_ids = [r["id"] for r in (rooms_resp.data or [])]
         if not room_ids:
             return 4.0, 85.0, 98
@@ -77,22 +77,22 @@ def _get_facility_telemetry(facility_id: str) -> tuple[float, float, int]:
 @router.get("/", response_model=List[SiteResponse])
 async def get_all_sites():
     """
-    Get all facilities mapped to site response format with real telemetry.
+    Get all sites mapped to site response format with real telemetry.
     """
     try:
-        response = supabase.table("facilities").select("*").execute()
-        facilities = response.data or []
+        response = supabase.table("sites").select("*").execute()
+        sites = response.data or []
         
         result = []
-        for f in facilities:
-            temp, hum, health = _get_facility_telemetry(f["id"])
+        for s in sites:
+            temp, hum, health = _get_site_telemetry(s["id"])
             result.append({
-                "id": f["id"],
-                "name": f.get("facility_name") or "Unnamed Facility",
-                "location": f.get("address") or "N/A",
-                "category": f.get("category") or "Cold Storage",
-                "capacity": float(f.get("total_capacity_kg") or f.get("capacity_tons") or 50000.0),
-                "current_load": float(f.get("current_utilization_kg") or 0.0),
+                "id": s["id"],
+                "name": s.get("facility_name") or "Unnamed Site",
+                "location": s.get("address") or "N/A",
+                "category": s.get("category") or "Cold Storage",
+                "capacity": float(s.get("total_capacity_kg") or s.get("capacity_tons") or 50000.0),
+                "current_load": float(s.get("current_utilization_kg") or 0.0),
                 "temperature": temp,
                 "humidity": hum,
                 "health_score": health,
@@ -105,22 +105,22 @@ async def get_all_sites():
 @router.get("/{site_id}", response_model=SiteResponse)
 async def get_site(site_id: str):
     """
-    Get a specific facility by ID with real telemetry.
+    Get a specific site by ID with real telemetry.
     """
     try:
-        response = supabase.table("facilities").select("*").eq("id", site_id).maybeSingle().execute()
+        response = supabase.table("sites").select("*").eq("id", site_id).maybeSingle().execute()
         if not response.data:
-            raise HTTPException(status_code=404, detail="Facility not found")
+            raise HTTPException(status_code=404, detail="Site not found")
         
-        f = response.data
-        temp, hum, health = _get_facility_telemetry(f["id"])
+        s = response.data
+        temp, hum, health = _get_site_telemetry(s["id"])
         return {
-            "id": f["id"],
-            "name": f.get("facility_name") or "Unnamed Facility",
-            "location": f.get("address") or "N/A",
-            "category": f.get("category") or "Cold Storage",
-            "capacity": float(f.get("total_capacity_kg") or f.get("capacity_tons") or 50000.0),
-            "current_load": float(f.get("current_utilization_kg") or 0.0),
+            "id": s["id"],
+            "name": s.get("facility_name") or "Unnamed Site",
+            "location": s.get("address") or "N/A",
+            "category": s.get("category") or "Cold Storage",
+            "capacity": float(s.get("total_capacity_kg") or s.get("capacity_tons") or 50000.0),
+            "current_load": float(s.get("current_utilization_kg") or 0.0),
             "temperature": temp,
             "humidity": hum,
             "health_score": health,
@@ -134,22 +134,22 @@ async def get_site(site_id: str):
 @router.get("/user/{user_id}", response_model=List[SiteResponse])
 async def get_user_sites(user_id: str):
     """
-    Get all facilities owned by or accessible to a profile ID with real telemetry.
+    Get all sites owned by or accessible to a profile ID with real telemetry.
     """
     try:
-        response = supabase.table("facilities").select("*").eq("owner_profile_id", user_id).execute()
-        facilities = response.data or []
+        response = supabase.table("sites").select("*").eq("owner_profile_id", user_id).execute()
+        sites = response.data or []
         
         result = []
-        for f in facilities:
-            temp, hum, health = _get_facility_telemetry(f["id"])
+        for s in sites:
+            temp, hum, health = _get_site_telemetry(s["id"])
             result.append({
-                "id": f["id"],
-                "name": f.get("facility_name") or "Unnamed Facility",
-                "location": f.get("address") or "N/A",
-                "category": f.get("category") or "Cold Storage",
-                "capacity": float(f.get("total_capacity_kg") or f.get("capacity_tons") or 50000.0),
-                "current_load": float(f.get("current_utilization_kg") or 0.0),
+                "id": s["id"],
+                "name": s.get("facility_name") or "Unnamed Site",
+                "location": s.get("address") or "N/A",
+                "category": s.get("category") or "Cold Storage",
+                "capacity": float(s.get("total_capacity_kg") or s.get("capacity_tons") or 50000.0),
+                "current_load": float(s.get("current_utilization_kg") or 0.0),
                 "temperature": temp,
                 "humidity": hum,
                 "health_score": health,
