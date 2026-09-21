@@ -24,6 +24,19 @@ const FarmerMarketIntelligence: React.FC = () => {
      if (!user?.id) return;
      const load = async () => {
         setLoading(true);
+        
+        // FORCE DEMO MODE FOR DEMO EMAILS
+        const userEmail = user?.email?.toLowerCase();
+        if (userEmail === 'roy@coldsense.in') {
+          setProfileId('demo-farmer-id');
+          setUniqueProducts(['Tomatoes']);
+          setBatches([
+            { product: 'Tomatoes', initial_quantity_kg: 1125, quantity_kg: 1125 }
+          ]);
+          setLoading(false);
+          return;
+        }
+        
         const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) return;
         setProfileId(profile.id);

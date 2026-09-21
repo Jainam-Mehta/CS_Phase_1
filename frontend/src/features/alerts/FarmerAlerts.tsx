@@ -31,6 +31,40 @@ const FarmerAlerts: React.FC = () => {
          try {
            setLoading(true);
            
+           // FORCE DEMO MODE FOR DEMO EMAILS
+           const userEmail = user?.email?.toLowerCase();
+           if (userEmail === 'roy@coldsense.in') {
+             // Roy's demo alerts - ONLY 3 RELEVANT ALERTS
+             setAlerts([
+               {
+                 id: '1',
+                 level: 'Info',
+                 title: 'Storage Request Approved',
+                 message: 'Your storage request at Kullu Storage A has been approved',
+                 time: '9:30 AM',
+                 is_acknowledged: true
+               },
+               {
+                 id: '2',
+                 level: 'Warning',
+                 title: 'Temperature Alert',
+                 message: 'Temperature slightly elevated in storage room',
+                 time: '2:30 PM',
+                 is_acknowledged: true
+               },
+               {
+                 id: '3',
+                 level: 'Info',
+                 title: 'Sale Dispatched',
+                 message: '25 crates dispatched to Studios Market successfully',
+                 time: '11:00 AM',
+                 is_acknowledged: true
+               }
+             ]);
+             setLoading(false);
+             return;
+           }
+           
            // Get farmer profile
            const { data: profile } = await supabase
              .from('profiles')
