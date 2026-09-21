@@ -41,6 +41,29 @@ const FarmerOrders: React.FC = () => {
      const load = async () => {
          setLoading(true);
          
+         // FORCE DEMO MODE FOR DEMO EMAILS
+         const userEmail = user?.email?.toLowerCase();
+         if (userEmail === 'roy@coldsense.in') {
+           setProfileId('demo-farmer-id');
+           // Roy's demo orders/sales
+           setOrders([{
+             id: 'order-1',
+             dispatch_date: '2024-09-21',
+             buyer_name: 'Studios Market',
+             quantity_crates: 25,
+             quantity_kg: 625,
+             price_per_kg: 48,
+             total_amount: 30000,
+             status: 'Completed',
+             product_name: 'Tomatoes'
+           }]);
+           setBatches([
+             { id: 'batch-1', product_name: 'Tomatoes', quantity_kg: 1125, available_crates: 45 },
+           ]);
+           setLoading(false);
+           return;
+         }
+         
          const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
          if (!profile) return;
          setProfileId(profile.id);
