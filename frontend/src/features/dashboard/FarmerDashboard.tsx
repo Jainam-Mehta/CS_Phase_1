@@ -359,26 +359,8 @@ function FarmerDashboardCore() {
     );
   }
 
-  // Skip approval check entirely for demo mode
-  if (!isDemoMode && !hasAnyApproved) {
-     if (hasAnyPending) {
-         return (
-             <div className="flex items-center justify-center min-h-screen">
-               <div className="text-center">
-                <Clock className="w-20 h-20 text-yellow-500 animate-pulse mx-auto mb-6" />
-                <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Waiting for Approval</h1>
-               </div>
-             </div>
-         );
-     }
-     return (
-        <div className="p-8 max-w-4xl mx-auto text-center pt-16">
-           <Package className="w-16 h-16 text-purple-500 mx-auto mb-6" />
-           <h1 className="text-2xl font-bold mb-3">No Approved Rooms</h1>
-           <p className="text-slate-500">You do not have access to any storage rooms yet.</p>
-        </div>
-     );
-  }
+  // APPROVAL CHECK COMPLETELY REMOVED FOR DEMO
+  // Dashboard always shows for demo users
 
   const roomOptions = rooms.filter(r => r.facilityId === selectedFacilityId);
   
