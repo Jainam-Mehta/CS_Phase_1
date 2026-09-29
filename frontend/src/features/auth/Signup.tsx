@@ -116,7 +116,15 @@ const Signup: React.FC = () => {
         throw new Error('No user created during signup');
       }
 
-      // Store user ID and move cleanly to step 2 without unmounting/redirecting
+      // Store user ID and move to profile setup based on role
+      if (selectedRole === 'farmer') {
+        // Farmers use FarmerProfileSetup which collects location data
+        localStorage.setItem('signupData', JSON.stringify({ email }));
+        navigate('/farmer-profile-setup');
+        return;
+      }
+      
+      // Other roles use Step 2 of Signup
       setUserId(data.user.id);
       setCurrentStep(2);
     } catch (err: any) {

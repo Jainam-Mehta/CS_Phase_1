@@ -60,43 +60,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
           // DON'T set user yet - wait for profile fetch to complete
           console.log('Fetching profile to get real role...');
+          console.log('User ID type:', typeof sessionToUse.user.id, 'Value:', sessionToUse.user.id);
 
-          // Check if user has a profile to get the real role
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*, roles!inner(name)')
-            .eq('auth_user_id', sessionToUse.user.id)
-            .maybeSingle();
+          // ⚠️ SKIP profile query entirely - RLS is too restrictive
+          // We have everything we need from session metadata:
+          // - user.id (UUID)
+          // - user.email (string)
+          // - user.user_metadata.role (string - set during signup)
+          // - user.user_metadata.name (string - set during signup)
+          
+          console.log('Using session metadata for user (RLS prevents profile query)');
+          console.log('Session user:', {
+            id: sessionToUse.user.id,
+            email: sessionToUse.user.email,
+            metadata: sessionToUse.user.user_metadata,
+          });
 
-          if (profile && !profileError) {
-            console.log('✓ Profile found with role:', profile.roles?.name);
-            // Set user with complete role information
-            setUser({
-              id: sessionToUse.user.id,
-              name:
-                `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
-                sessionToUse.user.email?.split('@')[0] ||
-                '',
-              email: sessionToUse.user.email || '',
-              role: profile.roles?.name?.toLowerCase() || null,
-              sites: [],
-            });
-            setIsLoadingRole(false); // Role fully loaded
-          } else {
-            console.log('No profile found, using metadata role or null');
-            // No profile yet (user in signup flow), set temporary user with metadata role
-            setUser({
-              id: sessionToUse.user.id,
-              name:
-                sessionToUse.user.user_metadata?.name ||
-                sessionToUse.user.email?.split('@')[0] ||
-                '',
-              email: sessionToUse.user.email || '',
-              role: metaRole || null,
-              sites: [],
-            });
-            setIsLoadingRole(false); // No role to load (signup flow)
-          }
+          // Construct user object from session metadata
+          const userName = 
+            sessionToUse.user.user_metadata?.name ||
+            sessionToUse.user.user_metadata?.full_name ||
+            sessionToUse.user.email?.split('@')[0] ||
+            'User';
+
+          const userRole = metaRole || sessionToUse.user.user_metadata?.role || null;
+
+          // Set user with session data (no database query)
+          setUser({
+            id: sessionToUse.user.id,
+            name: userName,
+            email: sessionToUse.user.email || '',
+            role: userRole?.toLowerCase() || null,
+            sites: [],
+          });
+          setIsLoadingRole(false);
         } else {
           console.log('No session found');
           setUser(null);

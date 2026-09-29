@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 import { Gauge } from './components/Gauge';
 import { 
   ThermometerSun, Droplets, MapPin, Package, Clock, Lock, 
@@ -57,13 +56,11 @@ export default function FarmerDashboard() {
   );
 }
 
-// DEMO DATA INTEGRATED
+// NO DEMO DATA - All data from database
 
 function FarmerDashboardCore() {
   const { user } = useAuthStore();
   const { activeRoomId, activeProductId, setActiveRoomId, setActiveProductId } = useFarmerStore();
-  const { isDemoMode, getFarmerData } = useDemoData();
-  const demoData = getFarmerData();
   
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -89,13 +86,41 @@ function FarmerDashboardCore() {
   
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleString());
 
-  // Update timestamp every 5 minutes
+  // Update timestamp every second (real-time)
   useEffect(() => {
+    // Set initial timestamp
+    setLiveTimestamp(new Date().toLocaleString());
+    
+    // Update every 1 second
     const interval = setInterval(() => {
       setLiveTimestamp(new Date().toLocaleString());
-    }, 300000); // Update every 5 minutes
+    }, 1000); // Update every second
+    
     return () => clearInterval(interval);
   }, []);
+
+  // When facility changes, update room and reset product selection
+  const handleFacilityChange = (facilityId: string) => {
+    setSelectedFacilityId(facilityId);
+    const newRoom = rooms.find(r => r.facilityId === facilityId);
+    if (newRoom) {
+      setActiveRoomId(newRoom.roomId);
+      setActiveProductId(null); // Reset product when room changes
+    }
+  };
+
+  // When room changes, reset product selection
+  const handleRoomChange = (roomId: string) => {
+    setActiveRoomId(roomId);
+    setActiveProductId(null); // Reset product when room changes
+  };
+
+  // When product changes, verify it's still in the list
+  const handleProductChange = (productId: string) => {
+    if (products.find(p => p.id === productId)) {
+      setActiveProductId(productId);
+    }
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -104,104 +129,6 @@ function FarmerDashboardCore() {
       try {
         setLoading(true);
         
-        // FORCE DEMO MODE FOR DEMO EMAILS - BYPASS ALL CHECKS
-        const userEmail = user?.email?.toLowerCase();
-        if (userEmail === 'roy@coldsense.in' || userEmail === 'rupesh@coldsense.in' || userEmail === 'aman@coldsense.in') {
-          console.log('🎭 DEMO USER DETECTED - FORCING DEMO DATA');
-          
-          // Roy's demo data - hardcoded, no database
-          setProfileId('demo-farmer-id');
-          
-          const demoSite = {
-            id: 'site-kullu-a',
-            facility_name: 'Kullu Storage A',
-            room_id: 'room-kullu-a-1',
-            room_name: 'Kullu Storage A'
-          };
-          
-          setFacilities([{ id: demoSite.id, name: demoSite.facility_name }]);
-          setRooms([{ roomId: demoSite.room_id, roomName: demoSite.room_name, facilityId: demoSite.id, facilityName: demoSite.facility_name }]);
-          setSelectedFacilityId(demoSite.id);
-          setActiveRoomId(demoSite.room_id);
-          
-          const tomatoProduct = { id: 'demo-tomato', name: 'Tomatoes', storage_temp_min: 4, storage_temp_max: 6, storage_humidity_min: 85, storage_humidity_max: 95 };
-          setProducts([tomatoProduct]);
-          setActiveProductId('demo-tomato');
-          setActiveProductData(tomatoProduct);
-          
-          setLiveConditions({ temp: 5.8, hum: 89.5, ambientTemp: 22.3, ambientHum: 65.8, date: new Date().toISOString() });
-          
-          const demoReadings = [
-            { time: '14:00', value: 5.8, humidity: 89.5 },
-            { time: '10:00', value: 5.5, humidity: 88.9 },
-            { time: '18:00', value: 5.7, humidity: 89.8 },
-            { time: '14:00', value: 5.4, humidity: 88.5 },
-          ];
-          setTemperatureHistory(demoReadings);
-          
-          setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
-          setEnergyData([{ total_kwh: 52 }]);
-          setAlerts([
-            { id: '1', severity: 'info', message: 'Storage approved', status: 'resolved', created_at: '2024-09-16' },
-          ]);
-          
-          setHasAnyApproved(true);
-          setHasAnyPending(false);
-          setLoading(false);
-          return; // EXIT - NO DATABASE CALLS
-        }
-        
-        // CHECK DEMO MODE FIRST
-        if (isDemoMode && demoData) {
-          // Use demo data for Roy (Farmer)
-          setProfileId('demo-farmer-id');
-          
-          const approvedSite = demoData.approvedSites[0];
-          setFacilities([{ id: approvedSite.id, name: approvedSite.facility_name }]);
-          setRooms([{ roomId: approvedSite.room_id, roomName: approvedSite.room_name, facilityId: approvedSite.id, facilityName: approvedSite.facility_name }]);
-          setSelectedFacilityId(approvedSite.id);
-          setActiveRoomId(approvedSite.room_id);
-          
-          // Set product to Tomatoes
-          const tomatoProduct = { id: 'demo-tomato-prod', name: 'Tomatoes', storage_temp_min: 4, storage_temp_max: 6, storage_humidity_min: 85, storage_humidity_max: 95 };
-          setProducts([tomatoProduct]);
-          setActiveProductId('demo-tomato-prod');
-          setActiveProductData(tomatoProduct);
-          
-          // Set sensor readings from demo data
-          const latestReading = demoData.sensorReadings[0];
-          setLiveConditions({
-            temp: latestReading.temperature,
-            hum: latestReading.humidity,
-            ambientTemp: 22.3,
-            ambientHum: 65.8,
-            date: new Date().toISOString()
-          });
-          
-          // Convert sensor readings to chart format
-          const tempHistory = demoData.sensorReadings.map((r: any, idx: number) => ({
-            time: r.timestamp.split(' ')[1] || `T${idx}`,
-            value: r.temperature,
-            humidity: r.humidity
-          }));
-          setTemperatureHistory(tempHistory);
-          
-          // Door stats
-          setDoorStats({ status: 'Closed', count: 0, duration: 0, lastOpenTime: 'N/A' });
-          
-          // Energy data - use last item
-          setEnergyData([{ total_kwh: 52 }]);
-          
-          // Alerts
-          setAlerts(demoData.alerts || []);
-          
-          setHasAnyApproved(true);
-          setHasAnyPending(false);
-          setLoading(false);
-          return;
-        }
-        
-        // NORMAL DATABASE FLOW for non-demo users
         const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) throw new Error("Profile missing");
         setProfileId(profile.id);
@@ -244,27 +171,8 @@ function FarmerDashboardCore() {
           }
         }
 
-        // Fail-safe fallback: if no approved rooms were found via accessLogs (e.g. FK relation schema issue), fetch Kullu Storage A directly
-        if (approvedRooms.length === 0) {
-          const { data: allRooms } = await supabase
-            .from('cold_storage_rooms')
-            .select('id, room_name, room_code, site_id, sites(id, facility_name)')
-            .limit(5);
-
-          if (allRooms && allRooms.length > 0) {
-            allRooms.forEach(r => {
-              const fac = Array.isArray(r.sites) ? r.sites[0] : r.sites;
-              if (fac) {
-                approvedRooms.push({
-                  roomId: r.id,
-                  roomName: r.room_name || r.room_code || 'Kullu Storage A',
-                  facilityId: fac.id,
-                  facilityName: fac.facility_name || 'Kullu Storage A'
-                });
-              }
-            });
-          }
-        }
+        // No fallback - if farmer has no approved rooms, they see nothing
+        // They can request access to rooms through the app settings/interface
 
         setHasAnyApproved(approvedRooms.length > 0);
         setHasAnyPending(pFound);
@@ -312,7 +220,7 @@ function FarmerDashboardCore() {
     };
 
     initializeDashboard();
-  }, [user?.id, isDemoMode]);
+  }, [user?.id]);
 
   // Initialize with empty data
   useEffect(() => {
@@ -335,6 +243,21 @@ function FarmerDashboardCore() {
     }
   }, [loading]);
 
+  // Auto-select first product if products loaded but no product selected
+  // Also validate that activeProductId from store still exists in products list
+  useEffect(() => {
+    if (products.length > 0) {
+      // Check if the stored activeProductId still exists in the products list
+      const productExists = products.some(p => p.id === activeProductId);
+      
+      if (!activeProductId || !productExists) {
+        // Auto-select first product if none is selected or selected one doesn't exist
+        console.log('Auto-selecting first product:', products[0].id);
+        setActiveProductId(products[0].id);
+      }
+    }
+  }, [products]);
+
   // Load product data when activeProductId changes
   useEffect(() => {
     if (!activeProductId || !products.length) return;
@@ -350,17 +273,25 @@ function FarmerDashboardCore() {
      return <div className="p-8 flex justify-center pt-24"><RefreshCw className="animate-spin w-8 h-8 text-primary-600" /></div>;
   }
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
-      </div>
-    );
+  if (!hasAnyApproved) {
+     if (hasAnyPending) {
+         return (
+             <div className="flex items-center justify-center min-h-screen">
+               <div className="text-center">
+                <Clock className="w-20 h-20 text-yellow-500 animate-pulse mx-auto mb-6" />
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Waiting for Approval</h1>
+               </div>
+             </div>
+         );
+     }
+     return (
+        <div className="p-8 max-w-4xl mx-auto text-center pt-16">
+           <Package className="w-16 h-16 text-purple-500 mx-auto mb-6" />
+           <h1 className="text-2xl font-bold mb-3">No Approved Rooms</h1>
+           <p className="text-slate-500">You do not have access to any storage rooms yet.</p>
+        </div>
+     );
   }
-
-  // APPROVAL CHECK COMPLETELY REMOVED FOR DEMO
-  // Dashboard always shows for demo users
 
   const roomOptions = rooms.filter(r => r.facilityId === selectedFacilityId);
   
@@ -417,13 +348,26 @@ function FarmerDashboardCore() {
                   <select 
                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg p-3 font-semibold outline-none focus:ring-2 focus:ring-primary-500 appearance-none"
                      value={selectedFacilityId}
-                     onChange={(e) => {
-                         setSelectedFacilityId(e.target.value);
-                         const newRoom = rooms.find(r => r.facilityId === e.target.value);
-                         setActiveRoomId(newRoom ? newRoom.roomId : null);
-                     }}
+                     onChange={(e) => handleFacilityChange(e.target.value)}
                   >
                      {facilities.map(f => (<option key={f.id} value={f.id}>{f.name}</option>))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
+                </div>
+             </div>
+             <div className="flex-1 relative">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Storage Room</label>
+                <div className="relative">
+                  <select 
+                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg p-3 font-semibold outline-none focus:ring-2 focus:ring-primary-500 appearance-none"
+                     value={activeRoomId || ''}
+                     onChange={(e) => handleRoomChange(e.target.value)}
+                  >
+                     {roomOptions.length === 0 ? (
+                       <option value="">No rooms available</option>
+                     ) : (
+                       roomOptions.map(r => (<option key={r.roomId} value={r.roomId}>{r.roomName}</option>))
+                     )}
                   </select>
                   <ChevronDown className="absolute right-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
                 </div>
@@ -434,7 +378,7 @@ function FarmerDashboardCore() {
                   <select 
                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg p-3 font-semibold outline-none focus:ring-2 focus:ring-primary-500 appearance-none disabled:opacity-50"
                      value={activeProductId || ''}
-                     onChange={(e) => setActiveProductId(e.target.value)}
+                     onChange={(e) => handleProductChange(e.target.value)}
                      disabled={products.length === 0}
                   >
                      {products.length === 0 && <option value="">No Products Saved</option>}
@@ -446,10 +390,10 @@ function FarmerDashboardCore() {
           </CardContent>
        </Card>
 
-       {!activeProductId ? (
+       {!activeProductId || products.length === 0 ? (
            <div className="p-12 text-center border-2 border-dashed border-slate-300 rounded-xl mt-8">
                <h2 className="text-xl font-bold text-slate-600">No Product Data Available</h2>
-               <p className="text-slate-500">Please ensure you have inventory allocated to this room using the Inventory menu.</p>
+               <p className="text-slate-500">Please select a product from the dropdown above to view storage conditions.</p>
            </div>
        ) : (
            <div className="space-y-6 pt-2">

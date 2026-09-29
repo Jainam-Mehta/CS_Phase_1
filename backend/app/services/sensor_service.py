@@ -62,10 +62,11 @@ def save_cold_storage_condition(condition: dict) -> dict | None:
 
     Required fields:
         room_id  uuid  — FK to cold_storage_rooms.id
+        site_id  uuid  — FK to sites.id (optional but recommended)
 
     Optional fields (any subset):
         temperature, humidity, ambient_temperature, ambient_humidity,
-        door_status, compressor_status
+        door_status, compressor_status, site_id
     """
     if not condition.get("room_id"):
         logger.warning("save_cold_storage_condition: missing room_id, skipping")
@@ -76,11 +77,17 @@ def save_cold_storage_condition(condition: dict) -> dict | None:
         "room_id": room_id,
         "recorded_at": condition.get("recorded_at", datetime.now(timezone.utc).isoformat()),
     }
+    
+    # Add site_id if provided (for multi-tenancy filtering)
+    if condition.get("site_id"):
+        data["site_id"] = condition["site_id"]
 
     for field in (
         "temperature", "humidity",
         "ambient_temperature", "ambient_humidity",
         "door_status", "compressor_status",
+        "suction_pressure", "discharge_pressure",
+        "energy_consumption_kwh", "solar_percentage",
     ):
         if field in condition and condition[field] is not None:
             data[field] = condition[field]
@@ -99,21 +106,46 @@ def save_cold_storage_condition(condition: dict) -> dict | None:
         
         if latest.data:
             latest_row = latest.data[0]
-            latest_time = datetime.fromisoformat(latest_row["recorded_at"].replace('Z', '+00:00'))
-            current_time = datetime.now(timezone.utc)
-            time_diff = (current_time - latest_time).total_seconds()
+            try:
+                # Parse the latest recorded timestamp safely
+                latest_recorded_str = latest_row.get("recorded_at", "")
+                if isinstance(latest_recorded_str, str):
+                    latest_recorded_str = latest_recorded_str.replace('Z', '+00:00')
+                latest_time = datetime.fromisoformat(latest_recorded_str)
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.warning("Invalid timestamp format in DB for room_id=%s: %s, creating new row", room_id, e)
+                # Fall through to insert new row
+                latest.data = None
             
-            # If the latest row is less than 60 seconds old, merge into it
-            if time_diff < 60:
-                resp = supabase.table("cold_storage_conditions") \
-                    .update(data) \
-                    .eq("id", latest_row["id"]) \
-                    .execute()
-                if resp.data:
-                    logger.info("✓ Merged condition into existing row for room_id=%s (age=%ds)", room_id, int(time_diff))
-                    return resp.data[0]
-            
-        # If no recent row found, insert a new one
+            if latest.data:
+                # Parse the message timestamp (should be valid, but handle gracefully)
+                message_timestamp = data.get("recorded_at")
+                if isinstance(message_timestamp, str):
+                    try:
+                        message_timestamp = message_timestamp.replace('Z', '+00:00')
+                        message_time = datetime.fromisoformat(message_timestamp)
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.error("Invalid message timestamp: %s, using current time", e)
+                        message_time = datetime.now(timezone.utc)
+                else:
+                    message_time = datetime.now(timezone.utc)
+                
+                # Calculate time difference (use message time, not server time)
+                time_diff = (message_time - latest_time).total_seconds()
+                
+                # If the message is from the same room within 60 seconds and not out-of-order, merge
+                if 0 <= time_diff < 60:
+                    resp = supabase.table("cold_storage_conditions") \
+                        .update(data) \
+                        .eq("id", latest_row["id"]) \
+                        .execute()
+                    if resp.data:
+                        logger.info("✓ Merged condition into existing row for room_id=%s (age=%ds)", room_id, int(time_diff))
+                        return resp.data[0]
+                elif time_diff < 0:
+                    logger.warning("Out-of-order message detected: received message with timestamp %.1f seconds in the past, creating new row", -time_diff)
+        
+        # If no recent row found or out-of-order, insert a new one
         resp = supabase.table("cold_storage_conditions").insert(data).execute()
         if resp.data:
             logger.info("✓ Created new condition row for room_id=%s", room_id)

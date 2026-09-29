@@ -227,21 +227,24 @@ const StorageSelection: React.FC = () => {
     setLoading(true);
 
     try {
-      // Save state and district selection to localStorage for room filtering
-      const storageRequest = {
-        state: selectedState,
-        district: selectedDistrict,
-        stateId: selectedStateId,
-        districtId: selectedDistrictId,
-        sites: [],
-        rooms: [],
-        products: [],
-      };
+      // Get or initialize storage request from localStorage
+      const existingRequest = localStorage.getItem('storageAccessRequest');
+      const storageRequest = existingRequest ? JSON.parse(existingRequest) : {};
+      
+      // Add state and district for room filtering, but DON'T populate sites/rooms/products yet
+      storageRequest.state = selectedState;
+      storageRequest.district = selectedDistrict;
+      storageRequest.stateId = selectedStateId;
+      storageRequest.districtId = selectedDistrictId;
+      // Ensure arrays exist but remain empty until user selects them
+      if (!storageRequest.rooms) storageRequest.rooms = [];
+      if (!storageRequest.products) storageRequest.products = [];
+      
       localStorage.setItem('storageAccessRequest', JSON.stringify(storageRequest));
 
       // Only complete onboarding step if not in extension mode
       if (!isExtensionMode) {
-        completeStep('site');
+        completeStep('dashboard');
       }
 
       // Navigate to room selection forwarding extension flags if they exist
@@ -256,7 +259,7 @@ const StorageSelection: React.FC = () => {
 
   // Don't render if still loading onboarding state or if this is not the correct step
   // Allow rendering in extension mode regardless of onboarding step
-  if (!isExtensionMode && (onboardingLoading || onboardingStep !== 'site')) {
+  if (!isExtensionMode && onboardingLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
@@ -272,7 +275,7 @@ const StorageSelection: React.FC = () => {
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 1/3
+                Step 1/4
               </span>
             </div>
             
@@ -281,7 +284,7 @@ const StorageSelection: React.FC = () => {
             </div>
             <CardTitle className="text-3xl">Select Your Storage Site</CardTitle>
             <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Choose the cold storage location where you want to store your products
+              Choose the cold storage site where you want to store your products
             </p>
           </CardHeader>
           <CardContent>

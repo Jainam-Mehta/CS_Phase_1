@@ -49,16 +49,22 @@ const StakeholderInvestmentPreferences: React.FC = () => {
         return;
       }
 
-      // Check if profile exists
+      // Check if profile exists and is a stakeholder
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, roles(name)')
+        .select('id, role')
         .eq('id', session.user.id)
         .single();
 
-      if (!profile || (profile.roles as any)?.name !== 'Stakeholder') {
+      if (!profile) {
         setError('Invalid profile. Please complete stakeholder profile setup first.');
         setTimeout(() => navigate('/stakeholder-profile-setup'), 3000);
+        return;
+      }
+
+      if (profile.role !== 'stakeholder') {
+        setError('Access denied. Stakeholder role required.');
+        setTimeout(() => navigate('/stakeholder/map'), 3000);
         return;
       }
     } catch (err) {
@@ -135,7 +141,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
         
         let ownerName = 'Unknown Owner';
         if (f.profiles) {
-           ownerName = `${f.profiles.first_name || ''} ${f.profiles.last_name || ''}`.trim() || 'Unknown Owner';
+           ownerName = f.profiles.full_name || 'Unknown Owner';
         }
 
         return {
@@ -220,18 +226,62 @@ const StakeholderInvestmentPreferences: React.FC = () => {
         throw new Error('Profile not found');
       }
 
-      // Insert into stakeholder_interest with investment amounts
-      const interests = selectedFacilities.map((facility) => ({
+      // Create investment objects
+      const investments = selectedFacilities.map((facility) => ({
         stakeholder_id: profile.id,
-        facility_id: facility.id,
-        interest_status: 'Interested'
+        site_id: facility.id,
+        investment_amount: facility.investmentAmount,
+        investment_amount_inr: facility.investmentAmount, // Store in INR as well
+        investment_date: new Date().toISOString(),
+        status: 'Pending', // Awaiting owner approval
+        roi_percentage: 0,
+        roi_percentage_estimate: 0,
+        carbon_credits: 0,
+        owner_company_id: null
       }));
 
-      const { error: insertError } = await supabase
-        .from('stakeholder_interest')
-        .insert(interests);
+      // Insert into stakeholder_investments (one at a time to catch errors better)
+      console.log('Attempting to insert investments:', investments);
+      
+      for (const investment of investments) {
+        console.log('Inserting investment:', investment);
+        const { error: investmentError, data: investmentData } = await supabase
+          .from('stakeholder_investments')
+          .insert([investment]);
 
-      if (insertError) throw insertError;
+        console.log(`Investment insert for ${investment.site_id}:`, { data: investmentData, error: investmentError });
+
+        if (investmentError) {
+          console.error(`Failed to insert investment for site ${investment.site_id}:`, investmentError);
+          throw new Error(`Failed to save investment for facility: ${investmentError.message}`);
+        }
+      }
+
+      // Also create stakeholder_interest records (one at a time)
+      // NOTE: Removed - we only create stakeholder_investments now
+      // stakeholder_interest is kept only for future "express interest" feature
+      // const interests = selectedFacilities.map((facility) => ({
+      //   stakeholder_id: profile.id,
+      //   site_id: facility.id,
+      //   interest_percentage: 0,
+      //   created_at: new Date().toISOString()
+      // }));
+
+      // console.log('Attempting to insert interests:', interests);
+
+      // for (const interest of interests) {
+      //   console.log('Inserting interest:', interest);
+      //   const { error: interestError, data: interestData } = await supabase
+      //     .from('stakeholder_interest')
+      //     .insert([interest]);
+
+      //   console.log(`Interest insert for ${interest.site_id}:`, { data: interestData, error: interestError });
+
+      //   if (interestError) {
+      //     console.warn(`Warning: Could not create interest record for site ${interest.site_id}:`, interestError);
+      //     // Don't throw - investments are the main data, interests are secondary
+      //   }
+      // }
 
       // Log stakeholder requests for each facility
       for (const facility of selectedFacilities) {
@@ -272,9 +322,6 @@ const StakeholderInvestmentPreferences: React.FC = () => {
           <div className="flex items-center justify-center gap-3 mb-2">
             <Briefcase className="h-8 w-8 text-white" />
             <h1 className="text-3xl font-bold text-white">Investment Preferences</h1>
-            <div className="text-sm font-semibold text-purple-600 bg-white px-3 py-1 rounded-full">
-              Step 3/3
-            </div>
           </div>
           <p className="text-white/90">Tell us where you'd like to invest</p>
         </div>

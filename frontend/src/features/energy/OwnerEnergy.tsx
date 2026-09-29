@@ -3,12 +3,12 @@ import { Zap, Sun, IndianRupee, BarChart3, Building } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 
 
-interface FacilityEnergy {
-  facility_id: string;
-  facility_name: string;
+interface RoomEnergy {
+  room_id: string;
+  room_name: string;
+  site_name: string;
   solar_kwh: number;
   grid_kwh: number;
   total_kwh: number;
@@ -17,72 +17,25 @@ interface FacilityEnergy {
 const OwnerEnergy: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
 
   const [loading, setLoading] = useState(true);
-  const [facilityEnergy, setFacilityEnergy] = useState<FacilityEnergy[]>([]);
+  const [roomEnergy, setRoomEnergy] = useState<RoomEnergy[]>([]);
   const [totals, setTotals] = useState({ solar: 0, grid: 0, saved: 0 });
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadEnergyData();
     }
-  }, [user?.id, selectedFacilityId, selectedRoomId, isDemoMode]);
+  }, [user?.id, selectedFacilityId]);
 
   const loadEnergyData = async () => {
     try {
       setLoading(true);
 
       if (!selectedFacilityId) {
-        setFacilityEnergy([]);
+        setRoomEnergy([]);
         setTotals({ solar: 0, grid: 0, saved: 0 });
-        setLoading(false);
-        return;
-      }
-
-      // Demo mode: use hardcoded data
-      if (isDemoMode && demoData) {
-        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
-        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
-
-        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
-        setRooms(demoRooms);
-
-        // Set default room if not selected
-        if (demoRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(demoRooms[0].id);
-        }
-
-        const roomToUse = selectedRoomId || (demoRooms.length > 0 ? demoRooms[0].id : null);
-
-        // Use energy data for the selected site
-        const siteEnergyData = demoData.energy.filter(e => e.site_id === selectedFacilityId);
-        
-        if (siteEnergyData.length > 0) {
-          // Calculate totals from last 7 days
-          const totalSolar = siteEnergyData.reduce((sum, e) => sum + e.solar_kwh, 0);
-          const totalGrid = siteEnergyData.reduce((sum, e) => sum + e.grid_kwh, 0);
-          const totalKwh = totalSolar + totalGrid;
-
-          const facilityData: FacilityEnergy = {
-            facility_id: selectedFacilityId,
-            facility_name: demoSite?.facility_name || 'Kullu Storage A',
-            solar_kwh: totalSolar,
-            grid_kwh: totalGrid,
-            total_kwh: totalKwh
-          };
-
-          setFacilityEnergy([facilityData]);
-          setTotals({ solar: totalSolar, grid: totalGrid, saved: Math.round(totalSolar * 8) });
-        } else {
-          setFacilityEnergy([]);
-          setTotals({ solar: 0, grid: 0, saved: 0 });
-        }
-
         setLoading(false);
         return;
       }
@@ -96,56 +49,63 @@ const OwnerEnergy: React.FC = () => {
 
       setSiteName(siteData?.facility_name || 'Your Site');
 
-      // Fetch Rooms for selected facility
+      // Fetch ALL rooms for selected facility
       const { data: rmData } = await supabase
         .from('cold_storage_rooms')
-        .select('*')
+        .select('id, room_name, room_code, site_id')
         .eq('site_id', selectedFacilityId);
 
       const resolvedRooms = rmData || [];
-      setRooms(resolvedRooms);
-
-      // Set default room if not already selected
-      if (resolvedRooms.length > 0 && !selectedRoomId) {
-        setSelectedRoomId(resolvedRooms[0].id);
-      }
-
-      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
       
-      if (!roomToUse) {
-        setFacilityEnergy([]);
+      if (resolvedRooms.length === 0) {
+        setRoomEnergy([]);
         setTotals({ solar: 0, grid: 0, saved: 0 });
         return;
       }
 
-      // Get latest energy reading for the selected room only
+      const roomIds = resolvedRooms.map(r => r.id);
+      const roomMap = new Map(resolvedRooms.map(r => [r.id, { name: r.room_name || r.room_code, site_name: siteData?.facility_name || 'Your Site' }]));
+
+      // Get latest energy readings for ALL rooms
       const { data: energyData } = await supabase
         .from('energy_usage')
         .select('room_id, solar_kwh, grid_kwh, total_kwh, recorded_at')
-        .eq('room_id', roomToUse)
+        .in('room_id', roomIds)
         .order('recorded_at', { ascending: false });
 
-      // Use the most recent reading
-      const latestReading = energyData && energyData.length > 0 ? energyData[0] : null;
-      
-      if (!latestReading) {
-        setFacilityEnergy([]);
-        setTotals({ solar: 0, grid: 0, saved: 0 });
-        return;
-      }
+      // Group by room and get latest reading for each
+      const latestByRoom = new Map<string, any>();
+      (energyData || []).forEach((reading: any) => {
+        if (!latestByRoom.has(reading.room_id)) {
+          latestByRoom.set(reading.room_id, reading);
+        }
+      });
 
-      const facilityData: FacilityEnergy = {
-        facility_id: selectedFacilityId,
-        facility_name: siteName || `Site ${selectedFacilityId.slice(0, 4)}`,
-        solar_kwh: Number(latestReading.solar_kwh) || 0,
-        grid_kwh: Number(latestReading.grid_kwh) || 0,
-        total_kwh: Number(latestReading.total_kwh) || 0
-      };
+      // Build room energy data
+      const roomEnergyData: RoomEnergy[] = [];
+      let totalSolar = 0;
+      let totalGrid = 0;
 
-      setFacilityEnergy([facilityData]);
+      resolvedRooms.forEach((room: any) => {
+        const latest = latestByRoom.get(room.id);
+        const solar = latest ? Number(latest.solar_kwh) || 0 : 0;
+        const grid = latest ? Number(latest.grid_kwh) || 0 : 0;
+        const total = latest ? Number(latest.total_kwh) || 0 : 0;
 
-      const totalSolar = facilityData.solar_kwh;
-      const totalGrid = facilityData.grid_kwh;
+        roomEnergyData.push({
+          room_id: room.id,
+          room_name: room.room_name || room.room_code,
+          site_name: siteData?.facility_name || 'Your Site',
+          solar_kwh: solar,
+          grid_kwh: grid,
+          total_kwh: total
+        });
+
+        totalSolar += solar;
+        totalGrid += grid;
+      });
+
+      setRoomEnergy(roomEnergyData);
       setTotals({ solar: totalSolar, grid: totalGrid, saved: Math.round(totalSolar * 8) });
     } catch (error) {
       console.error('Error loading energy data:', error);
@@ -167,15 +127,15 @@ const OwnerEnergy: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-          Please select a facility from the dropdown in the top header.
+          Please select a site from the dropdown in the top header.
         </p>
       </div>
     );
   }
 
-  const maxKwh = facilityEnergy.length > 0 ? Math.max(...facilityEnergy.map(f => f.total_kwh), 1) : 1;
+      const maxKwh = roomEnergy.length > 0 ? Math.max(...roomEnergy.map(f => f.total_kwh), 1) : 1;
 
   return (
     <div className="p-8 max-w-[1400px] mx-auto min-h-screen">
@@ -190,23 +150,7 @@ const OwnerEnergy: React.FC = () => {
         </div>
       </div>
 
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Room Selector Removed - Show all rooms across the selected site */}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -250,11 +194,11 @@ const OwnerEnergy: React.FC = () => {
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-500" />
-            Per Facility Energy Consumption
+            Per Room Energy Consumption
           </h2>
         </div>
 
-        {facilityEnergy.length === 0 ? (
+        {roomEnergy.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-16 text-center h-80">
             <Building className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-4" />
             <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Energy Data Yet</h3>
@@ -265,19 +209,24 @@ const OwnerEnergy: React.FC = () => {
         ) : (
           <div className="p-8">
             <div className="space-y-6">
-              {facilityEnergy.map((facility) => (
-                <div key={facility.facility_id} className="flex items-center gap-4">
-                  <div className="w-36 truncate text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {facility.facility_name}
+              {roomEnergy.map((room) => (
+                <div key={room.room_id} className="flex items-center gap-4">
+                  <div className="w-48">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                      {room.site_name} - {room.room_name}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Solar: {room.solar_kwh.toFixed(1)} kWh | Grid: {room.grid_kwh.toFixed(1)} kWh
+                    </div>
                   </div>
                   <div className="flex-1 w-full bg-slate-100 dark:bg-slate-700 rounded-full h-4 relative">
                     <div
                       className="bg-blue-500 dark:bg-blue-600 h-4 rounded-full transition-all duration-700"
-                      style={{ width: `${maxKwh > 0 ? (facility.total_kwh / maxKwh) * 100 : 0}%` }}
+                      style={{ width: `${maxKwh > 0 ? (room.total_kwh / maxKwh) * 100 : 0}%` }}
                     />
                   </div>
                   <div className="w-24 text-right text-sm font-bold text-slate-900 dark:text-white">
-                    {facility.total_kwh.toFixed(1)} kWh
+                    {room.total_kwh.toFixed(1)} kWh
                   </div>
                 </div>
               ))}

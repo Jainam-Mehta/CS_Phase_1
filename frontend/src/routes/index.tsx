@@ -108,7 +108,7 @@ const FarmerDashboard = React.lazy(() => import('../features/dashboard/FarmerDas
 const FarmerInventory = React.lazy(() => import('../features/inventory/FarmerInventory'));
 const FarmerPriceCalculator = React.lazy(() => import('../features/price-calculator/FarmerPriceCalculator'));
 const FarmerMarketIntelligence = React.lazy(() => import('../features/market-intelligence/FarmerMarketIntelligence'));
-const FarmerAlerts = React.lazy(() => import('../features/alerts/FarmerAlerts'));
+const FarmerAlerts = React.lazy(() => import('../features/alerts/FarmerAlertsAndInsights'));
 const FarmerOrders = React.lazy(() => import('../features/orders/FarmerOrders'));
 const FarmerFinance = React.lazy(() => import('../features/finance/FarmerFinance'));
 

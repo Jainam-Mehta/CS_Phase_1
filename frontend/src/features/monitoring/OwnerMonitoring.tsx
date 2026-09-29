@@ -3,7 +3,6 @@ import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 
 
 interface Sensor {
@@ -37,10 +36,7 @@ const AVAILABLE_SENSOR_TYPES = [
 
 const OwnerMonitoring: React.FC = () => {
   const { user } = useAuthStore();
-  const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
-  
+  const { selectedFacilityId, selectedRoomId, setSelectedRoomId } = useSiteStore();
   const [loading, setLoading] = useState(true);
 
   const [dbSensors, setDbSensors] = useState<Sensor[]>([]);
@@ -51,52 +47,18 @@ const OwnerMonitoring: React.FC = () => {
     quantity: 1
   });
   const [rooms, setRooms] = useState<any[]>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadMonitoringData();
     }
-  }, [user?.id, selectedFacilityId, isDemoMode]);
+  }, [user?.id, selectedFacilityId, selectedRoomId]);
 
   const loadMonitoringData = async () => {
     try {
       setLoading(true);
 
-      // CHECK DEMO MODE FIRST
-      if (isDemoMode && demoData) {
-        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
-        setSiteName(currentSite.facility_name);
-        
-        // Set rooms
-        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
-        setRooms(siteRooms);
-        
-        if (siteRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(siteRooms[0].id);
-        }
-        
-        // Transform demo sensors to match expected format (all 13 sensors)
-        const demoSensors: Sensor[] = demoData.sensors.map((s: any) => ({
-          id: s.id,
-          sensor_type: s.sensor_type,
-          sensor_name: s.sensor_name,
-          status: s.status,
-          battery_percentage: s.sensor_type === 'battery' ? s.last_reading : 92,
-          last_reading_value: s.last_reading,
-          last_reading_unit: s.unit,
-          last_seen: new Date().toISOString(),
-          room_id: s.room_id
-        }));
-        
-        setDbSensors(demoSensors);
-        setInventory(demoData.inventory);
-        setLoading(false);
-        return;
-      }
-
-      // NORMAL DATABASE FLOW
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')
@@ -203,12 +165,26 @@ const OwnerMonitoring: React.FC = () => {
   const handleAddSensor = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Get the first room for this facility
+      // Normalize sensor type to snake_case (database format)
+      const normalizeSensorType = (type: string): string => {
+        return type
+          .replace(/([A-Z])/g, '_$1')  // Insert _ before capitals
+          .toLowerCase()
+          .replace(/^_/, '');  // Remove leading _
+      };
+
+      // Use the currently selected room, not the first room
+      if (!selectedRoomId) {
+        alert('Please select a room first.');
+        return;
+      }
+
+      // Verify the room exists and belongs to this facility
       const { data: roomData, error: roomError } = await supabase
         .from('cold_storage_rooms')
         .select('id')
+        .eq('id', selectedRoomId)
         .eq('site_id', selectedFacilityId)
-        .limit(1)
         .single();
 
       if (roomError) {
@@ -218,7 +194,7 @@ const OwnerMonitoring: React.FC = () => {
       }
 
       if (!roomData) {
-        alert('No room found for this facility. Please create a room first.');
+        alert('No room found. Please create a room first.');
         return;
       }
 
@@ -233,75 +209,72 @@ const OwnerMonitoring: React.FC = () => {
         if (addSensorForm.sensor_type === 'Temperature+Humidity') {
           // Create both Temperature and Humidity sensors for each quantity
           for (let i = 0; i < addSensorForm.quantity; i++) {
-            const existingTemp = dbSensors.filter(s => s.sensor_type === 'Temperature');
-            const existingHumidity = dbSensors.filter(s => s.sensor_type === 'Humidity');
+            const existingTemp = dbSensors.filter(s => s.sensor_type === 'temperature');
+            const existingHumidity = dbSensors.filter(s => s.sensor_type === 'humidity');
             const tempNumber = existingTemp.length + 1 + i;
             const humidityNumber = existingHumidity.length + 1 + i;
 
             // Add Temperature sensor
             sensorsToAdd.push({
               room_id: roomData.id,
-              sensor_type: 'Temperature',
+              site_id: selectedFacilityId,
+              sensor_type: 'temperature',
               sensor_name: `Temperature ${tempNumber}`,
               sensor_code: `TEMP_${String(tempNumber).padStart(3, '0')}`,
               status: 'Online',
-              battery_percentage: 100,
-              last_reading_unit: '°C',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              is_active: true,
+              created_at: new Date().toISOString()
             });
 
             // Add Humidity sensor
             sensorsToAdd.push({
               room_id: roomData.id,
-              sensor_type: 'Humidity',
+              site_id: selectedFacilityId,
+              sensor_type: 'humidity',
               sensor_name: `Humidity ${humidityNumber}`,
               sensor_code: `HUM_${String(humidityNumber).padStart(3, '0')}`,
               status: 'Online',
-              battery_percentage: 100,
-              last_reading_unit: '%',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              is_active: true,
+              created_at: new Date().toISOString()
             });
           }
         } else if (addSensorForm.sensor_type === 'AmbientTemperature+AmbientHumidity') {
           // Create both Ambient Temperature and Ambient Humidity sensors for each quantity
           for (let i = 0; i < addSensorForm.quantity; i++) {
-            const existingAmbTemp = dbSensors.filter(s => s.sensor_type === 'AmbientTemperature');
-            const existingAmbHum = dbSensors.filter(s => s.sensor_type === 'AmbientHumidity');
+            const existingAmbTemp = dbSensors.filter(s => s.sensor_type === 'ambient_temperature');
+            const existingAmbHum = dbSensors.filter(s => s.sensor_type === 'ambient_humidity');
             const ambTempNumber = existingAmbTemp.length + 1 + i;
             const ambHumNumber = existingAmbHum.length + 1 + i;
 
             // Add Ambient Temperature sensor
             sensorsToAdd.push({
               room_id: roomData.id,
-              sensor_type: 'AmbientTemperature',
+              site_id: selectedFacilityId,
+              sensor_type: 'ambient_temperature',
               sensor_name: `Ambient Temperature ${ambTempNumber}`,
               sensor_code: `AMB_TEMP_${String(ambTempNumber).padStart(3, '0')}`,
               status: 'Online',
-              battery_percentage: 100,
-              last_reading_unit: '°C',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              is_active: true,
+              created_at: new Date().toISOString()
             });
 
             // Add Ambient Humidity sensor
             sensorsToAdd.push({
               room_id: roomData.id,
-              sensor_type: 'AmbientHumidity',
+              site_id: selectedFacilityId,
+              sensor_type: 'ambient_humidity',
               sensor_name: `Ambient Humidity ${ambHumNumber}`,
               sensor_code: `AMB_HUM_${String(ambHumNumber).padStart(3, '0')}`,
               status: 'Online',
-              battery_percentage: 100,
-              last_reading_unit: '%',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              is_active: true,
+              created_at: new Date().toISOString()
             });
           }
         }
       } else {
         // Regular single-type sensor
-        const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
+        const normalizedType = normalizeSensorType(addSensorForm.sensor_type);
+        const existingOfType = dbSensors.filter(s => s.sensor_type === normalizedType);
         const startNumber = existingOfType.length + 1;
 
         for (let i = 0; i < addSensorForm.quantity; i++) {
@@ -309,14 +282,13 @@ const OwnerMonitoring: React.FC = () => {
           
           sensorsToAdd.push({
             room_id: roomData.id,
-            sensor_type: addSensorForm.sensor_type,
+            site_id: selectedFacilityId,
+            sensor_type: normalizedType,
             sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
-            sensor_code: `${addSensorForm.sensor_type.toUpperCase().replace(/\+/g, '_')}_${String(sensorNumber).padStart(3, '0')}`,
+            sensor_code: `${normalizedType.toUpperCase().replace(/_/g, '-')}_${String(sensorNumber).padStart(3, '0')}`,
             status: 'Online',
-            battery_percentage: 100,
-            last_reading_unit: selectedSensorType?.unit || '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            is_active: true,
+            created_at: new Date().toISOString()
           });
         }
       }
@@ -349,9 +321,9 @@ const OwnerMonitoring: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown in the top header.
+          Please select a site from the dropdown in the top header.
         </p>
       </div>
     );
@@ -396,23 +368,7 @@ const OwnerMonitoring: React.FC = () => {
         </div>
       </div>
 
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Room Selector removed - use header selector instead */}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* KPI Cards */}

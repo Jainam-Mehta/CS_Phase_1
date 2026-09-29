@@ -18,6 +18,32 @@ import {
   getDisplayName 
 } from '../../lib/sensorRegistry';
 
+// ============================================================================
+// Sensor Type Mapping: UI internalKey → Database allowed values
+// Database only allows: temperature, humidity, pressure, co2, oxygen
+// ============================================================================
+function mapSensorTypeForDB(internalKey: string): string[] {
+  const key = internalKey.toLowerCase();
+  
+  // Direct mappings
+  if (key === 'temperature') return ['temperature'];
+  if (key === 'humidity') return ['humidity'];
+  if (key === 'oxygen') return ['oxygen'];
+  if (key === 'co2') return ['co2'];
+  if (key.includes('pressure')) return ['pressure'];
+  
+  // Compound sensors (create both sensor records)
+  if (key.includes('+')) {
+    return ['temperature', 'humidity'];
+  }
+
+  if (key.includes('temp')) return ['temperature'];
+  if (key.includes('humid')) return ['humidity'];
+  
+  // Return normalized key for single-type sensors
+  return [key.replace(/[^a-z0-9_]/g, '')];
+}
+
 type SetupStep = 'site' | 'sensors' | 'complete';
 
 interface OwnerSetupData {
@@ -105,7 +131,7 @@ const OwnerSetup: React.FC = () => {
   
   // Created IDs for subsequent steps
   const [createdFacilityId, setCreatedFacilityId] = useState<string | null>(null);
-  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
+  const [createdRoomIds, setCreatedRoomIds] = useState<string[]>([]);
 
   // Load states on mount
   useEffect(() => {
@@ -303,47 +329,75 @@ const OwnerSetup: React.FC = () => {
     setError('');
 
     try {
-      const { data: profile, error: profileError } = await supabase
+      // 1. Get authenticated user ID from session or store
+      const { data: { session } } = await supabase.auth.getSession();
+      const authUserId = session?.user?.id || user?.id;
+
+      if (!authUserId) {
+        throw new Error('No authenticated user session found. Please log in again.');
+      }
+
+      // 2. Fetch profile, or create on-the-fly if missing
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id, owner_company_id')
-        .eq('id', user?.id)
+        .eq('id', authUserId)
         .maybeSingle();
 
-      if (!profile) throw new Error('Owner profile not found');
+      if (profileError) {
+        console.error('Profile query error:', profileError);
+      }
 
-      // Check for duplicate sites under this owner profile
-      const siteName = `${setupData.siteName} Facility`;
+      if (!profile) {
+        console.log('Profile missing for owner user, creating on-the-fly:', authUserId);
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: authUserId,
+            email: session?.user?.email || user?.email || '',
+            full_name: user?.name || 'Owner',
+            role: 'owner',
+            is_active: true
+          }, { onConflict: 'id' })
+          .select('id, owner_company_id')
+          .single();
+
+        if (createError) {
+          throw new Error(`Profile setup error: ${createError.message || JSON.stringify(createError)}`);
+        }
+        profile = newProfile;
+      }
+
+      // 3. Check for duplicate sites under this owner profile
+      const siteName = setupData.siteName.trim();
       const { data: existingSite, error: existingSiteError } = await supabase
         .from('sites')
         .select('id')
         .eq('owner_profile_id', profile.id)
         .eq('facility_name', siteName)
-        .eq('state_id', selectedStateId)
-        .eq('district_id', selectedDistrictId)
         .maybeSingle();
 
       if (existingSiteError) {
-        console.error('Error checking for existing site:', existingSiteError);
-        throw existingSiteError;
+        console.warn('Error checking for existing site:', existingSiteError);
       }
 
       if (existingSite) {
-        setError('A site with this name already exists in this location.');
+        setError('A site with this name already exists in your account.');
         setLoading(false);
         return;
       }
 
-      // Get state and district names for the company record
-      const stateName = states.find(s => s.id === selectedStateId)?.name || '';
-      const districtName = districts.find(d => d.id === selectedDistrictId)?.name || '';
+      // 4. Get state and district names for the company record
+      const stateName = states.find(s => s.id === selectedStateId)?.name || setupData.state || '';
+      const districtName = districts.find(d => d.id === selectedDistrictId)?.name || setupData.district || '';
 
-      // Ensure Owner Company exists (Optional but good for metadata)
+      // 5. Ensure Owner Company exists
       if (!profile.owner_company_id) {
         const { data: ownerCompany, error: companyError } = await supabase
           .from('owner_companies')
           .insert({
-            company_name: `${setupData.siteName} Company`,
-            contact_email: setupData.contactEmail || user?.email || '',
+            company_name: `${siteName} Company`,
+            contact_email: setupData.contactEmail || session?.user?.email || user?.email || '',
             phone: setupData.phone || '',
             address: '',
             city: districtName,
@@ -356,7 +410,7 @@ const OwnerSetup: React.FC = () => {
 
         if (companyError) {
           console.error('Owner company creation error:', companyError);
-          throw companyError;
+          throw new Error(`Company creation error: ${companyError.message || companyError.details || JSON.stringify(companyError)}`);
         }
 
         // Link company to profile
@@ -367,11 +421,10 @@ const OwnerSetup: React.FC = () => {
           
         if (profileUpdateError) {
           console.error('Profile update error:', profileUpdateError);
-          throw profileUpdateError;
         }
       }
 
-      // Create site linked centrally manually via owner_profile_id
+      // 6. Create site record
       const sitePayload = {
         owner_profile_id: profile.id,
         facility_name: siteName,
@@ -392,20 +445,21 @@ const OwnerSetup: React.FC = () => {
 
       if (siteError) {
         console.error('Site creation error:', siteError);
-        throw siteError;
+        throw new Error(`Site creation error: ${siteError.message || siteError.details || JSON.stringify(siteError)}`);
       }
 
       setCreatedFacilityId(site.id);
 
-      // Create multiple rooms with distributed capacity
-      const totalCapacityKg = setupData.storageCapacityTons * 1000; // Convert tons to kg
-      const capacityPerRoomKg = Math.floor(totalCapacityKg / setupData.numRooms); // Distribute equally
+      // 7. Create multiple rooms with distributed capacity
+      const totalCapacityKg = setupData.storageCapacityTons * 1000;
+      const capacityPerRoomKg = Math.floor(totalCapacityKg / setupData.numRooms);
       
       const roomsToCreate = [];
       for (let i = 1; i <= setupData.numRooms; i++) {
         const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
         roomsToCreate.push({
           room_code: roomCode,
+          room_name: `Storage Room ${String.fromCharCode(64 + i)}`, // Room A, Room B, etc.
           site_id: site.id,
           capacity_kg: capacityPerRoomKg,
           current_utilization_kg: 0,
@@ -419,52 +473,50 @@ const OwnerSetup: React.FC = () => {
         .insert(roomsToCreate)
         .select();
 
-      if (roomError) throw roomError;
+      if (roomError) {
+        console.error('Room creation error:', roomError);
+        throw new Error(`Room creation error: ${roomError.message || roomError.details || JSON.stringify(roomError)}`);
+      }
       
-      console.log(`✓ Created ${setupData.numRooms} rooms with ${capacityPerRoomKg}kg capacity each`);
-      setCreatedRoomId(rooms?.[0]?.id || null); // Store first room ID for sensors
+      const roomIds = rooms?.map(r => r.id) || [];
+      console.log(`✓ Created ${setupData.numRooms} rooms with IDs:`, roomIds);
+      setCreatedRoomIds(roomIds);
       setCurrentStep('sensors');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating site:', err);
-      setError('Failed to create site. Please try again.');
+      const errorMessage = err?.message || err?.details || (typeof err === 'string' ? err : JSON.stringify(err));
+      setError(`Failed to create site: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleConfigureSensors = async () => {
-    // Validation: at least one sensor selected
-    let totalSensors = 0;
-    
-    if (setupData.numRooms > 1) {
-      // For multi-room: check at least one sensor per room
-      const roomSensors = setupData.roomSensorQuantities || {};
-      for (let i = 0; i < setupData.numRooms; i++) {
-        const roomKey = `room_${i}`;
-        const roomTotal = Object.values(roomSensors[roomKey] || {}).reduce((sum: number, qty: number) => sum + qty, 0);
-        totalSensors += roomTotal;
-      }
-      if (totalSensors === 0) {
-        setError('Please select at least one sensor for each room');
-        return;
-      }
-    } else {
-      // For single room: use sensorQuantities
-      totalSensors = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
-      if (totalSensors === 0) {
-        setError('Please select at least one sensor type');
-        return;
-      }
-    }
-
     setLoading(true);
     setError('');
 
     try {
-      const createdRoomIds = Array.isArray(createdRoomId) ? createdRoomId : [createdRoomId].filter(Boolean);
-      
-      if (setupData.numRooms > 1) {
-        // Multi-room: create sensors for each room separately
+      if (!createdFacilityId || createdRoomIds.length === 0) {
+        throw new Error('No site or rooms found. Please go back to Step 1 and recreate the site.');
+      }
+
+      let totalSensors = 0;
+      const isMultiRoom = setupData.numRooms > 1;
+
+      if (isMultiRoom) {
+        const roomSensors = setupData.roomSensorQuantities || {};
+        for (let i = 0; i < setupData.numRooms; i++) {
+          const roomKey = `room_${i}`;
+          const roomTotal = Object.values(roomSensors[roomKey] || {}).reduce((sum: number, qty: number) => sum + qty, 0);
+          totalSensors += roomTotal;
+        }
+      } else {
+        totalSensors = Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0);
+      }
+
+      console.log('🔵 Starting sensor creation...', { createdFacilityId, createdRoomIds, totalSensors });
+
+      if (isMultiRoom) {
         const roomSensors = setupData.roomSensorQuantities || {};
         for (let roomIndex = 0; roomIndex < createdRoomIds.length; roomIndex++) {
           const roomId = createdRoomIds[roomIndex];
@@ -472,70 +524,76 @@ const OwnerSetup: React.FC = () => {
           const sensorsForRoom = roomSensors[roomKey] || {};
           
           for (const [internalKey, quantity] of Object.entries(sensorsForRoom)) {
-            if (quantity === 0) continue;
+            if (quantity <= 0) continue;
 
             const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
             if (!sensorDef) continue;
 
+            const dbTypes = mapSensorTypeForDB(internalKey);
+
             for (let i = 0; i < quantity; i++) {
-              const serialNumber = generateSerialNumber();
-              const mqttTopic = generateMQTTTopic(roomId, internalKey, i + 1);
-              
-              const { error: sensorError } = await supabase
-                .from('sensor_devices')
-                .insert({
-                  room_id: roomId,
-                  sensor_name: sensorDef.displayName,
-                  sensor_type: internalKey,
-                  serial_number: serialNumber,
-                  mqtt_topic: mqttTopic,
-                  firmware_version: '1.0.0',
-                  installation_date: new Date().toISOString(),
-                  last_calibration: new Date().toISOString(),
-                  status: 'Online',
-                  last_seen: new Date().toISOString(),
-                  battery_percentage: 100,
-                  remarks: '',
-                });
-              if (sensorError) throw sensorError;
+              for (const dbSensorType of dbTypes) {
+                const serialNumber = generateSerialNumber();  // Generate ONCE per type
+                console.log(`🔵 Inserting sensor: room=${roomId}, type=${dbSensorType}, code=${serialNumber}`);
+                const { error: sensorError } = await supabase
+                  .from('sensor_devices')
+                  .insert({
+                    room_id: roomId,
+                    site_id: createdFacilityId,
+                    sensor_name: `${sensorDef.displayName} Sensor`,
+                    sensor_type: dbSensorType,
+                    sensor_code: serialNumber,
+                    status: 'Online',
+                    is_active: true
+                  });
+                
+                if (sensorError) {
+                  console.error(`❌ Sensor insert error: ${serialNumber}`, sensorError);
+                  throw new Error(`Sensor creation error: ${sensorError.message || sensorError.details || JSON.stringify(sensorError)}`);
+                }
+              }
             }
           }
         }
       } else {
-        // Single room: use existing logic
+        // Single room mode
+        const roomId = createdRoomIds[0];
+        console.log('🔵 Single room mode - creating sensors for room:', roomId);
+        
         for (const [internalKey, quantity] of Object.entries(setupData.sensorQuantities)) {
-          if (quantity === 0) continue;
+          if (quantity <= 0) continue;
 
           const sensorDef = SENSOR_REGISTRY.find(s => s.internalKey === internalKey);
           if (!sensorDef) continue;
 
+          const dbTypes = mapSensorTypeForDB(internalKey);
+
           for (let i = 0; i < quantity; i++) {
-            const serialNumber = generateSerialNumber();
-            const mqttTopic = generateMQTTTopic(createdRoomIds[0], internalKey, i + 1);
-            
-            const { error: sensorError } = await supabase
-              .from('sensor_devices')
-              .insert({
-                room_id: createdRoomIds[0],
-                sensor_name: sensorDef.displayName,
-                sensor_type: internalKey,
-                serial_number: serialNumber,
-                mqtt_topic: mqttTopic,
-                firmware_version: '1.0.0',
-                installation_date: new Date().toISOString(),
-                last_calibration: new Date().toISOString(),
-                status: 'Online',
-                last_seen: new Date().toISOString(),
-                battery_percentage: 100,
-                remarks: '',
-              });
-            if (sensorError) throw sensorError;
+            for (const dbSensorType of dbTypes) {
+              const serialNumber = generateSerialNumber();  // Generate ONCE per type
+              console.log(`🔵 Inserting sensor: room=${roomId}, type=${dbSensorType}, code=${serialNumber}`);
+              const { error: sensorError } = await supabase
+                .from('sensor_devices')
+                .insert({
+                  room_id: roomId,
+                  site_id: createdFacilityId,
+                  sensor_name: `${sensorDef.displayName} Sensor`,
+                  sensor_type: dbSensorType,
+                  sensor_code: serialNumber,
+                  status: 'Online',
+                  is_active: true
+                });
+              
+              if (sensorError) {
+                console.error(`❌ Sensor insert error: ${serialNumber}`, sensorError);
+                throw new Error(`Sensor creation error: ${sensorError.message || sensorError.details || JSON.stringify(sensorError)}`);
+              }
+            }
           }
         }
       }
 
-      const totalSensorsCreated = totalSensors;
-      console.log(`✓ Created ${totalSensorsCreated} sensor devices`);
+      console.log('✅ All sensor devices configured successfully');
 
       // Mark onboarding as complete
       completeStep('profile');
@@ -543,12 +601,12 @@ const OwnerSetup: React.FC = () => {
       // Clear selected site to force reload of sites list
       setSelectedFacilityId(null);
       
-      // Navigate to dashboard
+      setLoading(false);
       navigate('/owner/dashboard', { replace: true });
-    } catch (err) {
-      console.error('Error configuring sensors:', err);
-      setError('Failed to configure sensors. Please try again.');
-    } finally {
+    } catch (err: any) {
+      console.error('❌ Error configuring sensors:', err);
+      const errorMessage = err?.message || err?.details || (typeof err === 'string' ? err : JSON.stringify(err));
+      setError(`Failed to configure sensors: ${errorMessage}`);
       setLoading(false);
     }
   };
@@ -876,11 +934,6 @@ const OwnerSetup: React.FC = () => {
             className="flex-1"
             loading={loading}
             onClick={handleConfigureSensors}
-            disabled={
-              isMultiRoom
-                ? false // Don't disable for multi-room, validation happens in handleConfigureSensors
-                : Object.values(setupData.sensorQuantities).reduce((sum, qty) => sum + qty, 0) === 0
-            }
           >
             Complete Setup
             <Check className="h-4 w-4 ml-2" />

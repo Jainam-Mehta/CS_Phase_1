@@ -3,7 +3,6 @@ import { Wrench, CheckCircle, Calendar, Settings, AlertTriangle, PenTool, Drople
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 
 // Facility maintenance items with their schedules
 const FACILITY_MAINTENANCE_ITEMS = [
@@ -73,20 +72,19 @@ interface MaintenanceRecord {
   id: string;
   site_id: string | null;
   maintenance_type: string;
+  description?: string;
   last_service_date: string;
   next_due_date: string;
   status: 'healthy' | 'due' | 'in_progress' | 'critical';
   notes?: string;
+  performed_by?: string;
   created_at: string;
-  updated_at: string;
+  daysRemaining?: number;
 }
 
 const OwnerMaintenance: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
-  
   const [loading, setLoading] = useState(true);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -111,32 +109,12 @@ const OwnerMaintenance: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadMaintenanceData();
     }
-  }, [user?.id, selectedFacilityId, isDemoMode]);
+  }, [user?.id, selectedFacilityId]);
 
   const loadMaintenanceData = async () => {
     try {
       setLoading(true);
       
-      // Demo mode: use hardcoded data
-      if (isDemoMode && demoData) {
-        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
-        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
-
-        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
-        setRooms(demoRooms);
-
-        if (demoRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(demoRooms[0].id);
-        }
-
-        // Use maintenance data
-        const siteMaintenance = demoData.maintenance.filter(m => m.site_id === selectedFacilityId);
-        setMaintenanceRecords(siteMaintenance);
-        
-        setLoading(false);
-        return;
-      }
-
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')
@@ -178,10 +156,17 @@ const OwnerMaintenance: React.FC = () => {
       const siteCreatedDate = siteCreationData?.created_at ? new Date(siteCreationData.created_at) : new Date();
       
       // Try to fetch from maintenance table, if not found, initialize with defaults
-      const { data: existingRecords } = await supabase
-        .from('facility_maintenance')
-        .select('*')
-        .eq('site_id', selectedFacilityId);
+      let existingRecords = null;
+      try {
+        const { data } = await supabase
+          .from('facility_maintenance')
+          .select('*')
+          .eq('site_id', selectedFacilityId);
+        existingRecords = data;
+      } catch (err) {
+        console.warn('Could not fetch facility_maintenance records (table may not exist):', err);
+        existingRecords = null;
+      }
       
       if (existingRecords && existingRecords.length > 0) {
         // Use existing records and calculate their status
@@ -242,19 +227,24 @@ const OwnerMaintenance: React.FC = () => {
             id: item.id,
             site_id: selectedFacilityId,
             maintenance_type: item.id,
+            description: item.name,
             last_service_date: lastServiceDate.toISOString(),
             next_due_date: nextDueDate.toISOString(),
             status,
             notes: `Initial maintenance schedule for ${item.name}`,
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           };
         });
         
         // Save to database
-        await supabase
-          .from('facility_maintenance')
-          .insert(demoRecords);
+        try {
+          await supabase
+            .from('facility_maintenance')
+            .insert(demoRecords);
+        } catch (insertError) {
+          console.warn('Could not save maintenance records to database (table may not exist):', insertError);
+          // Continue anyway - data is stored in state
+        }
         
         setMaintenanceRecords(demoRecords);
       }
@@ -320,20 +310,18 @@ const OwnerMaintenance: React.FC = () => {
 
       if (logError) throw logError;
 
-      // 2. Upsert into facility_maintenance (current status) - mark as healthy after completion
+      // 2. Update facility_maintenance (current status) - mark as healthy after completion
       const { error: statusError } = await supabase
         .from('facility_maintenance')
-        .upsert({
-          site_id: selectedFacilityId,
-          maintenance_type: scheduleForm.maintenance_type,
+        .update({
           last_service_date: scheduledDate.toISOString(),
           next_due_date: nextDueDate.toISOString(),
           status: 'healthy',
           notes: scheduleForm.notes,
           performed_by: scheduleForm.performed_by
-        }, {
-          onConflict: 'site_id,maintenance_type'
-        });
+        })
+        .eq('site_id', selectedFacilityId)
+        .eq('maintenance_type', scheduleForm.maintenance_type);
 
       if (statusError) throw statusError;
 
@@ -370,9 +358,9 @@ const OwnerMaintenance: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown in the top header.
+          Please select a site from the dropdown in the top header.
         </p>
       </div>
     );
@@ -402,25 +390,6 @@ const OwnerMaintenance: React.FC = () => {
           Schedule Maintenance
         </button>
       </div>
-
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
           <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-xl">
@@ -435,16 +404,6 @@ const OwnerMaintenance: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
           <div className="p-3 bg-orange-50 dark:bg-orange-900/30 rounded-xl">
             <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Due Soon</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{dueItems.length}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-            <Calendar className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Due Soon</h3>

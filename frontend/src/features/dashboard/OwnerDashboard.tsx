@@ -2,20 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 import { HVACDiagram } from './components/HVACDiagram';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
+import { convertKgToCrates } from '../../utils/units';
 
 
 const OwnerDashboard: React.FC = () => {
   const { user } = useAuthStore();
-  const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
-  
+  const { selectedFacilityId, selectedRoomId } = useSiteStore();
   const [loading, setLoading] = useState(true);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
   // States
   const [rooms, setRooms] = useState<any[]>([]);
@@ -26,7 +22,7 @@ const OwnerDashboard: React.FC = () => {
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleTimeString());
   const [latestCondition, setLatestCondition] = useState<any>(null);
   
-  // Real database data for charts - Demo mode supported
+  // Real database data for charts - NO DEMO DATA
   const [revenueHistory, setRevenueHistory] = useState<any[]>([]);
   const [farmerActivity, setFarmerActivity] = useState<any[]>([]);
   const [energyHistory, setEnergyHistory] = useState<any[]>([]);
@@ -43,7 +39,7 @@ const OwnerDashboard: React.FC = () => {
     if (user?.id && selectedFacilityId) {
       loadFacilityData();
     }
-  }, [user?.id, selectedFacilityId, isDemoMode]); // Added isDemoMode dependency
+  }, [user?.id, selectedFacilityId, selectedRoomId]); // Also react to room changes
 
   const loadFacilityData = async () => {
     try {
@@ -51,81 +47,7 @@ const OwnerDashboard: React.FC = () => {
       console.log('=== OWNER DASHBOARD LOAD STARTED ===');
       console.log('User ID:', user?.id);
       console.log('Selected Facility ID:', selectedFacilityId);
-      console.log('Demo Mode:', isDemoMode);
 
-      // CHECK DEMO MODE FIRST
-      if (isDemoMode && demoData) {
-        // Use demo data for Rupesh (Owner)
-        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
-        setSiteName(currentSite.facility_name);
-        
-        // Set rooms for selected facility
-        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
-        setRooms(siteRooms);
-        
-        if (siteRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(siteRooms[0].id);
-        }
-        
-        // Set sensors - all 13 sensors
-        setDbSensors(demoData.sensors);
-        
-        // Set latest conditions from the first sensor reading
-        const latestReading = demoData.sensorReadings[0];
-        setLatestCondition({
-          temperature: latestReading.temperature,
-          humidity: latestReading.humidity,
-          ambient_temperature: 22.3,
-          ambient_humidity: 65.8,
-          suction_pressure: 145,
-          discharge_pressure: 210,
-          compressor_status: 'Optimal',
-          door_status: 'Closed',
-          solar_percentage: 40,
-          energy_consumption_kwh: 52,
-          recorded_at: new Date().toISOString()
-        });
-        
-        // Set inventory
-        setInventory(demoData.inventory);
-        
-        // Set stakeholders (empty for demo)
-        setStakeholders([]);
-        
-        // Revenue history - last 4 weeks from farmer payments (Roy's storage charges)
-        const weeklyRevenue = [
-          { time: 'Week 1', value: 50 },
-          { time: 'Week 2', value: 65 },
-          { time: 'Week 3', value: 80 },
-          { time: 'Week 4', value: 216.2 } // Total storage charges from Roy
-        ];
-        setRevenueHistory(weeklyRevenue);
-        
-        // Farmer activity - last 7 days (Roy's inventory additions)
-        const activityByDay = [
-          { day: 'Mon', checkIns: 0, batchesAdded: 0 },
-          { day: 'Tue', checkIns: 0, batchesAdded: 1 }, // 16th - 12 crates
-          { day: 'Wed', checkIns: 0, batchesAdded: 0 },
-          { day: 'Thu', checkIns: 0, batchesAdded: 1 }, // 18th - 11 crates
-          { day: 'Fri', checkIns: 0, batchesAdded: 1 }, // 19th - 8 crates
-          { day: 'Sat', checkIns: 0, batchesAdded: 0 },
-          { day: 'Sun', checkIns: 1, batchesAdded: 1 } // 21st - 14 crates added, 25 crates removed/sold
-        ];
-        setFarmerActivity(activityByDay);
-        
-        // Energy consumption - last 8 days from demo data
-        const energyForSite = demoData.energy.filter((e: any) => e.site_id === currentSite.id);
-        const energyByDay = energyForSite.slice(0, 8).reverse().map((e: any) => ({
-          time: e.date.split('-').slice(1).join('/'), // Format as MM/DD
-          value: e.kwh
-        }));
-        setEnergyHistory(energyByDay);
-        
-        setLoading(false);
-        return;
-      }
-
-      // NORMAL DATABASE FLOW for non-demo users
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')
@@ -148,17 +70,12 @@ const OwnerDashboard: React.FC = () => {
       const resolvedRooms = rmData || [];
       setRooms(resolvedRooms);
 
-      // Set default room if not already selected
-      if (resolvedRooms.length > 0 && !selectedRoomId) {
-        setSelectedRoomId(resolvedRooms[0].id);
-      }
-
       if (resolvedRooms.length > 0) {
-        const roomIds = resolvedRooms.length > 1 && selectedRoomId 
-          ? [selectedRoomId]  // Filter by selected room if multiple rooms
-          : resolvedRooms.map((r) => r.id);  // Use all rooms if only 1 room
+        // Always use the selected room, or default to the first room
+        const roomToUse = selectedRoomId || resolvedRooms[0].id;
+        const roomIds = [roomToUse];
 
-        // Fetch Sensors
+        // Fetch Sensors ONLY for the selected/default room
         const { data: sensorData } = await supabase
           .from('sensor_devices')
           .select('*')
@@ -196,7 +113,8 @@ const OwnerDashboard: React.FC = () => {
         const { data: invData } = await supabase
           .from('batch_room_allocations')
           .select('*, batches(farmer_id)')
-          .in('room_id', roomIds);
+          .in('room_id', roomIds)
+          .is('removed_at', null);
           
         setInventory(invData || []);
         
@@ -209,43 +127,94 @@ const OwnerDashboard: React.FC = () => {
         
         let stakeholdersList: any[] = [];
         if (ownerProfile?.owner_company_id) {
-          const { data: stakeholderInvestments } = await supabase
-            .from('stakeholder_investments')
-            .select('stakeholder_id')
-            .eq('owner_company_id', ownerProfile.owner_company_id)
-            .eq('active', true);
-          
-          stakeholdersList = stakeholderInvestments?.map(s => s.stakeholder_id) || [];
+          try {
+            const { data: stakeholderInvestments, error } = await supabase
+              .from('stakeholder_investments')
+              .select('stakeholder_id')
+              .eq('owner_company_id', ownerProfile.owner_company_id)
+              .eq('status', 'active');
+            
+            if (!error) {
+              stakeholdersList = stakeholderInvestments?.map(s => s.stakeholder_id) || [];
+            } else {
+              console.warn('Error fetching stakeholder investments:', error);
+            }
+          } catch (err) {
+            console.warn('Could not fetch stakeholder investments:', err);
+          }
         }
         
         setStakeholders(stakeholdersList);
         
         // Fetch real chart data from database
-        // 1. Revenue history - last 4 weeks from farmer_payments
-        // Revenue from farmer payments (calculated from crates × price)
+        // 1. Revenue history - Calculate TOTAL monthly revenue from stakeholder investments + farmer storage
+        // Display as a single total value (since we don't have daily breakdown data)
         const fourWeeksAgo = new Date();
         fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
         
-        const { data: paymentsData } = await supabase
-          .from('farmer_payments')
-          .select('total_amount, period_start')
-          .gte('period_start', fourWeeksAgo.toISOString())
-          .order('period_start', { ascending: true });
+        // Get owner's sites
+        const { data: ownerSitesData } = await supabase
+          .from('sites')
+          .select('id')
+          .eq('owner_profile_id', user?.id);
+        
+        const ownerSiteIds = ownerSitesData?.map((s: any) => s.id) || [];
+        
+        // Get stakeholder investments for these sites (already approved)
+        let stakeholderRevenue = 0;
+        if (ownerSiteIds.length > 0) {
+          const { data: stakeholderInvs } = await supabase
+            .from('stakeholder_investments')
+            .select('investment_amount_inr')
+            .in('site_id', ownerSiteIds)
+            .eq('status', 'active');
           
-        // Group by week
+          (stakeholderInvs || []).forEach((inv: any) => {
+            stakeholderRevenue += Number(inv.investment_amount_inr) || 0;
+          });
+        }
+        
+        // Get farmer storage revenue from allocations in this room
+        let farmerStorageRevenue = 0;
+        if (roomIds.length > 0) {
+          const { data: allocationsForRevenue } = await supabase
+            .from('batch_room_allocations')
+            .select('quantity_kg, batches(farmer_id)')
+            .in('room_id', roomIds)
+            .is('removed_at', null);
+          
+          const { data: pricingData } = await supabase
+            .from('farmer_room_access')
+            .select('farmer_id, room_id, price_per_crate, status')
+            .in('room_id', roomIds)
+            .eq('status', 'Approved');
+          
+          const pricingMap = new Map<string, number>();
+          (pricingData || []).forEach((p: any) => {
+            const key = `${p.farmer_id}_${p.room_id}`;
+            pricingMap.set(key, p.price_per_crate || 1.20);
+          });
+          
+          (allocationsForRevenue || []).forEach((alloc: any) => {
+            const qtyKg = Number(alloc.quantity_kg) || 0;
+            const crates = convertKgToCrates(qtyKg);
+            const farmerId = alloc.batches?.farmer_id;
+            const pricingKey = `${farmerId}_${alloc.room_id}`;
+            const pricePerCrate = pricingMap.get(pricingKey) || 1.20;
+            farmerStorageRevenue += crates * pricePerCrate;
+          });
+        }
+        
+        // Total monthly revenue from all sources
+        const totalMonthlyRevenue = stakeholderRevenue + farmerStorageRevenue;
+        
+        // Display as a single bar for "This Month" since we don't have daily breakdown
         const weeklyRevenue = [
           { time: 'Week 1', value: 0 },
           { time: 'Week 2', value: 0 },
           { time: 'Week 3', value: 0 },
-          { time: 'Week 4', value: 0 }
+          { time: 'Week 4', value: totalMonthlyRevenue } // Show total in Week 4
         ];
-        
-        (paymentsData || []).forEach((payment: any) => {
-          const paymentDate = new Date(payment.period_start);
-          const daysDiff = Math.floor((new Date().getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-          const weekIndex = Math.min(3, Math.floor(daysDiff / 7));
-          weeklyRevenue[3 - weekIndex].value += (payment.total_amount); // Keep in rupees for accurate scaling
-        });
         
         setRevenueHistory(weeklyRevenue);
         
@@ -304,12 +273,23 @@ const OwnerDashboard: React.FC = () => {
         console.log('Energy Chart - Today\'s date:', today.toDateString());
         console.log('Energy Chart - 7 days ago:', eightDaysAgo.toDateString());
         
-        const { data: energyData } = await supabase
-          .from('energy_consumption')
-          .select('total_kwh, reading_date')
-          .eq('site_id', selectedFacilityId)
-          .gte('reading_date', eightDaysAgo.toISOString().split('T')[0])
-          .order('reading_date', { ascending: true });
+        let energyData: any[] = [];
+        try {
+          const { data, error } = await supabase
+            .from('energy_consumption')
+            .select('total_kwh, reading_date')
+            .eq('site_id', selectedFacilityId)
+            .gte('reading_date', eightDaysAgo.toISOString())
+            .order('reading_date', { ascending: true });
+          
+          if (!error) {
+            energyData = data || [];
+          } else {
+            console.warn('Error fetching energy consumption:', error);
+          }
+        } catch (err) {
+          console.warn('Could not fetch energy consumption data:', err);
+        }
           
         // Group by day - last 8 days including today
         const energyByDay: any[] = [];
@@ -373,26 +353,38 @@ const OwnerDashboard: React.FC = () => {
     return (st === 'active' || st === 'online') && hasPassedReading;
   };
 
-  const totalSensors = 10;
-  const activeSensors = 10;
-  const inactiveSensors = 0;
+  const totalSensors = dbSensors.length;
+  const activeSensors = dbSensors.filter(s => isSensorActive(s)).length;
+  const inactiveSensors = totalSensors - activeSensors;
 
   // Farmers count from real data
   const uniqueFarmers = inventory.length > 0 
-    ? new Set(inventory.filter((i) => i.batches?.farmer_id).map((i) => i.batches.farmer_id)).size
+    ? new Set(inventory.filter((i) => {
+        const batch = Array.isArray(i.batches) ? i.batches[0] : i.batches;
+        return batch?.farmer_id;
+      }).map((i) => {
+        const batch = Array.isArray(i.batches) ? i.batches[0] : i.batches;
+        return batch?.farmer_id;
+      })).size
     : 0;
   
   // Stakeholders count from actual database query
   const totalStakeholders = stakeholders.length;
 
-  // Storage from real data
+  // Storage from real data - calculated from actual inventory
   const totalCapacity = rooms.length > 0 
     ? rooms.reduce((acc, rm) => acc + (Number(rm.capacity_kg) || 0), 0)
     : 0;
-  const currentUtilization = rooms.length > 0
-    ? rooms.reduce((acc, rm) => acc + (Number(rm.current_utilization_kg) || 0), 0)
+  
+  // Calculate used capacity from inventory (batches in this room)
+  const usedCapacity = inventory.length > 0
+    ? inventory.reduce((sum, alloc) => {
+        const qty = Number(alloc.quantity_kg) || 0;
+        return sum + qty;
+      }, 0)
     : 0;
-  const storagePercentage = totalCapacity > 0 ? ((currentUtilization / totalCapacity) * 100).toFixed(1) : '0';
+  
+  const storagePercentage = totalCapacity > 0 ? ((usedCapacity / totalCapacity) * 100).toFixed(1) : '0';
 
   // System Status based on actual alerts and sensor health
   const getSystemStatus = () => {
@@ -600,9 +592,9 @@ const OwnerDashboard: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown in the top header.
+          Please select a site from the dropdown in the top header.
         </p>
       </div>
     );
@@ -624,18 +616,7 @@ const OwnerDashboard: React.FC = () => {
       {/* Room Selector - Show if multiple rooms */}
       {rooms.length > 1 && (
         <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Viewing: {selectedRoomId ? `Room ID: ${selectedRoomId}` : 'All Rooms'}</p>
         </div>
       )}
       
@@ -717,7 +698,7 @@ const OwnerDashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
                 <XAxis dataKey="time" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} width={30} />
-                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} formatter={(value: any) => `₹${value.toFixed(2)}`} />
+                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} formatter={(value: any) => `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`} />
                 <Area type="monotone" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>
             </ResponsiveContainer>

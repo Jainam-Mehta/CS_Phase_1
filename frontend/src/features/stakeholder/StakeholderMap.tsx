@@ -8,7 +8,6 @@ import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
 import { Search, Map as MapIcon, Loader2, AlertCircle, TrendingUp, Building2, MapPin, Leaf, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDemoData } from '../../hooks/useDemoData';
 
 // The topological data downloaded locally
 const geoUrl = '/india.topo.json';
@@ -28,6 +27,7 @@ interface InvestmentData {
   investment_amount_inr: number;
   roi_percentage_estimate: number;
   carbon_credits?: number;
+  status?: string;
 }
 
 interface StateSummary {
@@ -44,8 +44,6 @@ interface StateSummary {
 const StakeholderMap: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { isDemoMode, getStakeholderData } = useDemoData();
-  const demoData = getStakeholderData();
   
   const [loading, setLoading] = useState(true);
   const [geoData, setGeoData] = useState<any | null>(null);
@@ -78,12 +76,15 @@ const StakeholderMap: React.FC = () => {
         if (!data || typeof data !== 'object') {
           throw new Error('Invalid topojson data structure.');
         }
-        setGeoData(data);
+        if (data.objects && data.objects.states) {
+          setGeoData({ ...data, objects: { states: data.objects.states } });
+        } else {
+          setGeoData(data);
+        }
       })
       .catch(e => {
         console.error("Map load error:", e);
         setMapError(true);
-        loadMapData();
       });
       
     loadMapData();
@@ -98,40 +99,19 @@ const StakeholderMap: React.FC = () => {
         return;
       }
 
-      // Demo mode: use hardcoded data
-      if (isDemoMode && demoData) {
-        const demoFacilities: FacilityData[] = demoData.investments.map((inv: any) => ({
-          id: inv.site_id,
-          facility_name: inv.facility_name,
-          stateId: inv.state.toLowerCase().replace(/\s+/g, '-'),
-          stateName: inv.state,
-          districtName: inv.district,
-          cityName: inv.locality || inv.district,
-        }));
-
-        setFacilities(demoFacilities);
-        setInvestments(demoData.investments.map((inv: any) => ({
-          site_id: inv.site_id,
-          investment_amount_inr: inv.investment_amount,
-          roi_percentage_estimate: inv.roi_percentage,
-          carbon_credits: 45,
-        })));
-
-        setLoading(false);
-        return;
-      }
-
       const profile = await resolveProfile(user.id);
       if (!profile) {
         setLoading(false);
         return;
       }
 
-      // Fetch all sites with location context
+      // Fetch all sites with location context (direct foreign keys + locality joins)
       const { data: facs, error: facErr } = await supabase
         .from('sites')
         .select(`
-          id, facility_name,
+          id, facility_name, state_id, district_id, locality_id,
+          states ( id, name ),
+          districts ( id, name ),
           localities (
             name,
             districts (
@@ -141,23 +121,63 @@ const StakeholderMap: React.FC = () => {
           )
         `);
 
+      if (facErr) {
+        console.error("Error fetching sites location context:", facErr);
+      }
+
       const flatFacilities = (facs || []).map((f: any) => ({
         id: f.id,
         facility_name: f.facility_name,
-        stateId: f.localities?.districts?.states?.id || '',
-        stateName: f.localities?.districts?.states?.name || 'Unknown',
-        districtName: f.localities?.districts?.name || 'Unknown',
-        cityName: f.localities?.name || 'Unknown',
+        stateId: f.states?.id || f.localities?.districts?.states?.id || '',
+        stateName: f.states?.name || f.localities?.districts?.states?.name || 'Unknown',
+        districtName: f.districts?.name || f.localities?.districts?.name || 'Unknown',
+        cityName: f.localities?.name || f.districts?.name || f.states?.name || 'Unknown',
       }));
 
-      // Fetch user's investments
+      // Fetch user's investments (only approved/active ones)
       const { data: invs } = await supabase
         .from('stakeholder_investments')
         .select('*')
-        .eq('stakeholder_id', profile.id);
+        .eq('stakeholder_id', profile.id)
+        .in('status', ['active', 'Active']);
 
       setFacilities(flatFacilities);
       setInvestments(invs || []);
+
+      // Setup real-time listener for investment changes
+      if (profile.id) {
+        const channelName = `stakeholder-portfolio-${profile.id}`;
+        const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`);
+        if (existingChannel) {
+          supabase.removeChannel(existingChannel);
+        }
+
+        const channel = supabase.channel(channelName)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'stakeholder_investments',
+              filter: `stakeholder_id=eq.${profile.id}`
+            },
+            () => {
+              console.log('Investment change detected, refreshing portfolio');
+              // Refetch investments
+              supabase
+                .from('stakeholder_investments')
+                .select('*')
+                .eq('stakeholder_id', profile.id)
+                .in('status', ['active', 'Active'])
+                .then(({ data: updatedInvs }) => {
+                  setInvestments(updatedInvs || []);
+                });
+            }
+          );
+        
+        // Subscribe after adding all callbacks
+        channel.subscribe();
+      }
     } catch (e) {
       console.error("Error loading portfolio data:", e);
     } finally {
@@ -208,11 +228,12 @@ const StakeholderMap: React.FC = () => {
   const portfolio = useMemo(() => {
     let totInv = 0;
     let totCities = new Set<string>();
-    let totalInvestedFacs = investments.length;
+    let totalInvestedFacs = 0;
     let totalRoiRaw = 0;
     let totalCredits = 0;
 
     investments.forEach(i => {
+      totalInvestedFacs += 1;
       totInv += Number(i.investment_amount_inr) || 0;
       totalRoiRaw += Number(i.roi_percentage_estimate) || 0;
       totalCredits += Number(i.carbon_credits) || 241;

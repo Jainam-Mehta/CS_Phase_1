@@ -226,7 +226,7 @@ const ProductSelection: React.FC = () => {
 
       // Complete onboarding step only if not in extension mode
       if (!isExtensionMode) {
-        completeStep('products');
+        completeStep('dashboard');
       }
 
       // Navigate based on mode
@@ -260,7 +260,7 @@ const ProductSelection: React.FC = () => {
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 3/3
+                Step 3/4
               </span>
             </div>
             

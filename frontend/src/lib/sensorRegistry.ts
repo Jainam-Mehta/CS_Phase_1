@@ -267,11 +267,14 @@ export function generateMQTTTopic(roomUuid: string, internalKey: string, sensorI
 
 /**
  * Generate serial number for a sensor
- * Format: SN-{random_6_digits}
+ * Format: SN-{timestamp}-{random}
+ * Ensures uniqueness even with multiple sensors/retries
  * @returns Serial number string
  */
 export function generateSerialNumber(): string {
-  return `SN-${Math.floor(100000 + Math.random() * 900000)}`;
+  const timestamp = Date.now().toString(36); // Base36 encoded timestamp
+  const random = Math.random().toString(36).substring(2, 8); // 6 random chars
+  return `SN-${timestamp}-${random}`.toUpperCase();
 }
 
 /**

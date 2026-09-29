@@ -86,49 +86,36 @@ const AuthCallback: React.FC = () => {
             console.log('User ID:', session.user?.id);
             console.log('User metadata:', session.user?.user_metadata);
             
-            // Check if user already has a profile
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
+            // DON'T check profile - use session metadata only
+            console.log('User role from metadata:', session.user?.user_metadata?.role);
+            
+            // Determine routing based on session metadata
+            const roleFromMetadata = getRoleFromUserMetadata(session.user);
+            const roleFromStorage = getRoleFromStorage();
+            const roleFromStore = selectedRole;
+            
+            const effectiveRole = roleFromMetadata || roleFromStorage || roleFromStore;
+            console.log('Effective role for routing:', effectiveRole, '(metadata:', roleFromMetadata, ', storage:', roleFromStorage, ', store:', roleFromStore, ')');
             
             // Clear the hash from URL
             window.location.hash = '';
             
-            if (profile && !profileError) {
-              console.log('✓ Profile found, redirecting to dashboard');
-              navigate('/');
+            // Route according to role
+            if (effectiveRole === 'owner') {
+              console.log('Redirecting owner to owner profile setup');
+              navigate('/owner-profile-setup');
+            } else if (effectiveRole === 'stakeholder') {
+              console.log('Redirecting stakeholder to stakeholder profile setup');
+              navigate('/stakeholder-profile-setup');
+            } else if (effectiveRole === 'farmer') {
+              console.log('Redirecting farmer to farmer profile setup');
+              navigate('/farmer-profile-setup');
+            } else if (effectiveRole === 'admin') {
+              console.log('Redirecting admin to role selection (future implementation)');
+              navigate('/role-selection');
             } else {
-              console.log('No profile found, determining role for routing');
-              
-              // Get role from user metadata (primary source)
-              const roleFromMetadata = getRoleFromUserMetadata(session.user);
-              // Fallback to localStorage
-              const roleFromStorage = getRoleFromStorage();
-              // Fallback to store
-              const roleFromStore = selectedRole;
-              
-              const effectiveRole = roleFromMetadata || roleFromStorage || roleFromStore;
-              console.log('Effective role for routing:', effectiveRole, '(metadata:', roleFromMetadata, ', storage:', roleFromStorage, ', store:', roleFromStore, ')');
-              
-              // Route according to role
-              if (effectiveRole === 'owner') {
-                console.log('Redirecting owner to owner profile setup');
-                navigate('/owner-profile-setup');
-              } else if (effectiveRole === 'stakeholder') {
-                console.log('Redirecting stakeholder to stakeholder profile setup');
-                navigate('/stakeholder-profile-setup');
-              } else if (effectiveRole === 'farmer') {
-                console.log('Redirecting farmer to farmer profile setup');
-                navigate('/farmer-profile-setup');
-              } else if (effectiveRole === 'admin') {
-                console.log('Redirecting admin to role selection (future implementation)');
-                navigate('/role-selection');
-              } else {
-                console.log('No role found, redirecting to role selection');
-                navigate('/role-selection');
-              }
+              console.log('No role found, redirecting to role selection');
+              navigate('/role-selection');
             }
             return;
           }

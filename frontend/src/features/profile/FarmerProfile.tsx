@@ -10,24 +10,20 @@ import { useNavigate } from 'react-router-dom';
 import type { State, District, Locality } from '../../lib/supabase';
 
 interface FarmerProfileData {
-  id: number;
-  auth_user_id: string;
-  first_name: string;
-  last_name?: string;
-  date_of_birth?: string;
-  phone?: string;
-  gender?: string;
-  state_id: number;
-  district_id: number;
-  locality_id?: number;
-  role_id: string;
-  created_at: string;
-  updated_at: string;
-  states?: { name: string };
-  districts?: { name: string };
-  localities?: { name: string };
-  roles?: { name: string };
+  id: string;
   email?: string;
+  full_name?: string;
+  role?: string;
+  phone?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  date_of_birth?: string;
+  gender?: string;
+  state_id?: string;
+  district_id?: string;
+  locality_id?: string;
+  owner_company_id?: string;
 }
 
 const FarmerProfile: React.FC = () => {
@@ -69,7 +65,19 @@ const FarmerProfile: React.FC = () => {
   useEffect(() => {
     loadFarmerProfile();
     loadStates();
+    loadAllDistricts();
+    loadAllLocalities();
   }, [user?.id]);
+  
+  const loadAllDistricts = async () => {
+    const { data } = await supabase.from('districts').select('*').order('name');
+    if (data) setDistricts(data);
+  };
+  
+  const loadAllLocalities = async () => {
+    const { data } = await supabase.from('localities').select('*').order('name');
+    if (data) setLocalities(data);
+  };
 
   useEffect(() => {
     if (selectedStateId) loadDistricts(selectedStateId);
@@ -102,7 +110,7 @@ const FarmerProfile: React.FC = () => {
 
       const { data, error: fetchError } = await supabase
         .from('profiles')
-        .select(`*, states(name), districts(name), localities(name), roles(name)`)
+        .select('*')
         .eq('id', user.id)
         .single();
 
@@ -110,20 +118,28 @@ const FarmerProfile: React.FC = () => {
 
       const { data: { user: authUser } } = await supabase.auth.getUser();
       
-      setProfileData({ ...data, email: authUser?.email });
+      setProfileData({ ...data, email: authUser?.email || data.email });
+
+      // Load the specific state/district/locality for this profile
+      if (data.state_id) {
+        await loadDistricts(data.state_id);
+      }
+      if (data.district_id) {
+        await loadLocalities(data.district_id);
+      }
 
       // Init edit form
       setFormData({
          phone: data.phone || '',
          dateOfBirth: data.date_of_birth || '',
          gender: data.gender || '',
-         state: data.states?.name || '',
-         district: data.districts?.name || '',
-         locality: data.localities?.name || ''
+         state: '',
+         district: '',
+         locality: ''
       });
-      setSelectedStateId(data.state_id?.toString());
-      setSelectedDistrictId(data.district_id?.toString());
-      setSelectedLocalityId(data.locality_id?.toString());
+      setSelectedStateId(null);
+      setSelectedDistrictId(null);
+      setSelectedLocalityId(null);
 
       // Fetch Storage Stats
       let appRooms = 0, penRooms = 0;
@@ -205,6 +221,21 @@ const FarmerProfile: React.FC = () => {
   };
   
   const getFieldValue = (value: any) => value || 'Not Provided';
+  
+  const getStateName = (stateId: string | null | undefined) => {
+    if (!stateId) return null;
+    return states.find(s => s.id === stateId)?.name || null;
+  };
+  
+  const getDistrictName = (districtId: string | null | undefined) => {
+    if (!districtId) return null;
+    return districts.find(d => d.id === districtId)?.name || null;
+  };
+  
+  const getLocalityName = (localityId: string | null | undefined) => {
+    if (!localityId) return null;
+    return localities.find(l => l.id === localityId)?.name || null;
+  };
 
   if (loading) return (
       <div className="flex items-center justify-center h-screen">
@@ -221,7 +252,7 @@ const FarmerProfile: React.FC = () => {
       </div>
   );
 
-  const fullName = `${profileData.first_name} ${profileData.last_name || ''}`.trim();
+  const fullName = profileData.full_name || 'Farmer';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-2">
@@ -241,7 +272,7 @@ const FarmerProfile: React.FC = () => {
                   </div>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mt-4">{fullName}</h3>
-                <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wider">{profileData.roles?.name || 'Farmer'}</p>
+                <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wider">{profileData.role || 'Farmer'}</p>
                 <div className="mt-6 w-full space-y-3">
                   <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                     <Mail className="h-4 w-4" /> <span className="truncate">{profileData.email || 'N/A'}</span>
@@ -250,7 +281,7 @@ const FarmerProfile: React.FC = () => {
                     <Shield className="h-4 w-4" /> <span>Verified Account</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                    <Calendar className="h-4 w-4" /> <span>Member since {new Date(profileData.created_at).getFullYear()}</span>
+                    <Calendar className="h-4 w-4" /> <span>Member since {profileData.created_at ? new Date(profileData.created_at).getFullYear() : 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -283,7 +314,31 @@ const FarmerProfile: React.FC = () => {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Profile Details</CardTitle>
               {!isEditing ? (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>Edit Profile</Button>
+                <Button variant="outline" size="sm" onClick={async () => { 
+                  setFormData({
+                    phone: profileData?.phone || '',
+                    dateOfBirth: profileData?.date_of_birth || '',
+                    gender: profileData?.gender || '',
+                    state: getStateName(profileData?.state_id) || '',
+                    district: getDistrictName(profileData?.district_id) || '',
+                    locality: getLocalityName(profileData?.locality_id) || ''
+                  });
+                  
+                  // Set state and load its districts
+                  if (profileData?.state_id) {
+                    setSelectedStateId(profileData.state_id);
+                    await loadDistricts(profileData.state_id);
+                    
+                    // Set district and load its localities
+                    if (profileData?.district_id) {
+                      setSelectedDistrictId(profileData.district_id);
+                      await loadLocalities(profileData.district_id);
+                      setSelectedLocalityId(profileData?.locality_id || null);
+                    }
+                  }
+                  
+                  setIsEditing(true);
+                }}>Edit Profile</Button>
               ) : (
                 <p className="text-sm font-medium text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1 rounded-full border border-yellow-200 dark:border-yellow-900/30 uppercase tracking-widest animate-pulse">Editing Mode Active</p>
               )}
@@ -353,7 +408,7 @@ const FarmerProfile: React.FC = () => {
                           placeholder="Select State..."
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.states?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100">{getStateName(profileData?.state_id) || 'Not Provided'}</p>
                     )}
                   </div>
                   <div>
@@ -370,7 +425,7 @@ const FarmerProfile: React.FC = () => {
                           disabled={!selectedStateId}
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.districts?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100">{getDistrictName(profileData?.district_id) || 'Not Provided'}</p>
                     )}
                   </div>
                   <div>
@@ -387,7 +442,7 @@ const FarmerProfile: React.FC = () => {
                           disabled={!selectedDistrictId}
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.localities?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100">{getLocalityName(profileData?.locality_id) || 'Not Provided'}</p>
                     )}
                   </div>
                 </div>

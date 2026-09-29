@@ -15,6 +15,7 @@ const FarmerMarketIntelligence: React.FC = () => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [uniqueProducts, setUniqueProducts] = useState<string[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
+  const [totalRevenueFromSales, setTotalRevenueFromSales] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
   // Use market prices hook (fetches from API/store with 24hr cache)
@@ -24,19 +25,6 @@ const FarmerMarketIntelligence: React.FC = () => {
      if (!user?.id) return;
      const load = async () => {
         setLoading(true);
-        
-        // FORCE DEMO MODE FOR DEMO EMAILS
-        const userEmail = user?.email?.toLowerCase();
-        if (userEmail === 'roy@coldsense.in') {
-          setProfileId('demo-farmer-id');
-          setUniqueProducts(['Tomatoes']);
-          setBatches([
-            { product: 'Tomatoes', initial_quantity_kg: 1125, quantity_kg: 1125 }
-          ]);
-          setLoading(false);
-          return;
-        }
-        
         const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
         if (!profile) return;
         setProfileId(profile.id);
@@ -85,6 +73,41 @@ const FarmerMarketIntelligence: React.FC = () => {
             });
             setBatches(transformedBatches);
         }
+        
+        // Fetch sales revenue for this farmer
+        try {
+          const { data: farmerBatches } = await supabase
+            .from('batches')
+            .select('id')
+            .eq('farmer_id', profile.id);
+          
+          if (farmerBatches && farmerBatches.length > 0) {
+            const batchIds = farmerBatches.map(b => b.id);
+            
+            // Query sales table for all batches sold by this farmer
+            const { data: salesData } = await supabase
+              .from('sales')
+              .select('quantity_kg, selling_price')
+              .in('batch_id', batchIds);
+            
+            // Calculate total revenue from all sales
+            let totalRevenue = 0;
+            if (salesData && salesData.length > 0) {
+              totalRevenue = salesData.reduce((sum: number, sale: any) => {
+                const qty = parseFloat(sale.quantity_kg) || 0;
+                const price = parseFloat(sale.selling_price) || 0;
+                return sum + (qty * price);
+              }, 0);
+            }
+            
+            setTotalRevenueFromSales(totalRevenue);
+            console.log(`Farmer ${profile.id}: Total Revenue from ${salesData?.length || 0} sales = ₹${totalRevenue}`);
+          }
+        } catch (err) {
+          console.error('Error fetching sales data:', err);
+          setTotalRevenueFromSales(0);
+        }
+        
         setLoading(false);
      };
      load();
@@ -110,7 +133,6 @@ const FarmerMarketIntelligence: React.FC = () => {
 
   // Calculate Finances using real/simulated market data
   let totalStorageCosts = 0;
-  let totalRevenueEarned = 0;
   let totalCrates = 0;
 
   batches.forEach(b => {
@@ -124,9 +146,8 @@ const FarmerMarketIntelligence: React.FC = () => {
   const storageRatePerCrate = 1.2; // ₹/crate/month - Will be set by owner
   totalStorageCosts = totalCrates * storageRatePerCrate;
   
-  // Revenue earned calculation
-  // TODO: Fetch from completed orders in the orders table
-  totalRevenueEarned = 0; // Will be calculated from orders table
+  // Revenue earned calculation - from actual completed sales
+  const totalRevenueEarned = totalRevenueFromSales;
   
   const netProfit = totalRevenueEarned - totalStorageCosts;
 

@@ -6,78 +6,25 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTo
 import { TrendingUp, TrendingDown, DollarSign, Users, IndianRupee, Zap, Wrench, Package, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { convertKgToCrates } from '../../utils/units';
-import { useDemoData } from '../../hooks/useDemoData';
 
 
 const OwnerFinance: React.FC = () => {
   const { user } = useAuthStore();
-  const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
-  
+  const { selectedFacilityId, selectedRoomId } = useSiteStore();
   const [loading, setLoading] = useState(true);
   const [financeData, setFinanceData] = useState<any>(null);
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadFinanceData();
     }
-  }, [user?.id, selectedFacilityId, selectedRoomId, isDemoMode]);
+  }, [user?.id, selectedFacilityId, selectedRoomId]);
 
   const loadFinanceData = async () => {
     try {
       setLoading(true);
       console.log('=== FINANCE DATA LOAD STARTED ===');
-
-      // Demo mode: use hardcoded data
-      if (isDemoMode && demoData) {
-        const demoSite = demoData.sites.find(s => s.id === selectedFacilityId);
-        setSiteName(demoSite?.facility_name || 'Kullu Storage A');
-
-        const demoRooms = demoData.rooms.filter(r => r.site_id === selectedFacilityId);
-        setRooms(demoRooms);
-
-        if (demoRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(demoRooms[0].id);
-        }
-
-        // Calculate totals from demo data
-        const totalRevenue = demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
-        const totalExpenses = demoData.expenses.reduce((sum: number, e: any) => sum + e.amount, 0);
-        const totalProfit = totalRevenue - totalExpenses;
-        const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0.0';
-
-        setFinanceData({
-          currentMonth: 'September 2024',
-          totalRevenue: totalRevenue,
-          totalExpenses: totalExpenses,
-          totalProfit: totalProfit,
-          profitMargin: profitMargin,
-          farmerRevenue: demoData.farmerPayments.map((p: any) => ({
-            farmer_name: p.farmer_name,
-            total_amount: p.amount,
-            crates: p.crates,
-          })),
-          expenses: demoData.expenses.map((e: any) => ({
-            category: e.category,
-            amount: e.amount,
-            description: e.description,
-            date: e.date,
-          })),
-          monthlyTrend: [
-            { month: 'Sep', revenue: totalRevenue, expenses: totalExpenses, profit: totalProfit },
-          ],
-          totalCrates: demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.crates, 0),
-          totalFarmers: 1,
-          avgPricePerCrate: (totalRevenue / demoData.farmerPayments.reduce((sum: number, p: any) => sum + p.crates, 0)).toFixed(2),
-        });
-
-        setLoading(false);
-        return;
-      }
 
       // Fetch Site Name
       const { data: siteData } = await supabase
@@ -87,39 +34,6 @@ const OwnerFinance: React.FC = () => {
         .single();
 
       setSiteName(siteData?.facility_name || 'Your Site');
-
-      // Fetch Rooms for selected facility
-      const { data: rmData } = await supabase
-        .from('cold_storage_rooms')
-        .select('*')
-        .eq('site_id', selectedFacilityId);
-
-      const resolvedRooms = rmData || [];
-      setRooms(resolvedRooms);
-
-      // Set default room if not already selected
-      if (resolvedRooms.length > 0 && !selectedRoomId) {
-        setSelectedRoomId(resolvedRooms[0].id);
-      }
-
-      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
-
-      if (!roomToUse) {
-        setFinanceData({
-          currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          totalRevenue: 0,
-          totalExpenses: 0,
-          totalProfit: 0,
-          profitMargin: '0.0',
-          farmerRevenue: [],
-          expenses: [],
-          monthlyTrend: [],
-          totalCrates: 0,
-          totalFarmers: 0,
-          avgPricePerCrate: '0',
-        });
-        return;
-      }
 
       // Get owner profile
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -133,41 +47,93 @@ const OwnerFinance: React.FC = () => {
 
       if (!profile) return;
 
-      // 1. Get rooms for selected facility (only the selected room)
-      const roomIds = [roomToUse];
+      // Get ALL rooms (not just selected room) - Profits tab is universal
+      const { data: allRooms } = await supabase
+        .from('cold_storage_rooms')
+        .select('id')
+        .eq('site_id', selectedFacilityId);
 
-      // 2. Fetch STAKEHOLDER INVESTMENT REVENUE (new)
-      const { data: stakeholderPayments } = await supabase
-        .from('stakeholder_payments')
-        .select('amount_inr, created_at, payment_status')
-        .eq('payment_status', 'Received')
-        .order('created_at', { ascending: true });
+      const roomIds = allRooms?.map((r: any) => r.id) || [];
+
+      // 2. Fetch STAKEHOLDER INVESTMENT REVENUE (from approved investments, not payments)
+      // Revenue = sum of investment_amount_inr where status='active' for THIS SITE
+      const { data: stakeholderInvestments } = await supabase
+        .from('stakeholder_investments')
+        .select('investment_amount_inr')
+        .eq('site_id', selectedFacilityId)
+        .eq('status', 'active');
 
       let stakeholderRevenue = 0;
-      (stakeholderPayments || []).forEach((payment: any) => {
-        stakeholderRevenue += payment.amount_inr || 0;
+      (stakeholderInvestments || []).forEach((investment: any) => {
+        stakeholderRevenue += Number(investment.investment_amount_inr) || 0;
       });
 
-      console.log('Stakeholder Investment Revenue:', stakeholderRevenue);
+      console.log('Stakeholder Investment Revenue (from approved investments):', stakeholderRevenue);
 
-      // 3. Fetch FARMER STORAGE REVENUE (existing logic)
-      const { data: paymentsHistory } = await supabase
-        .from('farmer_payments')
-        .select('total_amount, period_start, payment_status')
-        .eq('payment_status', 'Received')
-        .order('period_start', { ascending: true });
-
+      // 3. Fetch FARMER STORAGE REVENUE
+      // Revenue = crates stored × price_per_crate from farmer_room_access
       let farmerRevenue = 0;
-      (paymentsHistory || []).forEach((payment: any) => {
-        farmerRevenue += payment.total_amount || 0;
-      });
+      let totalCrates = 0;
+      let totalFarmers = 0;
+      let farmerPricing: any[] = [];
+      let farmerAllocations: any[] = [];
 
-      console.log('Farmer Storage Revenue:', farmerRevenue);
+      if (roomIds.length > 0) {
+        // Get all batch allocations
+        const { data: allocData, error: allocError } = await supabase
+          .from('batch_room_allocations')
+          .select('room_id, quantity_kg, batches(farmer_id)')
+          .in('room_id', roomIds);
 
-      const totalRevenue = stakeholderRevenue + farmerRevenue;
-      console.log('Total Revenue:', totalRevenue);
+        if (allocError) {
+          console.warn('Error fetching allocations:', allocError);
+        } else {
+          farmerAllocations = allocData || [];
+        }
 
-      // 3. Fetch EXPENSES (if table exists)
+        // Get farmer pricing for these rooms
+        const { data: pricingData } = await supabase
+          .from('farmer_room_access')
+          .select('farmer_id, room_id, price_per_crate, status')
+          .in('room_id', roomIds)
+          .eq('status', 'Approved');
+        
+        farmerPricing = pricingData || [];
+
+        // Calculate total farmer storage revenue
+        if (farmerAllocations && farmerAllocations.length > 0) {
+          const uniqueFarmers = new Set<string>();
+          
+          (farmerAllocations || []).forEach((alloc: any) => {
+            const qtyKg = Number(alloc.quantity_kg) || 0;
+            const crates = convertKgToCrates(qtyKg);
+            totalCrates += crates;
+            
+            // Track unique farmers
+            const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
+            if (batch?.farmer_id) {
+              uniqueFarmers.add(batch.farmer_id);
+            }
+            
+            // Find price for this farmer + room
+            const batchData = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
+            const pricing = farmerPricing?.find((p: any) => 
+              p.farmer_id === batchData?.farmer_id && p.room_id === alloc.room_id
+            );
+            
+            const pricePerCrate = pricing?.price_per_crate || 1.20;
+            farmerRevenue += crates * pricePerCrate;
+          });
+          
+          totalFarmers = uniqueFarmers.size;
+        }
+      }
+
+      console.log('Farmer Storage Revenue (from charges):', farmerRevenue);
+
+      console.log('Total Revenue (Stakeholder + Farmer Storage):', stakeholderRevenue + farmerRevenue);
+
+      // 4. Fetch EXPENSES (if table exists)
       let expData: any[] = [];
       if (roomIds.length > 0) {
         try {
@@ -199,39 +165,95 @@ const OwnerFinance: React.FC = () => {
       });
 
       const totalExpenses = energyCost + maintenanceCost + partsCost + otherCost;
-
-      // 4. Fetch approved farmer allocations & sales
-      const { data: allocData } = await supabase
-        .from('batch_room_allocations')
-        .select(`
-          room_id,
-          quantity_kg,
-          batches!inner(
-            id,
-            farmer_id,
-            remaining_quantity_kg,
-            profiles(full_name)
-          )
-        `)
-        .in('room_id', roomIds)
-        .is('removed_at', null);
-
       const totalExp = energyCost + maintenanceCost + partsCost + otherCost;
 
-      // Group farmer revenue from allocations
-      const farmerMap = new Map<string, { farmer: string; crates: number; total: number; location: string }>();
+      // 5. Build farmer revenue breakdown for detailed table
+      // Reuse the farmer allocations we already fetched earlier
+      console.log('Debug: farmerAllocations before enrichment:', farmerAllocations);
 
-      (allocData || []).forEach((alloc: any) => {
+      let tableAllocations = farmerAllocations || [];
+      
+      // Fetch full batch profiles if we have allocations
+      if (tableAllocations.length > 0) {
+        // Extract farmer_ids from the allocations
+        const farmerIds = new Set<string>();
+        tableAllocations.forEach((alloc: any) => {
+          const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
+          if (batch?.farmer_id) {
+            farmerIds.add(batch.farmer_id);
+          }
+        });
+
+        console.log('Debug: farmerIds to fetch profiles for:', Array.from(farmerIds));
+
+        if (farmerIds.size > 0) {
+          // Fetch farmer profiles
+          const { data: farmerProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', Array.from(farmerIds));
+
+          console.log('Debug: farmer profiles fetched:', farmerProfiles);
+
+          // Create profile lookup map
+          const profileMap = new Map<string, any>();
+          (farmerProfiles || []).forEach((p: any) => {
+            profileMap.set(p.id, p);
+          });
+
+          // Enrich allocations with profile data
+          tableAllocations = tableAllocations.map((alloc: any) => {
+            const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
+            if (batch) {
+              const profile = profileMap.get(batch.farmer_id);
+              return {
+                ...alloc,
+                batches: {
+                  ...batch,
+                  profiles: profile
+                }
+              };
+            }
+            return alloc;
+          });
+        }
+      }
+
+      console.log('Debug: tableAllocations after enrichment:', tableAllocations);
+
+      // Create a map of farmer_id + room_id -> price_per_crate for quick lookup
+      const pricingMap = new Map<string, number>();
+      (farmerPricing || []).forEach((access: any) => {
+        const key = `${access.farmer_id}_${access.room_id}`;
+        if (access.price_per_crate) {
+          pricingMap.set(key, access.price_per_crate);
+        }
+      });
+
+      // Group farmer revenue from allocations for detailed breakdown
+      const farmerMap = new Map<string, { farmer: string; crates: number; total: number; location: string; pricePerCrate: number }>();
+
+      console.log('Table allocations:', tableAllocations);
+      console.log('Pricing map entries:', Array.from(pricingMap.entries()));
+
+      (tableAllocations || []).forEach((alloc: any) => {
         const b = alloc.batches;
-        if (!b) return;
+        if (!b) {
+          console.warn('Allocation has no batches:', alloc);
+          return;
+        }
+        
         const farmerId = b.farmer_id;
-        const name = b.profiles ? `${b.profiles.first_name || ''} ${b.profiles.last_name || ''}`.trim() : 'Farmer';
+        const name = b.profiles ? b.profiles.full_name : 'Farmer';
         const qtyKg = Number(alloc.quantity_kg) || 0;
         const crates = convertKgToCrates(qtyKg);
         
-        // Use facility's price_per_crate from facilities table
-        const pricePerCrate = 1.4; // Default, should come from facility settings
+        // Get price_per_crate from pricing map, default to 1.20 if not set
+        const pricingKey = `${farmerId}_${alloc.room_id}`;
+        const pricePerCrate = pricingMap.get(pricingKey) || 1.20;
         const rev = crates * pricePerCrate;
+
+        console.log(`Processing farmer ${name} (${farmerId}): ${crates} crates @ ₹${pricePerCrate} = ₹${rev}`);
 
         if (farmerMap.has(farmerId)) {
           const curr = farmerMap.get(farmerId)!;
@@ -243,16 +265,20 @@ const OwnerFinance: React.FC = () => {
             crates,
             total: rev,
             location: 'Local Facility',
+            pricePerCrate,
           });
         }
       });
 
+      console.log('Final farmer map:', Array.from(farmerMap.values()));
       const farmerRevenueList = Array.from(farmerMap.values());
-      const calculatedFarmerRevenue = farmerRevenueList.reduce((sum: number, f: any) => sum + f.total, 0);
       
-      // TOTAL PROFIT = Stakeholder Revenue + Calculated Farmer Revenue - Expenses
-      const finalTotalProfit = totalRevenue + calculatedFarmerRevenue - totalExpenses;
-      const profitMargin = (totalRevenue + calculatedFarmerRevenue) > 0 ? (((totalRevenue + calculatedFarmerRevenue - totalExpenses) / (totalRevenue + calculatedFarmerRevenue)) * 100).toFixed(1) : (totalExpenses > 0 ? '-100.0' : '0.0');
+      // Total revenue = stakeholder investments + farmer storage charges
+      const totalRevenue = stakeholderRevenue + farmerRevenue;
+      
+      // TOTAL PROFIT = Total Revenue - Expenses
+      const finalTotalProfit = totalRevenue - totalExpenses;
+      const profitMargin = totalRevenue > 0 ? (((totalRevenue - totalExpenses) / totalRevenue) * 100).toFixed(1) : (totalExpenses > 0 ? '-100.0' : '0.0');
       
       const finalExpensesList = [
         { category: 'Energy Costs', amount: energyCost, percentage: totalExp > 0 ? Number(((energyCost / totalExp) * 100).toFixed(1)) : 0, color: '#f59e0b', icon: Zap },
@@ -265,27 +291,34 @@ const OwnerFinance: React.FC = () => {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       
-      // Fetch both stakeholder and farmer payments
+      // Fetch stakeholder investment history (monthly)
       const { data: stakeholderMonthly } = await supabase
-        .from('stakeholder_payments')
-        .select('amount_inr, created_at, payment_status')
-        .eq('payment_status', 'Received')
-        .gte('created_at', sixMonthsAgo.toISOString())
-        .order('created_at', { ascending: true });
+        .from('stakeholder_investments')
+        .select('investment_amount_inr, investment_date')
+        .eq('site_id', selectedFacilityId)
+        .eq('status', 'active')
+        .gte('investment_date', sixMonthsAgo.toISOString())
+        .order('investment_date', { ascending: true });
 
-      const { data: farmerMonthly, error: farmerError } = await supabase
-        .from('farmer_payments')
-        .select('*')
-        .gte('period_start', sixMonthsAgo.toISOString())
-        .order('period_start', { ascending: true });
+      // Fetch farmer storage allocations (historical - this is current state, not historical payments)
+      // Note: This gives current allocations, not historical monthly breakdown
+      const { data: farmerMonthlyAllocations } = await supabase
+        .from('batch_room_allocations')
+        .select(`
+          room_id,
+          quantity_kg,
+          assigned_at,
+          batches!inner(
+            farmer_id
+          )
+        `)
+        .in('room_id', roomIds)
+        .gte('assigned_at', sixMonthsAgo.toISOString())
+        .order('assigned_at', { ascending: true });
       
-      console.log('===== FARMER PAYMENTS DEBUG =====');
-      console.log('Query Error:', farmerError);
-      console.log('All Farmer Payments (last 6 months):', farmerMonthly);
-      if (farmerMonthly && farmerMonthly.length > 0) {
-        console.log('First payment status:', farmerMonthly[0].payment_status);
-        console.log('First payment amount:', farmerMonthly[0].total_amount);
-      }
+      console.log('===== STAKEHOLDER INVESTMENTS DEBUG =====');
+      console.log('Stakeholder Investments (last 6 months):', stakeholderMonthly);
+      console.log('Farmer Allocations (last 6 months):', farmerMonthlyAllocations);
         
       // Fetch expenses history for same period
       let expensesHistory: any = [];
@@ -322,27 +355,39 @@ const OwnerFinance: React.FC = () => {
         };
       }
       
-      console.log('Farmer Monthly Payments:', farmerMonthly);
-      console.log('Stakeholder Monthly Payments:', stakeholderMonthly);
+      console.log('Farmer Monthly Allocations:', farmerMonthlyAllocations);
+      console.log('Stakeholder Monthly Investments:', stakeholderMonthly);
       console.log('Six months ago date:', sixMonthsAgo.toISOString());
       
-      // Aggregate stakeholder payments into months
-      (stakeholderMonthly || []).forEach((payment: any) => {
-        const date = new Date(payment.created_at);
+      // Aggregate stakeholder investments into months
+      (stakeholderMonthly || []).forEach((investment: any) => {
+        const date = new Date(investment.investment_date);
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-        console.log('Stakeholder payment date:', date, 'monthKey:', monthKey, 'amount:', payment.amount_inr);
+        console.log('Stakeholder investment date:', date, 'monthKey:', monthKey, 'amount:', investment.investment_amount_inr);
         if (monthlyData[monthKey]) {
-          monthlyData[monthKey].revenue += (payment.amount_inr || 0);
+          monthlyData[monthKey].revenue += Number(investment.investment_amount_inr) || 0;
         }
       });
 
-      // Aggregate farmer payments into months
-      (farmerMonthly || []).forEach((payment: any) => {
-        const date = new Date(payment.period_start);
+      // Aggregate farmer storage revenue into months
+      (farmerMonthlyAllocations || []).forEach((alloc: any) => {
+        const date = new Date(alloc.assigned_at);  // Use assigned_at, not created_at
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-        console.log('Farmer payment date:', date, 'monthKey:', monthKey, 'amount:', payment.total_amount);
+        
+        const qtyKg = Number(alloc.quantity_kg) || 0;
+        const crates = convertKgToCrates(qtyKg);
+        
+        // Find price for this farmer + room
+        const pricing = farmerPricing?.find((p: any) => 
+          p.farmer_id === alloc.batches?.farmer_id && p.room_id === alloc.room_id
+        );
+        
+        const pricePerCrate = pricing?.price_per_crate || 1.20;
+        const amount = crates * pricePerCrate;
+        
+        console.log('Farmer allocation date:', date, 'monthKey:', monthKey, 'amount:', amount);
         if (monthlyData[monthKey]) {
-          monthlyData[monthKey].revenue += (payment.total_amount || 0);
+          monthlyData[monthKey].revenue += amount;
         }
       });
       
@@ -361,28 +406,22 @@ const OwnerFinance: React.FC = () => {
         profit: Number((month.revenue - month.expenses).toFixed(1))
       }));
 
-      console.log('Farmer Monthly Payments:', farmerMonthly);
-      console.log('Final Monthly Trend Data:', monthlyTrendData);
+      console.log('Final Monthly Trend Data (with stakeholder investments + farmer storage):', monthlyTrendData);
+
+      const avgPricePerCrate = totalCrates > 0 ? (farmerRevenue / totalCrates).toFixed(2) : '0.00';
 
       setFinanceData({
         currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-        totalRevenue: totalRevenue + calculatedFarmerRevenue,
+        totalRevenue: totalRevenue,
         totalExpenses: totalExpenses,
         totalProfit: finalTotalProfit,
         profitMargin,
         farmerRevenue: farmerRevenueList,
         expenses: finalExpensesList,
-        monthlyTrend: [
-          { month: 'Apr', revenue: 0, expenses: 0, profit: 0 },
-          { month: 'May', revenue: 0, expenses: 0, profit: 0 },
-          { month: 'Jun', revenue: 0, expenses: 0, profit: 0 },
-          { month: 'Jul', revenue: 0, expenses: 0, profit: 0 },
-          { month: 'Aug', revenue: 0, expenses: 0, profit: 0 },
-          { month: 'Sep', revenue: (totalRevenue + calculatedFarmerRevenue), expenses: totalExpenses, profit: finalTotalProfit },
-        ],
-        totalCrates: farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0),
+        monthlyTrend: monthlyTrendData,
+        totalCrates: totalCrates,
         totalFarmers: farmerRevenueList.length,
-        avgPricePerCrate: ((totalRevenue + calculatedFarmerRevenue) / Math.max(1, farmerRevenueList.reduce((sum: number, f: any) => sum + f.crates, 0))).toFixed(2),
+        avgPricePerCrate: avgPricePerCrate,
       });
     } catch (error) {
       console.error('Error loading finance data:', error);
@@ -416,9 +455,9 @@ const OwnerFinance: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown to view financial data.
+          Please select a site from the dropdown to view financial data.
         </p>
       </div>
     );
@@ -454,23 +493,7 @@ const OwnerFinance: React.FC = () => {
         </p>
       </div>
 
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Room Selector Removed - Using global useSiteStore selection */}
 
       {/* Top KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
@@ -675,7 +698,7 @@ const OwnerFinance: React.FC = () => {
                         {formatNumber(farmer.crates)}
                       </td>
                       <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-400">
-                        ₹{farmer.pricePerCrate}
+                        ₹{farmer.pricePerCrate?.toFixed(2) || '0.00'}
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
                         ₹{formatNumber(farmer.total)}

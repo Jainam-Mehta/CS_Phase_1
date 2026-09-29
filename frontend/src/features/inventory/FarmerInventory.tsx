@@ -2,16 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useFarmerStore } from '../../stores/useFarmerStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Package, PackageOpen, Plus, X, Loader2, AlertTriangle, TrendingUp } from 'lucide-react';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 
 const FarmerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { activeRoomId, setActiveRoomId } = useFarmerStore();
-  const { isDemoMode, getFarmerData } = useDemoData();
-  const demoData = getFarmerData();
   
   const [profileId, setProfileId] = useState<string | null>(null);
   const [batches, setBatches] = useState<any[]>([]);
@@ -88,60 +85,6 @@ const FarmerInventory: React.FC = () => {
        setLoading(true);
        try {
            if (!user?.id) return;
-           
-           // CHECK DEMO MODE FIRST
-           if (isDemoMode && demoData) {
-             // Use demo data for Roy (Farmer)
-             setProfileId('demo-farmer-id');
-             
-             // Set approved site and room
-             const approvedSite = demoData.approvedSites[0];
-             setApprovedSites([{
-               id: approvedSite.id,
-               name: approvedSite.facility_name,
-               rooms: [{
-                 id: approvedSite.room_id,
-                 name: approvedSite.room_name
-               }]
-             }]);
-             setSelectedSiteId(approvedSite.id);
-             setApprovedRooms([{
-               id: approvedSite.room_id,
-               name: approvedSite.room_name
-             }]);
-             
-             // Set room name map
-             setRoomNameMap({
-               [approvedSite.room_id]: `${approvedSite.room_name} - ${approvedSite.facility_name}`
-             });
-             
-             // Set farmer products (Tomatoes)
-             setFarmerProducts(['Tomatoes']);
-             
-             // Transform demo inventory to batch format
-             const demoBatches = demoData.inventory.map((inv: any, idx: number) => ({
-               id: inv.id,
-               batch_code: `BATCH-${Date.now()}-${idx}`,
-               farmer_id: 'demo-farmer-id',
-               product_id: 'demo-tomato-id',
-               harvest_date: inv.date,
-               expiry_date: new Date(new Date(inv.date).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString(),
-               initial_quantity_kg: inv.quantity_kg,
-               remaining_quantity_kg: inv.quantity_kg,
-               quality_grade: inv.quality || 'A',
-               room_id: approvedSite.room_id,
-               quantity_kg: inv.quantity_kg,
-               assigned_at: inv.date,
-               product: inv.product,
-               created_at: inv.date
-             }));
-             
-             setBatches(demoBatches);
-             setLoading(false);
-             return;
-           }
-           
-           // NORMAL DATABASE FLOW for non-demo users
            const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
            if (!profile) return;
            setProfileId(profile.id);
@@ -200,23 +143,23 @@ const FarmerInventory: React.FC = () => {
            }
 
            // 2. Fetch Farmer Selected Products
+           // Get all products farmer has selected (from farmer_products table)
            const { data: fProds } = await supabase
              .from('farmer_products')
-             .select('products(name)')
+             .select('products(id, name)')
              .eq('farmer_id', profile.id);
 
-           const extractedNames: string[] = [];
+           const extractedProducts: string[] = [];
            if (fProds) {
                fProds.forEach((fp: any) => {
-                   if (fp.products && !Array.isArray(fp.products) && fp.products.name) {
-                       extractedNames.push(fp.products.name);
-                   } else if (Array.isArray(fp.products)) {
-                       fp.products.forEach((p:any) => extractedNames.push(p.name));
+                   const product = Array.isArray(fp.products) ? fp.products[0] : fp.products;
+                   if (product?.name) {
+                       extractedProducts.push(product.name);
                    }
                });
            }
            
-           setFarmerProducts(extractedNames.length > 0 ? Array.from(new Set(extractedNames)) : ['Apple', 'Potato', 'Onion']);
+           setFarmerProducts(extractedProducts.length > 0 ? Array.from(new Set(extractedProducts)) : []);
 
            // Fetch all inventory across all rooms
            await fetchInventory(profile.id);
@@ -229,7 +172,7 @@ const FarmerInventory: React.FC = () => {
 
   useEffect(() => {
     initialize();
-  }, [user?.id, isDemoMode]);
+  }, [user?.id]);
 
   useEffect(() => {
      if (activeRoomId) setTargetRoom(activeRoomId);
@@ -431,6 +374,87 @@ const FarmerInventory: React.FC = () => {
          </CardContent>
       </Card>
 
+      {/* CURRENT STOCK SUMMARY SECTION */}
+      {batches.length > 0 && (
+      <Card className="shadow-sm border-slate-200 overflow-hidden mt-6">
+         <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+            <div className="flex items-center gap-2">
+               <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Current Stock Summary</h2>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Overview of available inventory by product</p>
+         </div>
+         <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+               {batches.map((batch) => {
+                  const totalCrates = convertKgToCrates(batch.initial_quantity_kg);
+                  const remainingCrates = convertKgToCrates(batch.remaining_quantity_kg || 0);
+                  const soldCrates = totalCrates - remainingCrates;
+                  const soldPercentage = ((soldCrates / totalCrates) * 100).toFixed(0);
+                  const expiryDate = new Date(batch.expiry_date);
+                  const daysUntilExpiry = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                  const isExpiringSoon = daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+                  const isExpired = daysUntilExpiry <= 0;
+
+                  return (
+                     <div key={batch.id} className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:shadow-md transition-shadow">
+                        {/* Product & Batch */}
+                        <div className="mb-4">
+                           <h3 className="font-bold text-slate-900 dark:text-white text-base">{batch.product || 'Unknown'}</h3>
+                           <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">{batch.batch_code}</p>
+                        </div>
+
+                        {/* Stock Progress */}
+                        <div className="mb-4">
+                           <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Level</span>
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{remainingCrates} / {totalCrates} Crates</span>
+                           </div>
+                           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                              <div
+                                 className="bg-gradient-to-r from-emerald-500 to-teal-500 h-2 rounded-full transition-all"
+                                 style={{ width: `${Math.min((remainingCrates / totalCrates) * 100, 100)}%` }}
+                              ></div>
+                           </div>
+                        </div>
+
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
+                           <div className="p-2 bg-slate-50 dark:bg-slate-900/50 rounded">
+                              <p className="text-slate-500 dark:text-slate-400 font-medium">Sold</p>
+                              <p className="text-lg font-bold text-slate-900 dark:text-white">{soldCrates}</p>
+                              <p className="text-slate-400 text-[10px]">{soldPercentage}% delivered</p>
+                           </div>
+                           <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded">
+                              <p className="text-emerald-700 dark:text-emerald-400 font-medium">Available</p>
+                              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{remainingCrates}</p>
+                              <p className="text-slate-400 text-[10px]">to sell</p>
+                           </div>
+                        </div>
+
+                        {/* Expiry Status */}
+                        <div className={`p-2 rounded text-xs font-medium text-center ${
+                           isExpired 
+                              ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400' 
+                              : isExpiringSoon 
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
+                              : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                           {isExpired 
+                              ? `❌ Expired ${Math.abs(daysUntilExpiry)} days ago`
+                              : isExpiringSoon
+                              ? `⚠️ Expires in ${daysUntilExpiry} days`
+                              : `✓ Expires in ${daysUntilExpiry} days`
+                           }
+                        </div>
+                     </div>
+                  );
+               })}
+            </div>
+         </CardContent>
+      </Card>
+      )}
+
       {/* ADD INVENTORY MODAL */}
       {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -467,23 +491,25 @@ const FarmerInventory: React.FC = () => {
                               </select>
                           </div>
 
-                          {/* Show room selector only if site has multiple rooms */}
-                          {approvedRooms.length > 1 && (
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Room</label>
-                                <select 
-                                    required 
-                                    value={targetRoom} 
-                                    onChange={(e) => setTargetRoom(e.target.value)}
-                                    className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                                >
-                                    <option value="" disabled>Select a room...</option>
-                                    {approvedRooms.map(r => (
+                          {/* Always show room selector */}
+                          <div>
+                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Storage Room</label>
+                              <select 
+                                  required 
+                                  value={targetRoom} 
+                                  onChange={(e) => setTargetRoom(e.target.value)}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                              >
+                                  <option value="" disabled>Select a room...</option>
+                                  {approvedRooms.length > 0 ? (
+                                    approvedRooms.map(r => (
                                         <option key={r.id} value={r.id}>{r.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                          )}
+                                    ))
+                                  ) : (
+                                    <option disabled>No rooms available</option>
+                                  )}
+                              </select>
+                          </div>
 
                           <div>
                               <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Product Type</label>

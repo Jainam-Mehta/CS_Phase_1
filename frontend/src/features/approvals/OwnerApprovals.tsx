@@ -3,8 +3,10 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Check, X, Clock, MapPin, Building2, User, Briefcase, CheckCircle } from 'lucide-react';
+import { Check, X, Clock, MapPin, Building2, User, Briefcase, CheckCircle, IndianRupee } from 'lucide-react';
 import { logFarmerApproved, logStakeholderApproved, logPaymentReceived } from '../../lib/activityLogger';
+import { logRoomRequestApproved, logRoomRequestRejected } from '../../services/activityLogService';
+import { notifyRequestApproved, notifyRequestRejected } from '../../services/notificationService';
 
 interface ApprovalRequest {
   id: string;
@@ -24,7 +26,8 @@ interface InvestmentRequest {
   facility_id: string;
   facility_name: string;
   created_at: string;
-  interest_status: string;
+  investment_amount: number;
+  interest_id?: string; // Track the interest record to delete it later
 }
 
 interface PaymentRequest {
@@ -108,9 +111,7 @@ const OwnerApprovals: React.FC = () => {
           requested_at,
           remarks,
           room_id,
-          profiles!farmer_room_access_farmer_id_fkey (
-            full_name
-          )
+          farmer_id
         `)
         .in('room_id', roomIds)
         .eq('status', 'Pending')
@@ -133,7 +134,14 @@ const OwnerApprovals: React.FC = () => {
          const siteId = roomToSiteMap.get(roomId);
          const siteName = siteId ? siteMap.get(siteId) || 'Unknown Site' : 'Unknown Site';
          
-         const name = req.profiles?.full_name || 'Unknown Farmer';
+         // Get farmer profile to fetch name
+         const { data: farmerProfile } = await supabase
+           .from('profiles')
+           .select('full_name')
+           .eq('id', req.farmer_id)
+           .single();
+         
+         const name = farmerProfile?.full_name || 'Unknown Farmer';
 
          formattedRequests.push({
            id: req.id,
@@ -141,7 +149,7 @@ const OwnerApprovals: React.FC = () => {
            requested_at: req.requested_at,
            remarks: req.remarks,
            farmerName: name,
-           farmerEmail: 'Validated User Account', // Email requires hitting Auth users, avoiding RPC blocks gracefully
+           farmerEmail: 'Validated User Account',
            facilityName: siteName,
            roomName
          });
@@ -176,40 +184,58 @@ const OwnerApprovals: React.FC = () => {
       const siteIds = sites.map(f => f.id);
       const siteMap = new Map(sites.map(f => [f.id, f.facility_name]));
 
-      // Get pending investment interests for these sites
-      const { data: interests } = await supabase
-        .from('stakeholder_interest')
-        .select(`
-          id,
-          stakeholder_id,
-          site_id,
-          created_at,
-          interest_status,
-          profiles!stakeholder_id (
-            full_name
-          )
-        `)
+      // Get ALL pending investment requests
+      // NOTE: We now fetch directly from stakeholder_investments with status='Pending'
+      // (We removed stakeholder_interest table usage since we only use stakeholder_investments)
+      const { data: interests, error: interestErr } = await supabase
+        .from('stakeholder_investments')
+        .select('id, stakeholder_id, site_id, investment_amount_inr, investment_date, status')
         .in('site_id', siteIds)
-        .eq('interest_status', 'Interested');
+        .eq('status', 'Pending');
 
-      if (!interests) {
+      console.log('Investment requests query result:', { interests, interestErr });
+
+      if (interestErr) {
+        console.error('Error fetching interests:', interestErr);
         setInvestmentRequests([]);
         return;
       }
 
-      const formatted = interests.map((interest: any) => ({
-        id: interest.id,
-        stakeholder_id: interest.stakeholder_id,
-        stakeholder_name: interest.profiles?.full_name || 'Unknown Stakeholder',
-        facility_id: interest.site_id,
-        facility_name: siteMap.get(interest.site_id) || 'Unknown Site',
-        created_at: interest.created_at,
-        interest_status: interest.interest_status
-      }));
+      if (!interests || interests.length === 0) {
+        setInvestmentRequests([]);
+        return;
+      }
 
+      // Now we have the investment records directly, but still need stakeholder details
+      // Since interests now contains investment records, we can skip the second query
+      const stakeholderIds = [...new Set(interests.map(i => i.stakeholder_id))];
+
+      const { data: stakeholders } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', stakeholderIds);
+
+      const stakeholderMap = new Map(stakeholders?.map(s => [s.id, s.full_name]) || []);
+
+      // Format the data (interests now contains investment records directly)
+      const formatted = interests.map((investment: any) => {
+        return {
+          id: investment.id, // Use investment ID
+          stakeholder_id: investment.stakeholder_id,
+          stakeholder_name: stakeholderMap.get(investment.stakeholder_id) || 'Unknown Stakeholder',
+          facility_id: investment.site_id,
+          facility_name: siteMap.get(investment.site_id) || 'Unknown Site',
+          created_at: investment.investment_date,
+          investment_amount: Number(investment.investment_amount_inr) || 0,
+          interest_id: investment.id // Store investment ID
+        };
+      });
+
+      console.log('Formatted investment requests:', formatted);
       setInvestmentRequests(formatted);
     } catch (err) {
       console.error('Error loading investment requests:', err);
+      setInvestmentRequests([]);
     }
   };
 
@@ -269,12 +295,12 @@ const OwnerApprovals: React.FC = () => {
       const stakeholderIds = [...new Set(payments.map(p => p.stakeholder_id))];
       const { data: stakeholders } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name')
+        .select('id, full_name')
         .in('id', stakeholderIds);
 
       const stakeholderMap = new Map((stakeholders || []).map(s => [
         s.id,
-        `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown'
+        s.full_name || 'Unknown'
       ]));
 
       const siteMap = new Map(sites.map(f => [f.id, `Site ${siteIds.indexOf(f.id) + 1}`]));
@@ -320,9 +346,30 @@ const OwnerApprovals: React.FC = () => {
     if (!user?.id) return;
     try {
       setActionLoading(requestId);
+      setError('');
       const profile = await resolveProfile(user.id);
-      const req = requests.find(r => r.id === requestId);
       
+      // Fetch complete request data with farmer and room info
+      const { data: completeReq, error: fetchErr } = await supabase
+        .from('farmer_room_access')
+        .select(`
+          id, farmer_id, room_id, status, requested_at,
+          cold_storage_rooms(room_code, room_name, site_id, sites(facility_name))
+        `)
+        .eq('id', requestId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.error('Error fetching request:', fetchErr);
+        throw new Error(`Failed to fetch request: ${fetchErr.message}`);
+      }
+
+      if (!completeReq) {
+        throw new Error('Request not found in database');
+      }
+      
+      console.log('Complete request data:', completeReq);
+
       const payload: any = {
         status: action,
         approved_at: new Date().toISOString(),
@@ -333,31 +380,90 @@ const OwnerApprovals: React.FC = () => {
          payload.remarks = 'Declined natively by owner interface';
       }
 
-      const { error } = await supabase
+      console.log('Updating request with payload:', payload);
+
+      const { error: updateErr } = await supabase
         .from('farmer_room_access')
         .update(payload)
         .eq('id', requestId);
 
-      if (error) throw error;
+      if (updateErr) {
+        console.error('Error updating request:', updateErr);
+        throw new Error(`Failed to update request: ${updateErr.message}`);
+      }
+
+      console.log('✓ Request updated successfully');
       
-      // Log farmer approval activity
-      if (action === 'Approved' && req && profile) {
-        await logFarmerApproved(
-          profile.id,
-          profile.full_name || 'Owner',
-          req.id, // farmer_id would be in the request but we use the request id as reference
-          req.farmerName,
-          req.id, // roomId
-          req.roomName,
-          req.id, // facilityId
-          req.facilityName
+      // Extract room and site data
+      const room = Array.isArray(completeReq.cold_storage_rooms) 
+        ? completeReq.cold_storage_rooms[0] 
+        : completeReq.cold_storage_rooms;
+      const site = Array.isArray(room?.sites) ? room.sites[0] : room?.sites;
+      
+      const roomCode = room?.room_code || 'Unknown Room';
+      const siteName = site?.facility_name || 'Unknown Site';
+      const siteId = room?.site_id;
+      const roomId = completeReq.room_id;
+      const farmerId = completeReq.farmer_id;
+      
+      console.log('Extracted data:', { farmerId, siteId, roomId, roomCode, siteName });
+      
+      // Log the approval/rejection action
+      if (action === 'Approved') {
+        console.log('Logging approval...');
+        await logRoomRequestApproved(
+          farmerId,
+          siteId,
+          roomId,
+          roomCode,
+          siteName,
+          profile?.full_name || 'Owner'
+        );
+        
+        console.log('Notifying farmer...');
+        // Notify the farmer
+        await notifyRequestApproved(
+          farmerId,
+          siteId,
+          roomId,
+          requestId,
+          roomCode,
+          siteName,
+          profile?.full_name || 'Owner'
+        );
+      } else if (action === 'Rejected') {
+        console.log('Logging rejection...');
+        await logRoomRequestRejected(
+          farmerId,
+          siteId,
+          roomId,
+          roomCode,
+          siteName,
+          profile?.full_name || 'Owner',
+          payload.remarks
+        );
+        
+        console.log('Notifying farmer of rejection...');
+        // Notify the farmer
+        await notifyRequestRejected(
+          farmerId,
+          siteId,
+          roomId,
+          requestId,
+          roomCode,
+          siteName,
+          profile?.full_name || 'Owner',
+          payload.remarks
         );
       }
 
+      console.log('✓ Action completed successfully');
+      
       // Update DOM gracefully instead of reloading page implicitly
       setRequests((prev) => prev.filter(r => r.id !== requestId));
     } catch (err) {
-      console.error(`Failed to natively ${action} request:`, err);
+      console.error(`Failed to ${action} request:`, err);
+      setError(`Failed to ${action} request: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setActionLoading(null);
     }
@@ -379,22 +485,47 @@ const OwnerApprovals: React.FC = () => {
         // Get owner company ID from the owner's profile
         console.log('Owner profile:', profile);
 
-        // Create entry in stakeholder_investments
-        const investmentData: any = {
-          stakeholder_id: stakeholderId,
-          site_id: facilityId,
-          owner_company_id: profile?.owner_company_id
-        };
-        
-        console.log('Inserting stakeholder_investments:', investmentData);
-        
+        // Update existing stakeholder_investments record to active
+        // First, find the existing investment record (regardless of current status)
+        const { data: existingInvestment, error: findErr } = await supabase
+          .from('stakeholder_investments')
+          .select('*')
+          .eq('stakeholder_id', stakeholderId)
+          .eq('site_id', facilityId)
+          .maybeSingle();
+
+        console.log('Looking for existing investment:', { existingInvestment, findErr });
+
+        if (!existingInvestment) {
+          throw new Error('No investment found for this stakeholder and site');
+        }
+
+        // Update the existing record to active and set owner_company_id
         const { data: investData, error: investError } = await supabase
           .from('stakeholder_investments')
-          .insert(investmentData)
+          .update({
+            status: 'active'  // Set to active (the default/allowed value)
+          })
+          .eq('id', existingInvestment.id)
           .select();
 
-        console.log('Insert response:', { data: investData, error: investError });
+        console.log('Update response:', { data: investData, error: investError });
         if (investError) throw investError;
+
+        // Delete the stakeholder_interest record now that investment is approved
+        if (req?.interest_id) {
+          console.log('Deleting stakeholder_interest record:', req.interest_id);
+          const { error: deleteErr } = await supabase
+            .from('stakeholder_interest')
+            .delete()
+            .eq('id', req.interest_id);
+
+          if (deleteErr) {
+            console.error('Error deleting interest record:', deleteErr);
+            throw new Error(`Failed to remove interest record: ${deleteErr.message}`);
+          }
+          console.log('✓ Stakeholder interest record deleted successfully');
+        }
 
         // Log stakeholder approval
         if (profile && req) {
@@ -407,24 +538,29 @@ const OwnerApprovals: React.FC = () => {
               req.stakeholder_name,
               facilityId,
               req.facility_name,
-              0 // investment amount will be updated during payment
+              req.investment_amount || 0
             );
             console.log('Stakeholder approval logged successfully');
           } catch (logErr) {
             console.error('Failed to log stakeholder approval:', logErr);
           }
         }
+      } else if (action === 'Rejected') {
+        // On rejection, also delete the interest record
+        if (req?.interest_id) {
+          console.log('Deleting stakeholder_interest record (rejection):', req.interest_id);
+          const { error: deleteErr } = await supabase
+            .from('stakeholder_interest')
+            .delete()
+            .eq('id', req.interest_id);
+
+          if (deleteErr) {
+            console.error('Error deleting interest record:', deleteErr);
+            throw new Error(`Failed to remove interest record: ${deleteErr.message}`);
+          }
+          console.log('✓ Stakeholder interest record deleted successfully');
+        }
       }
-
-      // Update interest status - use 'Approved' when accepted, 'Rejected' when rejected
-      console.log('Updating stakeholder_interest status to:', action === 'Approved' ? 'Approved' : 'Rejected');
-      const { error: statusError } = await supabase
-        .from('stakeholder_interest')
-        .update({ interest_status: action === 'Approved' ? 'Approved' : 'Rejected' })
-        .eq('id', interestId);
-
-      console.log('Status update error:', statusError);
-      if (statusError) throw statusError;
 
       console.log('Action successful, filtering requests');
       setInvestmentRequests((prev) => prev.filter(r => r.id !== interestId));
@@ -628,6 +764,16 @@ const OwnerApprovals: React.FC = () => {
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Site</p>
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{req.facility_name}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
+                        <IndianRupee className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Investment Amount</p>
+                        <p className="text-sm font-bold text-blue-600 dark:text-blue-400">₹{req.investment_amount?.toLocaleString('en-IN') || '0'}</p>
                       </div>
                     </div>
                   </div>

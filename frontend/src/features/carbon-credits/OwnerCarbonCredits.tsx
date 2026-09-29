@@ -45,9 +45,9 @@ const OwnerCarbonCredits: React.FC = () => {
   if (!selectedFacilityId) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
-        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-          Please select a facility from the dropdown in the top header.
+          Please select a site from the dropdown in the top header.
         </p>
       </div>
     );

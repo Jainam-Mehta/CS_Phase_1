@@ -182,6 +182,11 @@ const StakeholderProfileSetup: React.FC = () => {
           full_name: fullName,
           role: 'stakeholder',
           phone: formData.phoneNumber || null,
+          date_of_birth: formData.dateOfBirth || null,
+          gender: formData.gender || null,
+          state_id: selectedStateId || null,
+          district_id: selectedDistrictId || null,
+          locality_id: selectedLocalityId || null,
           is_active: true,
         }, { onConflict: 'id' })
         .select()

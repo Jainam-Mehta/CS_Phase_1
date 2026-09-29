@@ -3,70 +3,29 @@ import { Package, TrendingUp, Archive, AlertCircle, HardDrive, MapPin, Layers } 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
-import { useDemoData } from '../../hooks/useDemoData';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
 import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 
 
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
-  const { selectedFacilityId } = useSiteStore();
-  const { isDemoMode, getOwnerData } = useDemoData();
-  const demoData = getOwnerData();
+  const { selectedFacilityId, selectedRoomId } = useSiteStore();
   
   const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<any[]>([]);
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [farmerActions, setFarmerActions] = useState<any[]>([]);
   const [siteName, setSiteName] = useState<string>('');
 
   useEffect(() => {
-    if (user?.id && selectedFacilityId) {
+    if (user?.id && selectedFacilityId && selectedRoomId) {
       loadFacilityData();
     }
-  }, [user?.id, selectedFacilityId, isDemoMode]);
+  }, [user?.id, selectedFacilityId, selectedRoomId]);
 
   const loadFacilityData = async () => {
     try {
       setLoading(true);
       
-      // CHECK DEMO MODE FIRST
-      if (isDemoMode && demoData) {
-        // Use demo data for Rupesh (Owner)
-        const currentSite = demoData.sites.find((s: any) => s.id === selectedFacilityId) || demoData.sites[0];
-        setSiteName(currentSite.facility_name);
-        
-        // Set rooms for selected facility
-        const siteRooms = demoData.rooms.filter((r: any) => r.site_id === currentSite.id);
-        setRooms(siteRooms);
-        
-        if (siteRooms.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(siteRooms[0].id);
-        }
-        
-        // Transform demo inventory to match expected format
-        const roomToUse = selectedRoomId || siteRooms[0]?.id;
-        const roomInventory = demoData.inventory.filter((inv: any) => inv.room_id === roomToUse);
-        
-        const transformedInventory = roomInventory.map((inv: any) => ({
-          batch_id: inv.id,
-          batch_code: `BATCH-${inv.id}`,
-          farmer_name: inv.farmer_name,
-          product_name: inv.product,
-          quantity_kg: inv.quantity_kg,
-          quality_grade: 'A',
-          harvest_date: inv.date,
-          expiry_date: new Date(new Date(inv.date).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
-          assigned_at: inv.date,
-          status: inv.status
-        }));
-        
-        setInventory(transformedInventory);
-        setLoading(false);
-        return;
-      }
-      
-      // NORMAL DATABASE FLOW for non-demo users
       // Fetch Site Name
       const { data: siteData } = await supabase
         .from('sites')
@@ -76,114 +35,196 @@ const OwnerInventory: React.FC = () => {
 
       setSiteName(siteData?.facility_name || 'Your Site');
 
-      // Fetch Rooms for selected facility
-      const { data: rmData, error: rmError } = await supabase
-        .from('cold_storage_rooms')
-        .select('*')
-        .eq('site_id', selectedFacilityId);
-
-      console.log('Rooms query error:', rmError);
-      console.log('Rooms fetched:', rmData?.length || 0);
-
-      const resolvedRooms = rmData || [];
-      setRooms(resolvedRooms);
-
-      // Set default room if not already selected
-      if (resolvedRooms.length > 0 && !selectedRoomId) {
-        setSelectedRoomId(resolvedRooms[0].id);
-      }
-
-      // Use the currently selected room or the first room
-      const roomToUse = selectedRoomId || (resolvedRooms.length > 0 ? resolvedRooms[0].id : null);
-      
-      if (!roomToUse || resolvedRooms.length === 0) {
+      if (!selectedRoomId) {
         setInventory([]);
+        setFarmerActions([]);
         setLoading(false);
         return;
       }
 
-      const roomIds = [roomToUse];
-
-      // Query batch_room_allocations for the selected room
-      const { data: allocationData } = await supabase
+      // Simple query first - just get the allocations without nested joins
+      console.log('📍 Starting batch_room_allocations query for room:', selectedRoomId);
+      const { data: allocationData, error: allocError } = await supabase
         .from('batch_room_allocations')
-        .select(`
-          quantity_kg,
-          assigned_at,
-          removed_at,
-          room_id,
-          batches!inner(
-            id,
-            batch_code,
-            farmer_id,
-            product_id,
-            harvest_date,
-            expiry_date,
-            initial_quantity_kg,
-            remaining_quantity_kg,
-            quality_grade,
-            remarks,
-            created_at,
-            products(name),
-            profiles(full_name)
-          )
-        `)
-        .eq('room_id', roomToUse)
-        .is('removed_at', null)
+        .select('*')
+        .eq('room_id', selectedRoomId)
         .order('assigned_at', { ascending: false });
 
-      console.log('🔍 DEBUG Owner: Allocations found:', allocationData?.length || 0, allocationData);
+      if (allocError) {
+        console.error('❌ Error loading allocations:', allocError);
+        console.error('Error details:', { code: allocError.code, message: allocError.message });
+        setInventory([]);
+        setFarmerActions([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Allocations found:', allocationData?.length || 0);
+
+      // If no allocations, we're done
+      if (!allocationData || allocationData.length === 0) {
+        console.log('📭 No allocations in this room');
+        setInventory([]);
+        setFarmerActions([]);
+        setLoading(false);
+        return;
+      }
+
+      // Now fetch batch details for each allocation
+      const batchIds = allocationData.map((a: any) => a.batch_id);
+      console.log('🔗 Fetching batch details for', batchIds.length, 'batches');
+
+      const { data: batchData, error: batchError } = await supabase
+        .from('batches')
+        .select('*, products(name)')
+        .in('id', batchIds);
+
+      if (batchError) {
+        console.error('❌ Error loading batches:', batchError);
+        setInventory([]);
+        setFarmerActions([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Batches found:', batchData?.length || 0);
+
+      // Fetch sales data for these batches - to show what was removed
+      console.log('💰 Fetching sales for these batches...');
+      const { data: salesData } = await supabase
+        .from('sales')
+        .select('batch_id, quantity_kg, selling_price, buyer, sold_at')
+        .in('batch_id', batchIds)
+        .order('sold_at', { ascending: false });
+
+      console.log('✅ Sales found:', salesData?.length || 0);
+
+      // Get unique farmer IDs and fetch their profiles
+      const farmerIds = [...new Set((batchData || []).map((b: any) => b.farmer_id).filter(Boolean))];
+      let farmerMap = new Map();
+      
+      if (farmerIds.length > 0) {
+        const { data: farmerProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', farmerIds);
+        
+        farmerMap = new Map((farmerProfiles || []).map((p: any) => [p.id, p.full_name]));
+      }
+
+      // Create maps for quick lookup
+      const batchMap = new Map((batchData || []).map((b: any) => [b.id, b]));
+      const salesByBatch = new Map();
+      (salesData || []).forEach((sale: any) => {
+        if (!salesByBatch.has(sale.batch_id)) {
+          salesByBatch.set(sale.batch_id, []);
+        }
+        salesByBatch.get(sale.batch_id).push(sale);
+      });
 
       // Transform the data
-      const transformedInventory = allocationData?.map((allocation: any) => {
-        const products = allocation.batches.products;
+      const storedInventory: any[] = [];
+      const removedActions: any[] = [];
+
+      (allocationData || []).forEach((allocation: any) => {
+        const batch = batchMap.get(allocation.batch_id);
+        if (!batch) return; // Skip if batch not found
+
+        const products = batch.products;
         const productName = Array.isArray(products) ? products[0]?.name : products?.name;
-        const profile = allocation.batches.profiles;
-        const farmerName = profile 
-          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown Farmer'
-          : 'Unknown Farmer';
+        const farmerName = farmerMap.get(batch.farmer_id) || 'Unknown Farmer';
         
-        return {
-          ...allocation.batches,
+        // Get sales for this batch
+        const batchSales = salesByBatch.get(allocation.batch_id) || [];
+        const totalSoldKg = batchSales.reduce((sum: number, sale: any) => sum + (Number(sale.quantity_kg) || 0), 0);
+
+        const transformedItem = {
+          ...batch,
           room_id: allocation.room_id,
           quantity_kg: allocation.quantity_kg,
           assigned_at: allocation.assigned_at,
           removed_at: allocation.removed_at,
           product_name: productName || 'Unknown Product',
           farmer_name: farmerName,
-          display_date: allocation.created_at || allocation.assigned_at  // Use batch created_at first
+          display_date: allocation.assigned_at || batch.created_at,
+          sales: batchSales,
+          total_sold_kg: totalSoldKg
         };
-      }) || [];
 
-      console.log('✅ DEBUG Owner: Final inventory:', transformedInventory.length, transformedInventory);
-      setInventory(transformedInventory);
+        // If batch has sales, add removal log entry (one entry per total sales, not per individual sale)
+        if (batchSales.length > 0) {
+          removedActions.push({
+            id: `removed-${batch.id}`,
+            batch_code: batch.batch_code,
+            farmer_name: farmerName,
+            product_name: productName || 'Unknown Product',
+            quantity_kg: totalSoldKg,
+            quantity_crates: totalSoldKg / KG_PER_CRATE,
+            action_type: 'removed',
+            action_date: batchSales[0].sold_at, // Use earliest sale date
+            total_sales: batchSales.length
+          });
+        }
+
+        // Add the batch itself (whether stored or removed from room)
+        if (allocation.removed_at === null) {
+          storedInventory.push(transformedItem);
+        } else {
+          removedActions.push({
+            ...transformedItem,
+            action_type: 'removed',
+            action_date: allocation.removed_at
+          });
+        }
+      });
+
+      console.log('✅ Stored inventory:', storedInventory.length);
+      console.log('✅ Removed actions:', removedActions.length);
+
+      setInventory(storedInventory);
+      setFarmerActions(removedActions);
     } catch (error) {
-      console.error('❌ Error loading inventory:', error);
+      console.error('❌ Catch-all error loading inventory:', error);
       setInventory([]);
+      setFarmerActions([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const totalCrates = useMemo(() => {
-    const totalKg = inventory.reduce((acc, curr) => acc + (Number(curr.quantity_kg) || Number(curr.remaining_quantity_kg) || Number(curr.initial_quantity_kg) || 0), 0);
-    return convertKgToCrates(totalKg);
+  // Calculate remaining quantity after accounting for sales
+  const inventoryWithRemaining = useMemo(() => {
+    return inventory.map(item => {
+      const initialKg = item.initial_quantity_kg || item.quantity_kg || 0;
+      const soldKg = item.total_sold_kg || 0;
+      const remainingKg = Math.max(0, initialKg - soldKg);
+      return {
+        ...item,
+        remaining_kg: remainingKg,
+        sold_kg: soldKg
+      };
+    });
   }, [inventory]);
 
-  const activeBatches = inventory.length;
+  const totalCrates = useMemo(() => {
+    const totalKg = inventoryWithRemaining.reduce((acc, curr) => acc + (curr.remaining_kg || 0), 0);
+    return convertKgToCrates(totalKg);
+  }, [inventoryWithRemaining]);
 
-  // Products vs Quantity in Crates Bar Chart Data
+  const activeBatches = inventoryWithRemaining.length;
+
+  // Products vs Quantity in Crates Bar Chart Data - Shows REMAINING after sales
   const productAggregates = useMemo(() => {
     const agg: Record<string, number> = {};
-    inventory.forEach(item => {
+    inventoryWithRemaining.forEach(item => {
       const name = item.product_name || item.products?.name || item.commodity || item.crop_type || item.name || 'Unknown Item';
-      const kg = Number(item.quantity_kg) || Number(item.remaining_quantity_kg) || Number(item.initial_quantity_kg) || 0;
-      const crates = kg / KG_PER_CRATE;
+      const remainingKg = item.remaining_kg || 0;
+      const crates = remainingKg / KG_PER_CRATE;
       agg[name] = (agg[name] || 0) + crates;
     });
     // Convert to sorted array
     return Object.entries(agg).map(([name, crates]) => ({ name, crates })).sort((a,b) => b.crates - a.crates).slice(0, 5); // top 5
-  }, [inventory]);
+  }, [inventoryWithRemaining]);
 
   const maxCrates = productAggregates.length > 0 ? Math.max(...productAggregates.map(p => p.crates)) : 0;
 
@@ -192,48 +233,34 @@ const OwnerInventory: React.FC = () => {
   useEffect(() => {
     const loadCapacityData = async () => {
       try {
-        if (!selectedFacilityId) return;
-
-        // Get all rooms for this facility
-        const { data: roomsData } = await supabase
-          .from('cold_storage_rooms')
-          .select('id, capacity_kg')
-          .eq('site_id', selectedFacilityId);
-
-        if (!roomsData || roomsData.length === 0) {
+        if (!selectedFacilityId || !selectedRoomId) {
           setCapacityData({ total: 0, used: 0 });
           return;
         }
 
-        const totalCapacity = roomsData.reduce((sum, r) => sum + (Number(r.capacity_kg) || 0), 0);
-        const roomIds = roomsData.map(r => r.id);
+        // Get capacity for the selected room
+        const { data: roomData } = await supabase
+          .from('cold_storage_rooms')
+          .select('capacity_kg')
+          .eq('id', selectedRoomId)
+          .single();
 
-        // Calculate actual occupancy from batch_room_allocations for selected room only
-        const roomIdToQuery = selectedRoomId || (roomIds.length > 0 ? roomIds[0] : null);
-        if (!roomIdToQuery) {
-          setCapacityData({ total: totalCapacity, used: 0 });
-          return;
-        }
+        const totalCapacity = roomData?.capacity_kg || 0;
 
-        const { data: allocationsData } = await supabase
-          .from('batch_room_allocations')
-          .select('quantity_kg')
-          .eq('room_id', roomIdToQuery)
-          .is('removed_at', null);
-
-        const usedCapacity = (allocationsData || []).reduce((sum, alloc) => sum + (Number(alloc.quantity_kg) || 0), 0);
+        // Calculate used capacity based on remaining inventory (after sales)
+        const usedCapacity = inventoryWithRemaining.reduce((sum, item) => sum + (item.remaining_kg || 0), 0);
         
-        console.log('Capacity Debug:', { totalCapacity, usedCapacity, allocations: allocationsData?.length || 0 });
+        console.log('Capacity Debug:', { totalCapacity, usedCapacity, items: inventoryWithRemaining.length });
         setCapacityData({ total: totalCapacity, used: usedCapacity });
       } catch (error) {
         console.error('Error loading capacity data:', error);
       }
     };
     
-    if (selectedFacilityId) {
+    if (selectedFacilityId && selectedRoomId) {
       loadCapacityData();
     }
-  }, [selectedFacilityId, selectedRoomId]);
+  }, [selectedFacilityId, selectedRoomId, inventoryWithRemaining]);
 
   const occupiedPct = capacityData.total > 0 ? (capacityData.used / capacityData.total) * 100 : 0;
   const availablePct = Math.max(0, 100 - occupiedPct);
@@ -253,29 +280,13 @@ const OwnerInventory: React.FC = () => {
         </div>
       </div>
 
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Select Room:</label>
-          <select
-            value={selectedRoomId || ''}
-            onChange={(e) => setSelectedRoomId(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.room_name} (Capacity: {room.capacity_kg}kg)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Room Selector Removed - Using global useSiteStore selection */}
 
       {!selectedFacilityId ? (
         <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-64px)]">
-          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Facility Selected</h3>
+          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No Site Selected</h3>
           <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-            Please select a facility from the dropdown in the top header.
+            Please select a site from the dropdown in the top header.
           </p>
         </div>
       ) : loading ? (
@@ -325,7 +336,7 @@ const OwnerInventory: React.FC = () => {
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col min-h-[300px]">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                 <HardDrive className="w-5 h-5 text-emerald-500" />
-                Facility Capacity Overview
+                Site Capacity Overview
               </h2>
               
               <div className="flex-1 flex flex-col items-center justify-center">
@@ -384,10 +395,10 @@ const OwnerInventory: React.FC = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer Name</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product Name</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quantity</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer Name</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Action</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
                     </tr>
                   </thead>
@@ -398,18 +409,18 @@ const OwnerInventory: React.FC = () => {
                       
                       return (
                         <tr key={item.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {item.farmer_name || 'Unknown Farmer'}
+                          </td>
                           <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
                             {item.product_name || item.commodity || item.crop_type || item.name || 'Unknown Item'}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                             {crates} crates ({kg} kg)
                           </td>
-                          <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
-                            {item.farmer_name || 'Unknown Farmer'}
-                          </td>
                           <td className="px-6 py-4 text-sm">
                             <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
-                              In Storage
+                              Stored
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-500">
@@ -423,6 +434,51 @@ const OwnerInventory: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Farmer Removal Actions */}
+          {farmerActions.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden mt-8">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Farmer Product Removals</h2>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer Name</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product Name</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quantity Removed</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Removal Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {farmerActions.map((item, idx) => {
+                      const crates = item.quantity_crates ? item.quantity_crates.toFixed(1) : (item.quantity_kg / KG_PER_CRATE).toFixed(1);
+                      const kg = item.quantity_kg ?? 0;
+                      
+                      return (
+                        <tr key={item.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {item.farmer_name || 'Unknown Farmer'}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
+                            {item.product_name || 'Unknown Product'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                            {crates} crates ({kg.toFixed(1)} kg)
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-500">
+                            {item.action_date ? new Date(item.action_date).toLocaleDateString() : 'Date unavailable'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

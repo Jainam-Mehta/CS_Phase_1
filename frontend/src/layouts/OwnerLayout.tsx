@@ -42,7 +42,8 @@ const ownerNavigation = [
   // Hidden for future use - Carbon Credits feature
   // { name: 'Carbon Credits', href: '/owner/carbon-credits', icon: Leaf },
   { name: 'Alerts & Insights', href: '/owner/alerts', icon: AlertTriangle },
-  { name: 'Batch Traceability', href: '/owner/batch-traceability', icon: GitBranch },
+  // Hidden for future use - Batch Traceability feature (inventory tab shows this info)
+  // { name: 'Batch Traceability', href: '/owner/batch-traceability', icon: GitBranch },
   { name: 'Maintenance', href: '/owner/maintenance', icon: Wrench },
   { name: 'Approvals', href: '/owner/approvals', icon: CheckSquare },
 ];
@@ -60,7 +61,9 @@ const OwnerLayout: React.FC = () => {
   const { selectedFacilityId, setSelectedFacilityId } = useSiteStore();
   const { appearance, setAppearance } = useSettingsStore();
   const [facilities, setFacilities] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   const [fetchingSites, setFetchingSites] = useState(true);
+  const { selectedRoomId, setSelectedRoomId } = useSiteStore();
 
   // Header Dropdown States
   // Derive isDark from the persisted settings store — stays correct after refresh
@@ -97,7 +100,7 @@ const OwnerLayout: React.FC = () => {
           .eq('owner_profile_id', profile.id);
           
         if (error) {
-          console.error('Error loading facilities:', error);
+          console.error('Error loading sites:', error);
           return;
         }
           
@@ -113,7 +116,7 @@ const OwnerLayout: React.FC = () => {
           setSelectedFacilityId(null);
         }
       } catch (err) {
-        console.error('Error loading facilities in layout', err);
+        console.error('Error loading sites in layout', err);
       } finally {
         setFetchingSites(false);
       }
@@ -121,6 +124,38 @@ const OwnerLayout: React.FC = () => {
     loadFacilities();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]); // Only re-run when the logged-in user changes
+
+  // Load rooms when facility changes
+  React.useEffect(() => {
+    async function loadRooms() {
+      if (!selectedFacilityId) {
+        setRooms([]);
+        setSelectedRoomId(null);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('cold_storage_rooms')
+          .select('*')
+          .eq('site_id', selectedFacilityId)
+          .order('room_name', { ascending: true });
+          
+        if (error) {
+          console.error('Error loading rooms:', error);
+          setRooms([]);
+          return;
+        }
+        
+        setRooms(data || []);
+        // Reset room selection when site changes
+        setSelectedRoomId(null);
+      } catch (err) {
+        console.error('Error loading rooms', err);
+        setRooms([]);
+      }
+    }
+    loadRooms();
+  }, [selectedFacilityId]);
 
   const navigation = [...ownerNavigation, ...settingsNavigation];
 
@@ -248,119 +283,143 @@ const OwnerLayout: React.FC = () => {
       {/* Main Content */}
       <div className={cn('flex flex-col flex-1 transition-all duration-300 h-screen', collapsed ? 'ml-20' : 'ml-72')}>
         {/* Unified Top Header */}
-        <header className="h-16 px-8 flex items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 z-40">
-          <div className="flex items-center gap-3">
-            <Building2 className="w-5 h-5 text-gray-400" />
-            <div className="w-64 flex items-center gap-2">
-              <SearchableSelect
-                value={facilities.find(f => f.id === selectedFacilityId)?.facility_name || ''}
-                onChange={(facilityName) => {
-                  const facility = facilities.find(f => f.facility_name === facilityName);
-                  if (facility) setSelectedFacilityId(facility.id);
-                }}
-                options={facilities.map(f => f.facility_name)}
-                placeholder={fetchingSites ? 'Loading sites...' : facilities.length === 0 ? 'No Facilities Available' : 'Select facility...'}
-                disabled={fetchingSites || facilities.length === 0}
-              />
-              {facilities.length === 0 && !fetchingSites && (
+        <header className="h-auto px-8 py-4 flex flex-col gap-3 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 z-40">
+          {/* First Row: Site Selector */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Building2 className="w-5 h-5 text-gray-400" />
+              <div className="w-64 flex items-center gap-2">
+                <SearchableSelect
+                  value={facilities.find(f => f.id === selectedFacilityId)?.facility_name || ''}
+                  onChange={(facilityName) => {
+                    const facility = facilities.find(f => f.facility_name === facilityName);
+                    if (facility) {
+                      setSelectedFacilityId(facility.id);
+                      setSelectedRoomId(null); // Reset room when site changes
+                    }
+                  }}
+                  options={facilities.map(f => f.facility_name)}
+                  placeholder={fetchingSites ? 'Loading sites...' : facilities.length === 0 ? 'No Sites Available' : 'Select site...'}
+                  disabled={fetchingSites || facilities.length === 0}
+                />
+                {facilities.length === 0 && !fetchingSites && (
+                  <button
+                    onClick={() => navigate('/owner-setup')}
+                    title="Add Site"
+                    className="flex items-center justify-center p-2 text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4 border-l border-gray-200 dark:border-slate-800 pl-4 ml-4">
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+              </button>
+
+              {/* Notifications */}
+              <div className="relative">
                 <button
-                  onClick={() => navigate('/owner-setup')}
-                  title="Add Facility"
-                  className="flex items-center justify-center p-2 text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setShowProfileMenu(false);
+                  }}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors relative"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-slate-900" />
                 </button>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4 border-l border-gray-200 dark:border-slate-800 pl-4 ml-4">
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            </button>
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowNotifications(!showNotifications);
-                  setShowProfileMenu(false);
-                }}
-                className="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors relative"
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-slate-900" />
-              </button>
-              
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 overflow-hidden z-50">
-                  <div className="p-4 border-b border-gray-100 dark:border-slate-700">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                  </div>
-                  <div className="p-8 text-center">
-                    <div className="w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <Bell className="h-6 w-6 text-gray-400" />
+                
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 overflow-hidden z-50">
+                    <div className="p-4 border-b border-gray-100 dark:border-slate-700">
+                      <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">No new notifications</p>
+                    <div className="p-8 text-center">
+                      <div className="w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="h-6 w-6 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">No new notifications</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Profile Menu */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowProfileMenu(!showProfileMenu);
-                  setShowNotifications(false);
-                }}
-                className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center border border-primary-200 dark:border-primary-800">
-                  <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">
-                    {user?.email?.[0].toUpperCase() || 'O'}
-                  </span>
-                </div>
-              </button>
+              {/* Profile Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(!showProfileMenu);
+                    setShowNotifications(false);
+                  }}
+                  className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center border border-primary-200 dark:border-primary-800">
+                    <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">
+                      {user?.email?.[0].toUpperCase() || 'O'}
+                    </span>
+                  </div>
+                </button>
 
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 py-1 z-50">
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      navigate('/owner/profile');
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
-                  >
-                    <User className="h-4 w-4" />
-                    Profile
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      navigate('/owner/settings');
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </button>
-                  <div className="h-px bg-gray-100 dark:bg-slate-700 my-1 sticky top-0" />
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
+                {showProfileMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-slate-700 py-1 z-50">
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/owner/profile');
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <User className="h-4 w-4" />
+                      Profile
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/owner/settings');
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </button>
+                    <div className="h-px bg-gray-100 dark:bg-slate-700 my-1 sticky top-0" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Second Row: Room Selector (only if rooms exist for selected site) */}
+          {selectedFacilityId && rooms.length > 0 && (
+            <div className="flex items-center gap-3 pl-0">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Room:</span>
+              <select
+                value={selectedRoomId || (rooms.length > 0 ? rooms[0].id : '')}
+                onChange={(e) => setSelectedRoomId(e.target.value)}
+                className="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.room_name || `Room ${room.room_code}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </header>
 
         <main className="flex-1 overflow-auto">

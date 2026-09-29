@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../stores/useSettingsStore';
@@ -44,11 +44,53 @@ const SettingsPage: React.FC = () => {
     resetSettings,
   } = useSettingsStore();
 
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     if (user?.role === 'farmer') {
          loadMyRequests();
     } else if (user?.role === 'stakeholder') {
          loadStakeholderRequests();
+         
+         // Setup real-time listener for stakeholder_investments changes
+         const setupRealtimeListener = async () => {
+           const { data: { user: authUser } } = await supabase.auth.getUser();
+           if (authUser?.id) {
+             // Unsubscribe from old channel if exists
+             if (channelRef.current) {
+               await supabase.removeChannel(channelRef.current);
+             }
+
+             // Create new channel with callback BEFORE subscribe
+             const channel = supabase.channel(`stakeholder-investments-${authUser.id}`)
+               .on(
+                 'postgres_changes',
+                 {
+                   event: '*',
+                   schema: 'public',
+                   table: 'stakeholder_investments',
+                   filter: `stakeholder_id=eq.${authUser.id}`
+                 },
+                 () => {
+                   console.log('Real-time update detected for investments');
+                   fetchStakeholderInvestmentsData(authUser.id);
+                 }
+               )
+               .subscribe();
+             
+             channelRef.current = channel;
+           }
+         };
+         
+         setupRealtimeListener();
+         
+         // Cleanup on unmount
+         return () => {
+           if (channelRef.current) {
+             supabase.removeChannel(channelRef.current);
+             channelRef.current = null;
+           }
+         };
     } else if (user?.role === 'owner') {
          loadFacilitiesWithFarmers();
     }
@@ -58,39 +100,60 @@ const SettingsPage: React.FC = () => {
     if (!user?.id) return;
     try {
         setLoadingReqs(true);
-        
-        // FORCE DEMO MODE FOR DEMO EMAILS
-        const userEmail = user?.email?.toLowerCase();
-        if (userEmail === 'roy@coldsense.in') {
-          // Roy's demo storage request - APPROVED
-          setRequests([{
-            id: 'demo-req-1',
-            status: 'Approved',
-            requested_at: '2024-09-16T09:00:00Z',
-            remarks: 'Storage request approved by Owner',
-            cold_storage_rooms: {
-              room_name: 'Kullu Storage A',
-              sites: {
-                facility_name: 'Kullu Storage A'
-              }
-            }
-          }]);
-          setLoadingReqs(false);
+        const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
+        if (!profile) {
+          console.error('Profile not found for user:', user.id);
           return;
         }
         
-        const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
-        if (!profile) return;
-        
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('farmer_room_access')
           .select(`
             id, status, requested_at, remarks,
-            cold_storage_rooms(room_name, sites(facility_name))
+            cold_storage_rooms(room_name, room_code, site_id, sites(facility_name, owner_profile_id))
           `)
           .eq('farmer_id', profile.id)
           .order('requested_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error loading requests:', error);
+          return;
+        }
           
+        // Fetch owner names for each request
+        if (data && data.length > 0) {
+          const ownerIds = [...new Set((data as any[]).map(req => (req.cold_storage_rooms as any)?.[0]?.site_id).filter(Boolean))];
+          
+          if (ownerIds.length > 0) {
+            const { data: sites } = await supabase
+              .from('sites')
+              .select('id, owner_profile_id')
+              .in('id', ownerIds);
+            
+            const siteOwnerMap = new Map(sites?.map(s => [s.id, s.owner_profile_id]) || []);
+            
+            const ownerProfileIds = [...new Set(Array.from(siteOwnerMap.values()).filter(Boolean))];
+            
+            if (ownerProfileIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', ownerProfileIds);
+              
+              const ownerNameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
+              
+              // Enrich data with owner names
+              (data as any[]).forEach(req => {
+                const siteId = (req.cold_storage_rooms as any)?.[0]?.site_id;
+                const ownerId = siteOwnerMap.get(siteId);
+                const ownerName = ownerNameMap.get(ownerId);
+                (req as any)._ownerName = ownerName || 'Unknown Owner';
+              });
+            }
+          }
+        }
+        
+        console.log('Requests loaded:', data);
         if (data) setRequests(data);
     } catch (err) {
         console.error('Request loading failure', err);
@@ -103,69 +166,10 @@ const SettingsPage: React.FC = () => {
      if (!user?.id) return;
      try {
          setLoadingReqs(true);
-         
-         // FORCE DEMO MODE FOR DEMO EMAILS
-         const userEmail = user?.email?.toLowerCase();
-         if (userEmail === 'aman@coldsense.in') {
-           // Aman's demo investments - 6 investments
-           setStakeholderRequests([
-             { id: '1', site_id: 'site-kullu-a', created_at: '2024-09-01', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Kullu Storage A' } },
-             { id: '2', site_id: 'site-hamirpur', created_at: '2024-08-28', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Hamirpur Cold Store' } },
-             { id: '3', site_id: 'site-nashik', created_at: '2024-08-25', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Nashik Mega Storage' } },
-             { id: '4', site_id: 'site-mumbai', created_at: '2024-08-20', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Mumbai Port Storage' } },
-             { id: '5', site_id: 'site-kullu-2', created_at: '2024-08-15', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Kullu Valley Storage' } },
-             { id: '6', site_id: 'site-haryana', created_at: '2024-08-10', status: 'Invested', investment_amount: 20000, sites: { facility_name: 'Haryana AgriHub' } },
-           ]);
-           
-           // Demo payments
-           setStakeholderPayments([
-             { id: 'p1', investment_id: '1', amount_inr: 1060, payment_status: 'Received', payment_date: '2024-09-20', remarks: 'ROI payment for September' },
-             { id: 'p2', investment_id: '2', amount_inr: 1060, payment_status: 'Received', payment_date: '2024-09-20', remarks: 'ROI payment for September' },
-           ]);
-           
-           setLoadingReqs(false);
-           return;
-         }
-         
          const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
          if (!profile) return;
          
-         // Get both pending interests AND approved investments
-         // Pending: stakeholder_interest
-         const { data: interests } = await supabase
-            .from('stakeholder_interest')
-            .select(`
-               id, site_id, created_at, interest_status,
-               sites(facility_name)
-            `)
-            .eq('stakeholder_id', profile.id)
-            .eq('interest_status', 'Interested')
-            .order('created_at', { ascending: false });
-
-         // Approved: stakeholder_investments
-         const { data: investments } = await supabase
-            .from('stakeholder_investments')
-            .select(`
-               id, site_id, investment_amount, investment_date,
-               sites(facility_name)
-            `)
-            .eq('stakeholder_id', profile.id)
-            .order('investment_date', { ascending: false });
-
-         // Combine both - show approved investments first, then pending interests
-         const combined = [
-           ...(investments || []).map(inv => ({
-             ...inv,
-             created_at: inv.investment_date,
-             status: 'Invested'
-           })),
-           ...(interests || []).map(int => ({
-             ...int,
-             status: 'Pending'
-           }))
-         ];
-
-         setStakeholderRequests(combined);
+         await fetchStakeholderInvestmentsData(profile.id);
          
          // Load payments for these investments
          loadStakeholderPayments(profile.id);
@@ -173,6 +177,58 @@ const SettingsPage: React.FC = () => {
          console.error('Failed loading investments', err);
      } finally {
          setLoadingReqs(false);
+     }
+  };
+
+  const fetchStakeholderInvestmentsData = async (stakeholderId: string) => {
+     try {
+         // Get ONLY approved/pending investments (not interests)
+         // stakeholder_interest is just for browsing, investments are actual money
+         let investments: any[] = [];
+         try {
+           const { data: investmentsData } = await supabase
+              .from('stakeholder_investments')
+              .select(`
+                 id, site_id, investment_amount_inr, investment_date, status
+              `)
+              .eq('stakeholder_id', stakeholderId)
+              .order('investment_date', { ascending: false });
+
+           // Manually fetch site names for investments
+           if (investmentsData && investmentsData.length > 0) {
+             const siteIds = investmentsData.map(i => i.site_id);
+             const { data: sites } = await supabase
+               .from('sites')
+               .select('id, facility_name')
+               .in('id', siteIds);
+             
+             const siteMap = new Map(sites?.map(s => [s.id, s.facility_name]) || []);
+             
+             investments = investmentsData.map(inv => ({
+               ...inv,
+               site_name: siteMap.get(inv.site_id) || 'Unknown Facility'
+             }));
+           }
+         } catch (err) {
+           console.warn('Could not fetch stakeholder investments:', err);
+         }
+
+         // Transform investments for display
+         const combined = (investments || []).map(inv => ({
+           id: inv.id,
+           site_id: inv.site_id,
+           facility_name: inv.site_name,
+           created_at: inv.investment_date,
+           investment_amount: inv.investment_amount_inr,
+           status: inv.status === 'active' ? 'Approved' : (inv.status || 'Pending')
+         }));
+
+         console.log('Investments from DB:', investments.map(i => ({ id: i.id, site: i.site_name, status: i.status })));
+         console.log('Transformed display data:', combined.map(c => ({ id: c.id, facility: c.facility_name, status: c.status })));
+
+         setStakeholderRequests(combined);
+     } catch (err) {
+         console.error('Failed fetching investments data', err);
      }
   };
 
@@ -313,12 +369,12 @@ const SettingsPage: React.FC = () => {
           const farmerIds = accesses.map(a => a.farmer_id);
           const { data: farmerProfiles } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name')
+            .select('id, full_name')
             .in('id', farmerIds);
 
           const farmerNameMap = new Map((farmerProfiles || []).map(f => [
             f.id,
-            `${f.first_name || ''} ${f.last_name || ''}`.trim() || 'Unknown Farmer'
+            f.full_name || 'Unknown Farmer'
           ]));
           
           // Group by farmer (since we're treating 1 facility = 1 room concept)
@@ -456,14 +512,14 @@ const SettingsPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Facilities Management (Owner Only) */}
+      {/* Sites Management (Owner Only) */}
       {user?.role === 'owner' && (
         <>
           <Card variant="default" className="border-blue-100 dark:border-blue-900/30">
             <CardHeader className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-50 dark:border-blue-900/20">
               <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
                 <Building className="w-5 h-5" />
-                Facilities Management
+                Sites Management
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
@@ -471,32 +527,32 @@ const SettingsPage: React.FC = () => {
                 <div>
                   <p className="font-medium text-gray-900 dark:text-gray-100">Add New Site</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mt-1">
-                    Register a new cold storage facility to your network. This will begin the setup process for new rooms and sensor gateways.
+                    Register a new cold storage site to your network. This will begin the setup process for new rooms and sensor gateways.
                   </p>
                 </div>
                 <Button variant="primary" onClick={() => navigate('/owner-setup')} className="flex items-center gap-2">
-                  <Plus className="w-4 h-4" /> Add Facility
+                  <Plus className="w-4 h-4" /> Add Site
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Facilities Details Section */}
+          {/* Sites Details Section */}
           <Card variant="default" className="border-emerald-100 dark:border-emerald-900/30">
             <CardHeader className="bg-emerald-50/50 dark:bg-emerald-900/10 border-b border-emerald-50 dark:border-emerald-900/20">
               <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                 <Users className="w-5 h-5" />
-                Facilities Details
+                Sites Details
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               {loadingFacilities ? (
-                <div className="text-center py-8 text-gray-500">Loading facilities...</div>
+                <div className="text-center py-8 text-gray-500">Loading sites...</div>
               ) : facilities.length === 0 ? (
                 <div className="text-center py-8">
                   <Building className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    No facilities found. Add your first facility to get started.
+                    No sites found. Add your first site to get started.
                   </p>
                 </div>
               ) : (
@@ -522,7 +578,7 @@ const SettingsPage: React.FC = () => {
                       {facility.farmers.length === 0 ? (
                         <div className="text-center py-6 bg-white dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700">
                           <User className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500 dark:text-gray-400">No farmers currently using this facility</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">No farmers currently using this site</p>
                         </div>
                       ) : (
                         <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
@@ -621,7 +677,7 @@ const SettingsPage: React.FC = () => {
               )}
               <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30">
                 <p className="text-sm text-blue-700 dark:text-blue-400">
-                  <strong>Note:</strong> Multiple farmers can use the same facility at different times. Set individual pricing per farmer per facility based on your agreement. Price is charged per crate (25kg).
+                  <strong>Note:</strong> Multiple farmers can use the same site at different times. Set individual pricing per farmer per site based on your agreement. Price is charged per crate (25kg).
                 </p>
               </div>
             </CardContent>
@@ -670,7 +726,8 @@ const SettingsPage: React.FC = () => {
                  <table className="w-full text-sm text-left">
                    <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-slate-800/50">
                      <tr>
-                       <th className="px-6 py-4 font-semibold">Facility</th>
+                       <th className="px-6 py-4 font-semibold">Owner Name</th>
+                       <th className="px-6 py-4 font-semibold">Site</th>
                        <th className="px-6 py-4 font-semibold">Room</th>
                        <th className="px-6 py-4 font-semibold">Requested On</th>
                        <th className="px-6 py-4 font-semibold">Status</th>
@@ -680,15 +737,18 @@ const SettingsPage: React.FC = () => {
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                       {requests.length > 0 ? (
                         requests.map((req, idx) => {
-                          // Extract facility name from nested structure
-                          const room = Array.isArray(req.cold_storage_rooms) ? req.cold_storage_rooms[0] : req.cold_storage_rooms;
-                          const facilities = Array.isArray(room?.facilities) ? room?.facilities[0] : room?.facilities;
-                          const facilityName = facilities?.facility_name || room?.facilities?.facility_name || 'Unknown Facility';
+                          // Extract data from nested structure
+                          const room = req.cold_storage_rooms;
+                          const site = room?.sites;
+                          const ownerName = req._ownerName || 'Unknown Owner';
+                          const siteName = site?.facility_name || 'Unknown Site';
+                          const roomCode = room?.room_code || '—';
                           
                           return (
                             <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                              <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{facilityName}</td>
-                              <td className="px-6 py-4 text-gray-500">{room?.room_name || '—'}</td>
+                              <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{ownerName}</td>
+                              <td className="px-6 py-4 text-gray-900 dark:text-gray-100">{siteName}</td>
+                              <td className="px-6 py-4 text-gray-600 dark:text-gray-300 font-mono font-semibold">{roomCode}</td>
                               <td className="px-6 py-4 text-gray-500">{new Date(req.requested_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                               <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
                               <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
@@ -697,7 +757,7 @@ const SettingsPage: React.FC = () => {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                             No storage requests yet. Submit your first request to get started!
                           </td>
                         </tr>
@@ -751,7 +811,7 @@ const SettingsPage: React.FC = () => {
                  <table className="w-full text-sm text-left">
                    <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-slate-800/50">
                      <tr>
-                       <th className="px-6 py-4 font-semibold">Facility</th>
+                       <th className="px-6 py-4 font-semibold">Site</th>
                        <th className="px-6 py-4 font-semibold">Requested On</th>
                        <th className="px-6 py-4 font-semibold">Investment Amount</th>
                        <th className="px-6 py-4 font-semibold">Status</th>
@@ -763,7 +823,7 @@ const SettingsPage: React.FC = () => {
                         stakeholderRequests.map((req: any) => (
                           <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
                             <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
-                              {req.facilities?.facility_name || 'Unknown Facility'}
+                              {req.facility_name || 'Unknown Facility'}
                             </td>
                             <td className="px-6 py-4 text-gray-500">
                               {new Date(req.created_at || req.investment_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
@@ -773,11 +833,11 @@ const SettingsPage: React.FC = () => {
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                req.status === 'Invested' 
+                                req.status === 'Approved' 
                                   ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                                   : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
                               }`}>
-                                {req.status === 'Invested' ? 'Approved' : 'Pending'}
+                                {req.status === 'Approved' ? 'Approved' : 'Pending'}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
@@ -883,7 +943,7 @@ const SettingsPage: React.FC = () => {
                   <option value="">Select an investment</option>
                   {stakeholderRequests.map((inv: any) => (
                     <option key={inv.id} value={inv.id}>
-                      {inv.facilities?.facility_name} - ₹{inv.investment_amount?.toLocaleString() || '0'}
+                      {inv.facility_name} - ₹{inv.investment_amount?.toLocaleString() || '0'}
                     </option>
                   ))}
                 </select>

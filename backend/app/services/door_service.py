@@ -98,21 +98,6 @@ def close_door_open_event(door_id: str) -> Optional[Dict]:
     except Exception as e:
         logger.error("close_door_open_event error: %s", e)
         return None
-        "duration_seconds": duration_seconds,
-        "duration_minutes": duration_minutes
-    }
-    
-    update_response = (
-        supabase
-        .table("door_events")
-        .update(update_data)
-        .eq("id", event["id"])
-        .execute()
-    )
-    
-    if update_response.data:
-        return update_response.data[0]
-    return None
 
 
 def get_door_frequency_today(door_id: str) -> int:

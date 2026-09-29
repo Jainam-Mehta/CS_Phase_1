@@ -184,7 +184,23 @@ const FarmerProfileSetup: React.FC = () => {
         .maybeSingle();
 
       if (existingProfile) {
-        console.log('Profile already exists');
+        console.log('Profile already exists, updating with location if needed');
+        
+        // Update existing profile with location data
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            state_id: selectedStateId || null,
+            district_id: selectedDistrictId || null,
+            locality_id: selectedLocalityId || null,
+          })
+          .eq('id', user.id);
+        
+        if (updateError) {
+          console.error('Error updating profile location:', updateError);
+          // Don't throw - continue anyway
+        }
+        
         localStorage.removeItem('signupData');
         setUser({
           id: user.id,
@@ -217,6 +233,9 @@ const FarmerProfileSetup: React.FC = () => {
           role: 'farmer',
           phone: formData.phoneNumber || null,
           is_active: true,
+          state_id: selectedStateId || null,
+          district_id: selectedDistrictId || null,
+          locality_id: selectedLocalityId || null,
         }, { onConflict: 'id' });
 
       if (profileError) {

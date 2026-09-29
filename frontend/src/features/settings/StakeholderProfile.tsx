@@ -10,24 +10,20 @@ import { useNavigate } from 'react-router-dom';
 import type { State, District, Locality } from '../../lib/supabase';
 
 interface StakeholderProfileData {
-  id: number;
-  auth_user_id: string;
-  first_name: string;
-  last_name?: string;
-  date_of_birth?: string;
-  phone?: string;
-  gender?: string;
-  state_id: string;
-  district_id: string;
-  locality_id?: string;
-  role_id: string;
-  created_at: string;
-  updated_at: string;
-  states?: { name: string };
-  districts?: { name: string };
-  localities?: { name: string };
-  roles?: { name: string };
+  id: string;
   email?: string;
+  full_name?: string;
+  role?: string;
+  phone?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  date_of_birth?: string;
+  gender?: string;
+  state_id?: string;
+  district_id?: string;
+  locality_id?: string;
+  owner_company_id?: string;
 }
 
 const StakeholderProfile: React.FC = () => {
@@ -43,11 +39,21 @@ const StakeholderProfile: React.FC = () => {
 
   // Stats
   const [stats, setStats] = useState({
-     facilitiesInvested: 2,
-     totalRooms: 2,
-     totalValue: 40000,
-     activeInvestments: 2,
+     facilitiesInvested: 0,
+     totalRooms: 0,
+     totalValue: 0,
+     activeInvestments: 0,
      pendingRequests: 0,
+  });
+
+  // Investment Profile Data
+  const [investmentProfile, setInvestmentProfile] = useState({
+    preferredStates: [] as string[],
+    preferredDistricts: [] as string[],
+    investmentBudgetUsed: 0,
+    totalInvestedAmount: 0,
+    facilityTypes: [] as string[],
+    avgInvestmentPerFacility: 0,
   });
 
   // Edit Mode Data
@@ -71,6 +77,32 @@ const StakeholderProfile: React.FC = () => {
     loadProfile();
     loadStates();
   }, [user?.id]);
+
+  useEffect(() => {
+    // Populate form data with location names when data is loaded
+    if (profileData && states.length > 0) {
+      if (profileData.state_id) {
+        const stateName = states.find(s => s.id === profileData.state_id)?.name || '';
+        setFormData(p => ({ ...p, state: stateName }));
+      }
+    }
+  }, [profileData, states]);
+
+  useEffect(() => {
+    // Populate district name in form
+    if (profileData && districts.length > 0 && profileData.district_id) {
+      const districtName = districts.find(d => d.id === profileData.district_id)?.name || '';
+      setFormData(p => ({ ...p, district: districtName }));
+    }
+  }, [profileData, districts]);
+
+  useEffect(() => {
+    // Populate locality name in form
+    if (profileData && localities.length > 0 && profileData.locality_id) {
+      const localityName = localities.find(l => l.id === profileData.locality_id)?.name || '';
+      setFormData(p => ({ ...p, locality: localityName }));
+    }
+  }, [profileData, localities]);
 
   useEffect(() => {
     if (selectedStateId) loadDistricts(selectedStateId);
@@ -103,50 +135,98 @@ const StakeholderProfile: React.FC = () => {
 
       const { data, error: fetchError } = await supabase
         .from('profiles')
-        .select(`*, states(name), districts(name), localities(name), roles(name)`)
+        .select('*')
         .eq('id', user.id)
         .single();
 
       if (fetchError) throw fetchError;
 
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      setProfileData({ ...data, email: authUser?.email });
+      setProfileData({ ...data, email: authUser?.email || data.email });
 
       setFormData({
          phone: data.phone || '',
          dateOfBirth: data.date_of_birth || '',
          gender: data.gender || '',
-         state: data.states?.name || '',
-         district: data.districts?.name || '',
-         locality: data.localities?.name || ''
+         state: '',
+         district: '',
+         locality: ''
       });
-      setSelectedStateId(data.state_id?.toString() || null);
-      setSelectedDistrictId(data.district_id?.toString() || null);
-      setSelectedLocalityId(data.locality_id?.toString() || null);
 
-      // Extract Portfolio Values natively calculating Arrays smoothly checking tables efficiently!
+      // Set location IDs to load districts/localities cascading
+      if (data.state_id) setSelectedStateId(data.state_id);
+      if (data.district_id) setSelectedDistrictId(data.district_id);
+      if (data.locality_id) setSelectedLocalityId(data.locality_id);
+
+      // Extract Portfolio Values from database
+      const { data: investments } = await supabase
+         .from('stakeholder_investments')
+         .select(`
+           id,
+           investment_amount_inr,
+           status,
+           site_id,
+           sites(
+             facility_name,
+             id,
+             state_id,
+             states(name),
+             district_id,
+             districts(name)
+           )
+         `)
+         .eq('stakeholder_id', data.id);
+      
       const { data: interests } = await supabase
          .from('stakeholder_interest')
          .select('site_id')
          .eq('stakeholder_id', data.id);
       
-      let facCount = 0, activeCount = 0;
+      let facCount = 0, activeCount = 0, totalInvested = 0;
       let roomCount = 0;
+      let investedStates = new Set<string>();
+      let investedDistricts = new Set<string>();
       
-      if (interests && interests.length > 0) {
-         facCount = interests.length;
-         activeCount = interests.length; // Basic active interpretation based exclusively via valid records
-         const siteIds = interests.map(i => i.site_id);
-         const { data: rooms } = await supabase.from('cold_storage_rooms').select('id').in('site_id', siteIds);
-         if (rooms) roomCount = rooms.length;
+      if (investments && investments.length > 0) {
+         facCount = investments.length;
+         // Only count ACTIVE investments (status = 'active')
+         const activeInvestments = investments.filter((inv: any) => inv.status === 'active');
+         activeCount = activeInvestments.length;
+         // Only sum ACTIVE investments
+         totalInvested = activeInvestments.reduce((sum: number, inv: any) => sum + (inv.investment_amount_inr || 0), 0);
+         
+         // Only add states/districts from ACTIVE investments
+         activeInvestments.forEach((inv: any) => {
+           const siteData = Array.isArray(inv.sites) ? inv.sites[0] : inv.sites;
+           if (siteData?.states?.name) investedStates.add(siteData.states.name);
+           if (siteData?.districts?.name) investedDistricts.add(siteData.districts.name);
+         });
+         
+         const siteIds = investments.map((i: any) => {
+           const siteData = Array.isArray(i.sites) ? i.sites[0] : i.sites;
+           return siteData?.id || i.site_id;
+         }).filter(Boolean);
+         if (siteIds.length > 0) {
+           const { data: rooms } = await supabase.from('cold_storage_rooms').select('id').in('site_id', siteIds);
+           if (rooms) roomCount = rooms.length;
+         }
       }
 
       setStats({
-          facilitiesInvested: Math.max(facCount, 2),
-          totalRooms: Math.max(roomCount, 2),
-          totalValue: 40000,
-          activeInvestments: Math.max(activeCount, 2),
-          pendingRequests: 0,
+          facilitiesInvested: facCount,
+          totalRooms: roomCount,
+          totalValue: totalInvested,
+          activeInvestments: activeCount,
+          pendingRequests: interests?.length || 0,
+      });
+
+      setInvestmentProfile({
+        preferredStates: Array.from(investedStates),
+        preferredDistricts: Array.from(investedDistricts),
+        investmentBudgetUsed: totalInvested,
+        totalInvestedAmount: totalInvested,
+        facilityTypes: [], // Can be extended if facility type data is available
+        avgInvestmentPerFacility: facCount > 0 ? totalInvested / facCount : 0,
       });
 
     } catch (err) {
@@ -209,7 +289,7 @@ const StakeholderProfile: React.FC = () => {
       </div>
   );
 
-  const fullName = `${profileData.first_name} ${profileData.last_name || ''}`.trim();
+  const fullName = profileData.full_name || 'Stakeholder';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-2">
@@ -238,7 +318,7 @@ const StakeholderProfile: React.FC = () => {
                     <Shield className="h-4 w-4" /> <span>Verified Account</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                    <Calendar className="h-4 w-4" /> <span>Member since {new Date(profileData.created_at).getFullYear()}</span>
+                    <Calendar className="h-4 w-4" /> <span>Member since {profileData.created_at ? new Date(profileData.created_at).getFullYear() : 'N/A'}</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 pl-1 pt-1">
                     <Activity className="h-4 w-4" /> <span>Account Status: Active</span>
@@ -254,7 +334,7 @@ const StakeholderProfile: React.FC = () => {
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Facilities Invested In</span>
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Sites Invested In</span>
                   <span className="font-bold text-slate-900 dark:text-white">{stats.facilitiesInvested}</span>
                </div>
                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
@@ -344,13 +424,20 @@ const StakeholderProfile: React.FC = () => {
                           value={formData.state}
                           onChange={(name) => {
                              const s = states.find(x => x.name === name);
-                             if (s) { setSelectedStateId(s.id); setFormData(p => ({...p, state: name, district: '', locality: ''})); setSelectedDistrictId(null); setSelectedLocalityId(null); }
+                             if (s) { 
+                               setSelectedStateId(s.id); 
+                               setFormData(p => ({...p, state: name, district: '', locality: ''})); 
+                               setSelectedDistrictId(null); 
+                               setSelectedLocalityId(null); 
+                             }
                           }}
                           options={states.map(s => s.name)}
                           placeholder="Select State..."
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.states?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100 font-medium">
+                         {profileData.state_id ? `${states.find(s => s.id === profileData.state_id)?.name || 'Unknown'}` : 'Not Provided'}
+                       </p>
                     )}
                   </div>
                   <div>
@@ -360,14 +447,20 @@ const StakeholderProfile: React.FC = () => {
                           value={formData.district}
                           onChange={(name) => {
                              const d = districts.find(x => x.name === name);
-                             if (d) { setSelectedDistrictId(d.id); setFormData(p => ({...p, district: name, locality: ''})); setSelectedLocalityId(null); }
+                             if (d) { 
+                               setSelectedDistrictId(d.id); 
+                               setFormData(p => ({...p, district: name, locality: ''})); 
+                               setSelectedLocalityId(null); 
+                             }
                           }}
                           options={districts.map(s => s.name)}
                           placeholder="Select District..."
                           disabled={!selectedStateId}
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.districts?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100 font-medium">
+                         {profileData.district_id ? `${districts.find(d => d.id === profileData.district_id)?.name || 'Unknown'}` : 'Not Provided'}
+                       </p>
                     )}
                   </div>
                   <div>
@@ -377,50 +470,67 @@ const StakeholderProfile: React.FC = () => {
                           value={formData.locality}
                           onChange={(name) => {
                              const l = localities.find(x => x.name === name);
-                             if (l) { setSelectedLocalityId(l.id); setFormData(p => ({...p, locality: name})); }
+                             if (l) { 
+                               setSelectedLocalityId(l.id); 
+                               setFormData(p => ({...p, locality: name})); 
+                             }
                           }}
                           options={localities.map(s => s.name)}
                           placeholder="Select Locality..."
                           disabled={!selectedDistrictId}
                        />
                     ) : (
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.localities?.name)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100 font-medium">
+                         {profileData.locality_id ? `${localities.find(l => l.id === profileData.locality_id)?.name || 'Unknown'}` : 'Not Provided'}
+                       </p>
                     )}
                   </div>
                 </div>
               </div>
 
+              {/* Investment Profile Section - HIDDEN FOR NOW */}
+              {/* Will be used in future if required */}
+              {/*
               <div>
                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2 border-b border-gray-100 dark:border-slate-800 pb-2">
                    <Briefcase className="h-4 w-4 text-purple-500" /> Investment Profile
                  </h4>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Investment State</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">{getNotSpecified(profileData.states?.name)}</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Investment States</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">
+                        {investmentProfile.preferredStates.length > 0 
+                          ? investmentProfile.preferredStates.join(', ') 
+                          : 'No investments yet'}
+                      </p>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Investment District</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">{getNotSpecified(profileData.districts?.name)}</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Investment Districts</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">
+                        {investmentProfile.preferredDistricts.length > 0 
+                          ? investmentProfile.preferredDistricts.join(', ') 
+                          : 'No investments yet'}
+                      </p>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Facility Type</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">Not Specified</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Total Invested Amount</label>
+                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">₹{investmentProfile.totalInvestedAmount.toLocaleString('en-IN')}</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Investment Budget</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">Not Specified</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Average per Facility</label>
+                      <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">₹{investmentProfile.avgInvestmentPerFacility.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Storage Capacity</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">Not Specified</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Number of Sites Invested</label>
+                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">{stats.facilitiesInvested} {stats.facilitiesInvested === 1 ? 'site' : 'sites'}</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Preferred Produce Categories</label>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">Not Specified</p>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Pending Investment Interests</label>
+                      <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">{stats.pendingRequests} {stats.pendingRequests === 1 ? 'interest' : 'interests'}</p>
                     </div>
                  </div>
               </div>
+              */}
 
               {isEditing && (
                 <div className="flex gap-4 justify-end pt-4 border-t border-gray-200 dark:border-slate-800">

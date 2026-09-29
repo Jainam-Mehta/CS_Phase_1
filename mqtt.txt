@@ -1,0 +1,12 @@
+SELECT
+  s.id as site_id,
+  s.facility_name,
+  r.id as room_id,
+  r.room_code,
+  r.capacity_kg
+FROM public.sites s
+LEFT JOIN public.cold_storage_rooms r ON s.id = r.site_id
+WHERE s.owner_profile_id = 'YOUR_OWNER_UUID'
+ORDER BY s.created_at DESC, r.created_at DESC;
+
+

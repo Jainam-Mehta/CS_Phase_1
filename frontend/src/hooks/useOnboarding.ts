@@ -11,22 +11,13 @@ import { useAuthStore } from '../stores/useAuthStore';
 
 export type OnboardingStep = 
   | 'profile' 
-  | 'site' 
-  | 'rooms' 
-  | 'products' 
   | 'dashboard';
 
 interface OnboardingState {
   step: OnboardingStep;
   loading: boolean;
   hasProfile: boolean;
-  hasSite: boolean;
-  hasRooms: boolean;
-  hasProducts: boolean;
   profile: any;
-  sites: any[];
-  rooms: any[];
-  products: any[];
 }
 
 export const useOnboarding = () => {
@@ -37,13 +28,7 @@ export const useOnboarding = () => {
     step: 'profile',
     loading: true,
     hasProfile: false,
-    hasSite: false,
-    hasRooms: false,
-    hasProducts: false,
     profile: null,
-    sites: [],
-    rooms: [],
-    products: [],
   });
 
   useEffect(() => {
@@ -61,22 +46,6 @@ export const useOnboarding = () => {
       
       if (!user?.id) {
         setState(prev => ({ ...prev, loading: false, step: 'profile' }));
-        return;
-      }
-      
-      // FORCE DEMO USERS TO SKIP ALL ONBOARDING
-      const userEmail = user?.email?.toLowerCase();
-      if (userEmail === 'roy@coldsense.in' || userEmail === 'rupesh@coldsense.in' || userEmail === 'aman@coldsense.in') {
-        console.log('🎭 DEMO USER - SKIP ALL ONBOARDING - GO TO DASHBOARD');
-        setState(prev => ({
-          ...prev,
-          step: 'dashboard',
-          loading: false,
-          hasProfile: true,
-          hasSite: true,
-          hasRooms: true,
-          hasProducts: true,
-        }));
         return;
       }
       
@@ -133,23 +102,45 @@ export const useOnboarding = () => {
       }
 
       console.log('✓ Profile found');
-      console.log('User role:', profile.roles?.name);
+      console.log('User role from profile.roles?.name:', profile.roles?.name);
+      console.log('Full profile object:', profile);
 
-      // Owners: Check if they have a facility, if not, still go to dashboard
-      // They can add a facility from the dashboard
-      if (profile.roles?.name === 'Owner') {
-        console.log('Owner role detected -> step: dashboard');
-        setState(prev => ({
-          ...prev,
-          step: 'dashboard',
-          loading: false,
-          hasProfile: true,
-          hasSite: true,
-          hasRooms: true,
-          hasProducts: true,
-          profile,
-        }));
-        return;
+      // Owners: Check if they have sites in database
+      // If they do, go to dashboard. If not, go to site setup.
+      if (profile.roles?.name === 'Owner' || user?.role === 'owner') {
+        console.log('Owner role detected, checking for existing sites...');
+        
+        const { data: sites, error: sitesError } = await supabase
+          .from('sites')
+          .select('id')
+          .eq('owner_profile_id', profile.id)
+          .limit(1);
+        
+        if (!sitesError && sites && sites.length > 0) {
+          console.log('✓ Owner has existing sites -> step: dashboard');
+          setState(prev => ({
+            ...prev,
+            step: 'dashboard',
+            loading: false,
+            hasProfile: true,
+            hasSite: true,
+            hasRooms: true,
+            hasProducts: true,
+            profile,
+            sites: sites,
+          }));
+          return;
+        } else {
+          console.log('Owner has no sites -> step: profile (OwnerSetup)');
+          setState(prev => ({
+            ...prev,
+            step: 'profile',
+            loading: false,
+            hasProfile: true,
+            profile,
+          }));
+          return;
+        }
       }
 
       // Stakeholders skip farmer onboarding
@@ -168,10 +159,10 @@ export const useOnboarding = () => {
         return;
       }
 
-      // Farmers skip storage selection onboarding - they go directly to dashboard
-      // They can add cold storage later via Settings tab
-      if (profile.roles?.name === 'Farmer') {
-        console.log('Farmer role detected -> skip storage selection, go to dashboard');
+      // Farmers: Skip onboarding entirely after profile creation
+      // They go directly to dashboard. Room requests happen later via Settings
+      if (profile.role === 'farmer') {
+        console.log('Farmer role detected -> skip onboarding, go to dashboard');
         setState(prev => ({
           ...prev,
           step: 'dashboard',
@@ -199,113 +190,14 @@ export const useOnboarding = () => {
          return;
       }
 
-      // 2. Check if user has sites (from localStorage or backend)
-      const storageRequest = localStorage.getItem('storageAccessRequest');
-      let hasSelectedSite = false;
-      let selectedSites: any[] = [];
-
-      if (storageRequest) {
-        try {
-          const parsed = JSON.parse(storageRequest);
-          hasSelectedSite = !!(parsed.sites && parsed.sites.length > 0);
-          selectedSites = parsed.sites || [];
-        } catch (e) {
-          console.error('Error parsing storage request:', e);
-        }
-      }
-
-      if (!hasSelectedSite) {
-        console.log('No site selected -> step: site');
-        setState(prev => ({
-          ...prev,
-          step: 'site',
-          loading: false,
-          hasProfile: true,
-          hasSite: false,
-          profile,
-        }));
-        return;
-      }
-
-      console.log('✓ Site selected');
-
-      // 3. Check if user has selected rooms
-      let hasSelectedRooms = false;
-      let selectedRooms: any[] = [];
-
-      if (storageRequest) {
-        try {
-          const parsed = JSON.parse(storageRequest);
-          hasSelectedRooms = !!(parsed.rooms && parsed.rooms.length > 0);
-          selectedRooms = parsed.rooms || [];
-        } catch (e) {
-          console.error('Error parsing storage request:', e);
-        }
-      }
-
-      if (!hasSelectedRooms) {
-        console.log('No rooms selected -> step: rooms');
-        setState(prev => ({
-          ...prev,
-          step: 'rooms',
-          loading: false,
-          hasProfile: true,
-          hasSite: true,
-          hasRooms: false,
-          profile,
-          sites: selectedSites,
-        }));
-        return;
-      }
-
-      console.log('✓ Rooms selected');
-
-      // 4. Check if user has selected products
-      let hasSelectedProducts = false;
-      let selectedProducts: any[] = [];
-
-      if (storageRequest) {
-        try {
-          const parsed = JSON.parse(storageRequest);
-          hasSelectedProducts = !!(parsed.products && parsed.products.length > 0);
-          selectedProducts = parsed.products || [];
-        } catch (e) {
-          console.error('Error parsing storage request:', e);
-        }
-      }
-
-      if (!hasSelectedProducts) {
-        console.log('No products selected -> step: products');
-        setState(prev => ({
-          ...prev,
-          step: 'products',
-          loading: false,
-          hasProfile: true,
-          hasSite: true,
-          hasRooms: true,
-          hasProducts: false,
-          profile,
-          sites: selectedSites,
-          rooms: selectedRooms,
-        }));
-        return;
-      }
-
-      console.log('✓ Products selected');
-
-      console.log('✓ All onboarding steps complete -> step: dashboard');
+      // For non-farmer roles, default to dashboard as well
+      console.log('Reached end of role checks - defaulting to dashboard');
       setState(prev => ({
         ...prev,
         step: 'dashboard',
         loading: false,
         hasProfile: true,
-        hasSite: true,
-        hasRooms: true,
-        hasProducts: true,
         profile,
-        sites: selectedSites,
-        rooms: selectedRooms,
-        products: selectedProducts,
       }));
 
     } catch (error) {
@@ -328,7 +220,7 @@ export const useOnboarding = () => {
     if (state.step === 'profile') {
       const userRole = user?.role;
       if (userRole === 'owner') {
-        return '/owner-profile-setup'; // Owner goes to profile setup (not facility)
+        return '/owner-profile-setup';
       } else if (userRole === 'stakeholder') {
         return '/stakeholder-profile-setup';
       } else if (userRole === 'farmer') {
@@ -337,21 +229,7 @@ export const useOnboarding = () => {
       return '/farmer-profile-setup';
     }
 
-    // Handle site step - for owners, this means facility setup
-    if (state.step === 'site') {
-      const userRole = user?.role || state.profile?.roles?.name?.toLowerCase();
-      if (userRole === 'owner' || userRole === 'Owner') {
-        return '/owner-setup'; // Owner creates facility
-      }
-      return '/storage-selection'; // Farmers select storage
-    }
-
-    const stepRoutes: Record<Exclude<OnboardingStep, 'dashboard' | 'profile' | 'site'>, string> = {
-      'rooms': '/room-selection',
-      'products': '/product-selection',
-    };
-
-    return stepRoutes[state.step as Exclude<OnboardingStep, 'dashboard' | 'profile' | 'site'>] ?? null;
+    return null;
   };
 
   const completeStep = (step: OnboardingStep) => {

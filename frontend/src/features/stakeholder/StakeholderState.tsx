@@ -46,11 +46,13 @@ const StakeholderState: React.FC = () => {
       const profile = await resolveProfile(user!.id);
       if (!profile) throw new Error('Profile not found');
 
-      // 1. Fetch sites in this state
+      // 1. Fetch sites in this state (with direct FK and nested locality joins)
       const { data: facs, error: facErr } = await supabase
         .from('sites')
         .select(`
-          id, facility_name,
+          id, facility_name, state_id, district_id, locality_id,
+          states ( name ),
+          districts ( name ),
           localities (
             districts (
               name,
@@ -61,15 +63,17 @@ const StakeholderState: React.FC = () => {
         
       if (facErr) throw facErr;
 
-      // Filter facilities by requested state locally due to deep join
-      const stateFacilities = (facs || []).filter((f: any) => 
-        f.localities?.districts?.states?.name === stateName
-      ).map((f: any) => ({
-        id: f.id,
-        facility_name: f.facility_name,
-        stateName: f.localities.districts.states.name,
-        districtName: f.localities.districts.name
-      }));
+      // Filter facilities by requested state locally
+      const stateFacilities = (facs || []).map((f: any) => {
+        const resolvedStateName = f.states?.name || f.localities?.districts?.states?.name || '';
+        const resolvedDistrictName = f.districts?.name || f.localities?.districts?.name || 'Unknown';
+        return {
+          id: f.id,
+          facility_name: f.facility_name,
+          stateName: resolvedStateName,
+          districtName: resolvedDistrictName
+        };
+      }).filter((f: any) => f.stateName === stateName);
 
       // 2. Fetch user's investments for these facilities
       const facIds = stateFacilities.map((f: any) => f.id);
@@ -79,7 +83,7 @@ const StakeholderState: React.FC = () => {
         .select('*')
         .eq('stakeholder_id', profile.id)
         .in('site_id', facIds)
-        .eq('status', 'Active')).data : [];
+        .in('status', ['active', 'Active'])).data : [];
 
       const invMap = new Map((invs || []).map((i: any) => [i.site_id, i]));
       

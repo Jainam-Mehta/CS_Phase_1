@@ -8,6 +8,7 @@ import { Check, AlertCircle, Warehouse, Clock, Sprout } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { FarmerRoomAccess } from '../../lib/supabase';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
+import { logRoomRequestSubmitted } from '../../services/activityLogService';
 
 const RoomSelection: React.FC = () => {
   const navigate = useNavigate();
@@ -23,10 +24,10 @@ const RoomSelection: React.FC = () => {
   const isExtensionMode = searchParams.get('mode') === 'extension';
 
   useEffect(() => {
-    if (step === 'rooms' || isExtensionMode) {
+    if (isExtensionMode) {
       loadFarmerLocality();
     }
-  }, [step, isExtensionMode]);
+  }, [isExtensionMode]);
 
   const loadFarmerLocality = async () => {
     try {
@@ -193,6 +194,26 @@ const RoomSelection: React.FC = () => {
 
       if (insertError) throw insertError;
 
+      // Log each room request submission
+      for (const roomId of selectedRooms) {
+        const { data: room } = await supabase
+          .from('cold_storage_rooms')
+          .select('room_code, site_id, sites(facility_name)')
+          .eq('id', roomId)
+          .maybeSingle();
+
+        if (room) {
+          const site = Array.isArray(room.sites) ? room.sites[0] : room.sites;
+          await logRoomRequestSubmitted(
+            profile.id,
+            room.site_id,
+            roomId,
+            room.room_code,
+            site?.facility_name || 'Unknown Site'
+          );
+        }
+      }
+
       // Get farmer's selected products
       const { data: farmerProducts } = await supabase
         .from('farmer_products')
@@ -218,7 +239,7 @@ const RoomSelection: React.FC = () => {
           navigate('/product-selection?mode=extension');
       } else {
           // Notify onboarding hook that this step is complete
-          completeStep('rooms');
+          completeStep('dashboard');
           // Navigate to product selection
           navigate('/product-selection');
       }
@@ -248,7 +269,7 @@ const RoomSelection: React.FC = () => {
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 2/3
+                Step 2/4
               </span>
             </div>
             
@@ -257,7 +278,7 @@ const RoomSelection: React.FC = () => {
             </div>
             <CardTitle className="text-3xl">Select Storage Rooms</CardTitle>
             <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Choose the cold storage rooms you want to request access to
+              Choose the cold storage rooms you want to request access to for storing your products
             </p>
           </CardHeader>
           <CardContent>
