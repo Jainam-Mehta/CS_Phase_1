@@ -93,7 +93,7 @@ const StakeholderDistrict: React.FC = () => {
           resolvedStateName
         };
       }).filter((f: any) => 
-        f.resolvedDistrictName.toLowerCase() === districtName.toLowerCase()
+        districtName ? f.resolvedDistrictName.toLowerCase() === districtName.toLowerCase() : false
       );
 
       // 3. Fetch user's investments for these facilities
