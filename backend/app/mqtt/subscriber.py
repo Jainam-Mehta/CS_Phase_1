@@ -265,45 +265,91 @@ def on_message(client, userdata, msg):
         timestamp = datetime.now(timezone.utc).isoformat()
         sensor_id = payload.get("sensor_id", sensor_name)
         
-        # ── Handle Combined Sensor (temperature + humidity) ────────────────
-        if "temperature" in payload and "humidity" in payload:
-            logger.info("📡 Combined sensor detected: temp+humidity")
-            print(f"{Color.BLUE}📡 Combined sensor detected: temp+humidity{Color.END}")
+        # ── UNIVERSAL SENSOR HANDLER ──────────────────────────────────────
+        # Maps GCP payload keys to sensor types and processes all sensors
+        
+        from app.database.supabase import supabase
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Define payload key → (sensor_type, unit) mapping
+        payload_mapping = {
+            # Temperature & Humidity (both GCP format and standard format)
+            "Temp": ("Temperature", "°C"),
+            "temperature": ("Temperature", "°C"),
+            "Hum": ("Humidity", "%"),
+            "humidity": ("Humidity", "%"),
             
-            try:
-                temp_value = float(payload["temperature"])
-                humidity_value = float(payload["humidity"])
-                temp_unit = payload.get("temp_unit", "°C")
-                humidity_unit = payload.get("humidity_unit", "%")
-                
-                # Save BOTH temperature and humidity in ONE row to cold_storage_conditions
+            # Door sensors
+            "Door1": ("Door", "Status"),
+            "Door2": ("Door", "Status"),
+            "Door3": ("Door", "Status"),
+            "Door4": ("Door", "Status"),
+            
+            # Gas sensors
+            "CO2": ("CO2", "ppm"),
+            "Oxygen": ("Oxygen", "%"),
+            "O2": ("Oxygen", "%"),
+            "Ammonia": ("Ammonia", "ppm"),
+            "Ethylene": ("Ethylene", "ppm"),
+            
+            # Pressure sensors
+            "Pressure": ("Pressure", "psi"),
+            "SuctionPressure": ("SuctionPressure", "psi"),
+            "DischargePressure": ("DischargePressure", "psi"),
+            
+            # Power & Energy
+            "Battery": ("Battery", "%"),
+            "Solar": ("Solar", "W"),
+            "Energy": ("Energy", "kWh"),
+            
+            # Environmental
+            "AmbientTemperature": ("AmbientTemperature", "°C"),
+            "AmbientHumidity": ("AmbientHumidity", "%"),
+        }
+        
+        sensors_processed = 0
+        
+        # Process each key in payload
+        for payload_key, (sensor_type, default_unit) in payload_mapping.items():
+            if payload_key in payload:
                 try:
-                    from app.database.supabase import supabase
+                    value = payload[payload_key]
+                    unit = payload.get(f"{payload_key}_unit", default_unit)
                     
-                    # First: Update sensor_devices to mark as Online WITH reading values
-                    now = datetime.now(timezone.utc).isoformat()
+                    # Convert to float for numeric types
+                    try:
+                        value_numeric = float(value)
+                    except (ValueError, TypeError):
+                        # For non-numeric (like door status), keep as-is
+                        value_numeric = value
                     
-                    # Update temperature sensor device with reading value
+                    # Update sensor_devices table
                     supabase.table("sensor_devices").update({
                         "last_reading": now,
-                        "last_reading_value": temp_value,
-                        "last_reading_unit": temp_unit,
+                        "last_reading_value": value_numeric,
+                        "last_reading_unit": unit,
                         "status": "Online",
                         "gateway_id": gateway_id,
-                    }).eq("room_id", room_id).eq("sensor_type", "Temperature").eq("gateway_id", gateway_id).execute()
+                    }).eq("room_id", room_id).eq("sensor_type", sensor_type).eq("gateway_id", gateway_id).execute()
                     
-                    # Update humidity sensor device with reading value
-                    supabase.table("sensor_devices").update({
-                        "last_reading": now,
-                        "last_reading_value": humidity_value,
-                        "last_reading_unit": humidity_unit,
-                        "status": "Online",
-                        "gateway_id": gateway_id,
-                    }).eq("room_id", room_id).eq("sensor_type", "Humidity").eq("gateway_id", gateway_id).execute()
+                    logger.info("✓ Updated %s sensor: value=%s%s", sensor_type, value_numeric, unit)
+                    print(f"{Color.GREEN}✓ {sensor_type}: {value_numeric}{unit}{Color.END}")
+                    sensors_processed += 1
                     
-                    print(f"{Color.GREEN}✓ Updated sensor_devices: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
+                except Exception as e:
+                    logger.error("Error processing %s: %s", payload_key, e)
+                    print(f"{Color.YELLOW}⚠ Error processing {payload_key}: {e}{Color.END}")
+        
+        # Special handling: combined temp+humidity in ONE database row
+        if "temperature" in payload or "Temp" in payload:
+            temp_key = "temperature" if "temperature" in payload else "Temp"
+            hum_key = "humidity" if "humidity" in payload else "Hum"
+            
+            if hum_key in payload:
+                try:
+                    temp_value = float(payload[temp_key])
+                    humidity_value = float(payload[hum_key])
                     
-                    # Second: Save both temperature and humidity in ONE row to cold_storage_conditions
                     condition_data = {
                         "site_id": site_id,
                         "room_id": room_id,
@@ -315,63 +361,19 @@ def on_message(client, userdata, msg):
                     
                     resp = supabase.table("cold_storage_conditions").insert(condition_data).execute()
                     if resp.data:
-                        logger.info("✓ Saved combined sensor to database: temp=%.1f%s, humidity=%.1f%s",
-                                   temp_value, temp_unit, humidity_value, humidity_unit)
-                        print(f"{Color.GREEN}✓ Saved to database: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
-                    else:
-                        logger.error("Failed to save combined sensor")
-                        print(f"{Color.RED}✗ Failed to save combined sensor{Color.END}")
-                except Exception as e:
-                    logger.error("Error saving combined sensor: %s", e)
-                    print(f"{Color.RED}✗ Error saving to database: {e}{Color.END}")
-                
-            except (ValueError, TypeError) as e:
-                logger.error("Failed to process combined sensor values: %s", e)
-                print(f"{Color.RED}✗ Error processing combined sensor: {e}{Color.END}")
-                return
+                        logger.info("✓ Saved temp+humidity to cold_storage_conditions")
+                        print(f"{Color.GREEN}✓ Archived to cold_storage_conditions{Color.END}")
+                    
+                except (ValueError, TypeError) as e:
+                    logger.warning("Could not save combined temp+humidity: %s", e)
         
-        # ── Handle Single Sensor ──────────────────────────────────────────
-        elif "value" in payload:
-            value = payload["value"]
-            unit = payload.get("unit", "")
-            
-            # Detect sensor type from sensor_name
-            sensor_type = _normalize_sensor_type(sensor_name)
-            
-            if not sensor_type:
-                logger.warning("Could not determine sensor type for: %s", sensor_name)
-                print(f"{Color.YELLOW}⚠ Could not determine sensor type{Color.END}")
-                return
-            
-            # Try to convert to float if numeric type
-            if sensor_type in ("Temperature", "Humidity", "Pressure", "SuctionPressure", "DischargePressure", "CO2", "Oxygen", "Energy", "Solar", "Battery"):
-                try:
-                    value = float(value)
-                except (ValueError, TypeError):
-                    logger.error("Sensor %s type %s has non-numeric value: %s", 
-                               sensor_name, sensor_type, value)
-                    print(f"{Color.RED}✗ Non-numeric value for {sensor_type}: {value}{Color.END}")
-                    return
-            
-            _process_sensor_reading(
-                gateway_id=gateway_id,
-                site_id=site_id,
-                room_id=room_id,
-                sensor_name=sensor_name,
-                sensor_type=sensor_type,
-                value=value,
-                unit=unit,
-                timestamp=timestamp,
-                sensor_id=sensor_id
-            )
-            print(f"{Color.GREEN}✓ Saved to database: {sensor_name}={value}{unit}{Color.END}")
-        
-        else:
-            logger.warning("Payload has neither 'value' nor 'temperature'+'humidity': %s", payload)
-            print(f"{Color.YELLOW}⚠ Payload format not recognized{Color.END}")
+        # Handle case where no recognized keys were found
+        if sensors_processed == 0:
+            logger.warning("No recognized sensor keys in payload: %s", payload)
+            print(f"{Color.YELLOW}⚠ No recognized sensor keys found{Color.END}")
             return
         
-        logger.info("✓ Successfully processed sensor reading")
+        logger.info("✓ Successfully processed %d sensor(s)", sensors_processed)
         print(f"{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}\n")
 
     except Exception as e:
