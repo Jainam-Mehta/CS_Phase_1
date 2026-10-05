@@ -52,6 +52,13 @@ const OwnerMonitoring: React.FC = () => {
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadMonitoringData();
+      
+      // Poll for sensor updates every 5 seconds to show real-time data
+      const interval = setInterval(() => {
+        loadMonitoringData();
+      }, 5000);
+      
+      return () => clearInterval(interval);
     }
   }, [user?.id, selectedFacilityId, selectedRoomId]);
 

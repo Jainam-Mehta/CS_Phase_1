@@ -21,15 +21,15 @@ def main():
     args = parser.parse_args()
     
     print("=" * 60)
-    print("🚀 Starting ColdSense FastAPI Backend")
+    print(" Starting ColdSense FastAPI Backend")
     print("=" * 60)
-    print(f"📍 Host: {args.host}")
-    print(f"🔌 Port: {args.port}")
-    print(f"🔄 Auto-reload: {'Disabled' if args.no_reload else 'Enabled'}")
-    print(f"📊 Log level: {args.log_level}")
+    print(f" Host: {args.host}")
+    print(f" Port: {args.port}")
+    print(f" Auto-reload: {'Disabled' if args.no_reload else 'Enabled'}")
+    print(f" Log level: {args.log_level}")
     print("-" * 60)
-    print(f"📖 API Docs: http://localhost:{args.port}/docs")
-    print(f"📚 ReDoc: http://localhost:{args.port}/redoc")
+    print(f" API Docs: http://localhost:{args.port}/docs")
+    print(f" ReDoc: http://localhost:{args.port}/redoc")
     print("=" * 60)
     
     uvicorn.run(

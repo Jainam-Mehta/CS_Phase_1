@@ -203,6 +203,32 @@ def on_message(client, userdata, msg):
             logger.warning("Payload is not a dict: %s", type(payload))
             return
         
+        # ── Transform GCP payload format to standard format ─────────────────
+        # GCP sends short names: {"Temp": "29.5", "Hum": "45.70", ...}
+        # Transform to: {"temperature": 29.5, "humidity": 45.70}
+        if "Temp" in payload or "Hum" in payload:
+            transformed = {}
+            
+            # Map Temp → temperature
+            if "Temp" in payload:
+                try:
+                    transformed["temperature"] = float(payload["Temp"])
+                except (ValueError, TypeError):
+                    logger.warning("Could not convert Temp to float: %s", payload["Temp"])
+                    transformed["temperature"] = payload["Temp"]
+            
+            # Map Hum → humidity
+            if "Hum" in payload:
+                try:
+                    transformed["humidity"] = float(payload["Hum"])
+                except (ValueError, TypeError):
+                    logger.warning("Could not convert Hum to float: %s", payload["Hum"])
+                    transformed["humidity"] = payload["Hum"]
+            
+            payload = transformed
+            logger.info("✓ Transformed GCP payload: %s", payload)
+            print(f"{Color.BLUE}✓ Mapped GCP format (Temp/Hum) → standard format (temperature/humidity){Color.END}")
+        
         # ── Validate room exists and belongs to the site ───────────────────
         try:
             from app.database.supabase import supabase
@@ -235,17 +261,9 @@ def on_message(client, userdata, msg):
             logger.warning("Failed to update gateway heartbeat: %s", e)
         
         # ── Parse payload and extract values ───────────────────────────────
-        timestamp = payload.get("timestamp", datetime.now(timezone.utc).isoformat())
+        # ALWAYS use server time, ignore payload timestamp (GCP device time is unreliable)
+        timestamp = datetime.now(timezone.utc).isoformat()
         sensor_id = payload.get("sensor_id", sensor_name)
-        
-        # Try to parse timestamp safely
-        try:
-            if isinstance(timestamp, str):
-                timestamp = timestamp.replace('Z', '+00:00')
-                datetime.fromisoformat(timestamp)  # Validate format
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.warning("Invalid timestamp format %s, using server time: %s", timestamp, e)
-            timestamp = datetime.now(timezone.utc).isoformat()
         
         # ── Handle Combined Sensor (temperature + humidity) ────────────────
         if "temperature" in payload and "humidity" in payload:
@@ -258,35 +276,54 @@ def on_message(client, userdata, msg):
                 temp_unit = payload.get("temp_unit", "°C")
                 humidity_unit = payload.get("humidity_unit", "%")
                 
-                # Create/update temperature sensor
-                _process_sensor_reading(
-                    gateway_id=gateway_id,
-                    site_id=site_id,
-                    room_id=room_id,
-                    sensor_name=f"{sensor_name}_temp",
-                    sensor_type="temperature",
-                    value=temp_value,
-                    unit=temp_unit,
-                    timestamp=timestamp,
-                    sensor_id=f"{sensor_id}_temp"
-                )
-                
-                # Create/update humidity sensor
-                _process_sensor_reading(
-                    gateway_id=gateway_id,
-                    site_id=site_id,
-                    room_id=room_id,
-                    sensor_name=f"{sensor_name}_humid",
-                    sensor_type="humidity",
-                    value=humidity_value,
-                    unit=humidity_unit,
-                    timestamp=timestamp,
-                    sensor_id=f"{sensor_id}_humid"
-                )
-                
-                logger.info("✓ Processed combined sensor: temp=%.1f%s, humid=%.1f%s",
-                           temp_value, temp_unit, humidity_value, humidity_unit)
-                print(f"{Color.GREEN}✓ Saved to database: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
+                # Save BOTH temperature and humidity in ONE row to cold_storage_conditions
+                try:
+                    from app.database.supabase import supabase
+                    
+                    # First: Update sensor_devices to mark as Online WITH reading values
+                    now = datetime.now(timezone.utc).isoformat()
+                    
+                    # Update temperature sensor device with reading value
+                    supabase.table("sensor_devices").update({
+                        "last_reading": now,
+                        "last_reading_value": temp_value,
+                        "last_reading_unit": temp_unit,
+                        "status": "Online",
+                        "gateway_id": gateway_id,
+                    }).eq("room_id", room_id).eq("sensor_type", "temperature").eq("gateway_id", gateway_id).execute()
+                    
+                    # Update humidity sensor device with reading value
+                    supabase.table("sensor_devices").update({
+                        "last_reading": now,
+                        "last_reading_value": humidity_value,
+                        "last_reading_unit": humidity_unit,
+                        "status": "Online",
+                        "gateway_id": gateway_id,
+                    }).eq("room_id", room_id).eq("sensor_type", "humidity").eq("gateway_id", gateway_id).execute()
+                    
+                    print(f"{Color.GREEN}✓ Updated sensor_devices: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
+                    
+                    # Second: Save both temperature and humidity in ONE row to cold_storage_conditions
+                    condition_data = {
+                        "site_id": site_id,
+                        "room_id": room_id,
+                        "gateway_id": gateway_id,
+                        "temperature": temp_value,
+                        "humidity": humidity_value,
+                        "recorded_at": timestamp,
+                    }
+                    
+                    resp = supabase.table("cold_storage_conditions").insert(condition_data).execute()
+                    if resp.data:
+                        logger.info("✓ Saved combined sensor to database: temp=%.1f%s, humidity=%.1f%s",
+                                   temp_value, temp_unit, humidity_value, humidity_unit)
+                        print(f"{Color.GREEN}✓ Saved to database: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
+                    else:
+                        logger.error("Failed to save combined sensor")
+                        print(f"{Color.RED}✗ Failed to save combined sensor{Color.END}")
+                except Exception as e:
+                    logger.error("Error saving combined sensor: %s", e)
+                    print(f"{Color.RED}✗ Error saving to database: {e}{Color.END}")
                 
             except (ValueError, TypeError) as e:
                 logger.error("Failed to process combined sensor values: %s", e)
@@ -435,17 +472,22 @@ def _process_sensor_reading(
             logger.error("Failed to get/create sensor_device for %s", sensor_name)
             return
         
-        # 2. Update last reading
+        # 2. Update last reading in sensor_devices
         now = datetime.now(timezone.utc).isoformat()
-        supabase.table("sensor_devices").update({
-            "last_reading_value": value,
-            "last_reading_unit": unit,
-            "last_seen": now,
-            "status": "Online",
-            "gateway_id": gateway_id,
-        }).eq("id", sensor_device_id).execute()
-        
-        logger.debug("✓ Updated sensor_device %s", sensor_device_id)
+        try:
+            supabase.table("sensor_devices").update({
+                "last_reading": now,
+                "last_reading_value": value,
+                "last_reading_unit": unit,
+                "status": "Online",
+                "gateway_id": gateway_id,
+            }).eq("id", sensor_device_id).execute()
+            
+            logger.debug("✓ Updated sensor_device %s with reading: %s %s", sensor_device_id, value, unit)
+            print(f"{Color.GREEN}✓ Updated sensor_devices table: {sensor_name} = {value}{unit}{Color.END}")
+        except Exception as e:
+            logger.error("Failed to update sensor_device: %s", e)
+            print(f"{Color.YELLOW}⚠ Could not update sensor_devices (continuing): {e}{Color.END}")
         
         # 3. Save to sensor_readings for history
         try:
@@ -510,10 +552,10 @@ def _get_or_create_sensor_device(
     
     try:
         # Try to find existing sensor by room + sensor_name + gateway
-        result = supabase.table("sensor_devices").select("id").eq("room_id", room_id).eq("sensor_name", sensor_name).eq("gateway_id", gateway_id).maybeSingle().execute()
+        result = supabase.table("sensor_devices").select("id").eq("room_id", room_id).eq("sensor_name", sensor_name).eq("gateway_id", gateway_id).limit(1).execute()
         
         if result.data:
-            return result.data["id"]
+            return result.data[0]["id"]
         
         # Create new sensor_device
         insert_result = supabase.table("sensor_devices").insert({
@@ -523,12 +565,12 @@ def _get_or_create_sensor_device(
             "gateway_id": gateway_id,
             "sensor_code": sensor_id,
             "status": "Online",
-            "last_seen": datetime.now(timezone.utc).isoformat(),
-        }).select().single().execute()
+            "last_reading": datetime.now(timezone.utc).isoformat(),
+        }).select().execute()
         
         if insert_result.data:
-            logger.info("✓ Created sensor_device: %s (%s)", sensor_name, insert_result.data["id"])
-            return insert_result.data["id"]
+            logger.info("✓ Created sensor_device: %s (%s)", sensor_name, insert_result.data[0]["id"])
+            return insert_result.data[0]["id"]
         else:
             logger.error("Failed to create sensor_device")
             return None
@@ -569,7 +611,10 @@ def _update_gateway_heartbeat(site_id: str, gateway_id: str) -> None:
 
 
 def _build_client() -> mqtt.Client:
-    client = mqtt.Client(client_id="ColdSense_Subscriber")
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+        client_id="ColdSense_Subscriber"
+    )
     client.on_connect    = on_connect
     client.on_disconnect = on_disconnect
     client.on_message    = on_message
