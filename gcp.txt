@@ -60,7 +60,7 @@ docker ps
 exit
 
 # 6. Stop the VM instance (from local machine)
-gcloud compute instances stop coldsense-production-vm --zone=asia-south1-c
+ 
 
 # ==========================
 # USEFUL COMMANDS (ON VM)

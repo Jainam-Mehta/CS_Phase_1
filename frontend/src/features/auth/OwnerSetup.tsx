@@ -19,29 +19,34 @@ import {
 } from '../../lib/sensorRegistry';
 
 // ============================================================================
-// Sensor Type Mapping: UI internalKey → Database allowed values
-// Database only allows: temperature, humidity, pressure, co2, oxygen
+// Sensor Type Mapping: Frontend internalKey → Database sensor_type values
+// 
+// IMPORTANT: This function must return EXACT values that match:
+// 1. SENSOR_REGISTRY.internalKey values (PascalCase)
+// 2. Database constraint CHECK values
+// 
+// The database constraint only accepts PascalCase values like:
+// 'Temperature', 'Humidity', 'CO2', 'SuctionPressure', etc.
+// 
+// Combined sensors like 'Temperature+Humidity' must split into
+// two separate database records: ['Temperature', 'Humidity']
 // ============================================================================
 function mapSensorTypeForDB(internalKey: string): string[] {
-  const key = internalKey.toLowerCase();
+  // Handle combined sensors that must create multiple database records
+  // For example: "Temperature+Humidity" → creates 2 records: Temperature and Humidity
   
-  // Direct mappings
-  if (key === 'temperature') return ['temperature'];
-  if (key === 'humidity') return ['humidity'];
-  if (key === 'oxygen') return ['oxygen'];
-  if (key === 'co2') return ['co2'];
-  if (key.includes('pressure')) return ['pressure'];
-  
-  // Compound sensors (create both sensor records)
-  if (key.includes('+')) {
-    return ['temperature', 'humidity'];
+  if (internalKey === 'Temperature+Humidity') {
+    return ['Temperature', 'Humidity'];  // Creates 2 separate sensor_device records
   }
-
-  if (key.includes('temp')) return ['temperature'];
-  if (key.includes('humid')) return ['humidity'];
   
-  // Return normalized key for single-type sensors
-  return [key.replace(/[^a-z0-9_]/g, '')];
+  if (internalKey === 'AmbientTemperature+AmbientHumidity') {
+    return ['AmbientTemperature', 'AmbientHumidity'];  // Creates 2 separate records
+  }
+  
+  // For all single sensors, return the internalKey as-is (PascalCase)
+  // This ensures database constraint validation passes
+  // Examples: 'Temperature' → 'Temperature', 'CO2' → 'CO2', 'Door' → 'Door'
+  return [internalKey];
 }
 
 type SetupStep = 'site' | 'sensors' | 'complete';

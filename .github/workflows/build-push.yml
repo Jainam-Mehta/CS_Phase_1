@@ -1,0 +1,254 @@
+name: Build & Push - Docker Images
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  workflow_run:
+    workflows: [ "CI - Build & Test" ]
+    types: [ completed ]
+    branches: [ main, develop ]
+
+env:
+  GCP_PROJECT_ID: exalted-skein-505210-g0
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev
+  REGISTRY_REPOSITORY: coldsense
+
+jobs:
+  # ============================================================================
+  # SETUP: Authenticate with GCP and configure Docker
+  # ============================================================================
+  setup:
+    name: Setup GCP & Docker
+    runs-on: ubuntu-latest
+    outputs:
+      backend-image: ${{ steps.image-tags.outputs.backend-image }}
+      simulator-image: ${{ steps.image-tags.outputs.simulator-image }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCP Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Generate image tags
+        id: image-tags
+        run: |
+          BRANCH=${GITHUB_REF##*/}
+          SHORT_SHA=${GITHUB_SHA::8}
+          TIMESTAMP=$(date +%s)
+          
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG=${GITHUB_REF##*/}
+          elif [[ $BRANCH == "main" ]]; then
+            TAG="latest"
+          else
+            TAG="${BRANCH}-${SHORT_SHA}"
+          fi
+          
+          BACKEND_IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPOSITORY }}/backend:${TAG}"
+          SIMULATOR_IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPOSITORY }}/simulator:${TAG}"
+          
+          echo "backend-image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
+          echo "simulator-image=${SIMULATOR_IMAGE}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # BUILD: Backend Docker Image
+  # ============================================================================
+  build-backend:
+    name: Build Backend Docker Image
+    runs-on: ubuntu-latest
+    needs: setup
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ needs.setup.outputs.backend-image }}
+          cache-from: type=registry,ref=${{ needs.setup.outputs.backend-image }}:buildcache
+          cache-to: type=registry,ref=${{ needs.setup.outputs.backend-image }}:buildcache,mode=max
+          build-args: |
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+
+      - name: Image digest
+        run: echo "Backend image pushed: ${{ needs.setup.outputs.backend-image }}"
+
+  # ============================================================================
+  # BUILD: Simulator Docker Image (Optional)
+  # ============================================================================
+  build-simulator:
+    name: Build Simulator Docker Image
+    runs-on: ubuntu-latest
+    needs: setup
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Create Simulator Dockerfile
+        run: |
+          cat > backend/Dockerfile.simulator << 'EOF'
+          FROM python:3.12-slim
+          
+          WORKDIR /app
+          
+          COPY simulators/requirements.txt .
+          RUN pip install --no-cache-dir -r requirements.txt
+          
+          COPY simulators/ .
+          
+          CMD ["python", "simulator.py"]
+          EOF
+
+      - name: Build simulator image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.simulator
+          push: true
+          tags: ${{ needs.setup.outputs.simulator-image }}
+          cache-from: type=registry,ref=${{ needs.setup.outputs.simulator-image }}:buildcache
+          cache-to: type=registry,ref=${{ needs.setup.outputs.simulator-image }}:buildcache,mode=max
+
+      - name: Image digest
+        run: echo "Simulator image pushed: ${{ needs.setup.outputs.simulator-image }}"
+
+  # ============================================================================
+  # SCAN: Container Image Security Scanning
+  # ============================================================================
+  scan-images:
+    name: Scan Docker Images for Vulnerabilities
+    runs-on: ubuntu-latest
+    needs: [setup, build-backend, build-simulator]
+    
+    steps:
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.setup.outputs.backend-image }}
+          format: 'sarif'
+          output: 'backend-scan.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Scan simulator image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.setup.outputs.simulator-image }}
+          format: 'sarif'
+          output: 'simulator-scan.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: |
+            backend-scan.sarif
+            simulator-scan.sarif
+        continue-on-error: true
+
+  # ============================================================================
+  # NOTIFY: Send build status notifications
+  # ============================================================================
+  notify:
+    name: Notify Build Status
+    runs-on: ubuntu-latest
+    needs: [setup, build-backend, build-simulator, scan-images]
+    if: always()
+    
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [[ "${{ needs.build-backend.result }}" == "success" && "${{ needs.build-simulator.result }}" == "success" ]]; then
+            echo "status=✅ Success" >> $GITHUB_OUTPUT
+            echo "color=good" >> $GITHUB_OUTPUT
+          else
+            echo "status=❌ Failed" >> $GITHUB_OUTPUT
+            echo "color=danger" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Slack (Optional)
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Docker Build ${{ steps.status.outputs.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Docker Build ${{ steps.status.outputs.status }}*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.sha }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Backend:*\n${{ needs.setup.outputs.backend-image }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Simulator:*\n${{ needs.setup.outputs.simulator-image }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true

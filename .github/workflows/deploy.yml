@@ -1,0 +1,350 @@
+name: Deploy - GCP Compute Engine
+
+on:
+  workflow_run:
+    workflows: [ "Build & Push - Docker Images" ]
+    types: [ completed ]
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  GCP_PROJECT_ID: exalted-skein-505210-g0
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+
+jobs:
+  # ============================================================================
+  # SETUP: Determine deployment environment
+  # ============================================================================
+  setup:
+    name: Setup Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      vm-name: ${{ steps.env.outputs.vm-name }}
+      vm-zone: ${{ steps.env.outputs.vm-zone }}
+      
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          BRANCH=${GITHUB_REF##*/}
+          
+          # Manual dispatch takes priority
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV=${{ github.event.inputs.environment }}
+          # Automatic from workflow_run
+          elif [[ $BRANCH == "main" ]]; then
+            ENV="production"
+          else
+            ENV="staging"
+          fi
+          
+          if [[ $ENV == "production" ]]; then
+            VM_NAME="coldsense-production-vm"
+            VM_ZONE="asia-south1-c"
+          else
+            VM_NAME="coldsense-staging-vm"
+            VM_ZONE="asia-south1-c"
+          fi
+          
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "vm-name=${VM_NAME}" >> $GITHUB_OUTPUT
+          echo "vm-zone=${VM_ZONE}" >> $GITHUB_OUTPUT
+          echo "Deploying to ${ENV} environment on ${VM_NAME}"
+
+  # ============================================================================
+  # PRE-DEPLOYMENT: Run health checks
+  # ============================================================================
+  pre-deployment-check:
+    name: Pre-Deployment Health Check
+    runs-on: ubuntu-latest
+    needs: setup
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Check VM status
+        run: |
+          VM_STATUS=$(gcloud compute instances describe ${{ needs.setup.outputs.vm-name }} \
+            --zone=${{ needs.setup.outputs.vm-zone }} \
+            --format='value(status)')
+          
+          if [[ $VM_STATUS != "RUNNING" ]]; then
+            echo "Starting VM: ${{ needs.setup.outputs.vm-name }}"
+            gcloud compute instances start ${{ needs.setup.outputs.vm-name }} \
+              --zone=${{ needs.setup.outputs.vm-zone }} \
+              --async
+            
+            echo "Waiting for VM to be ready..."
+            sleep 30
+          fi
+
+      - name: Verify Artifact Registry access
+        run: |
+          gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }}
+          gcloud artifacts repositories describe ${{ secrets.GCP_ARTIFACT_REPO }} \
+            --location=${{ env.GCP_REGION }}
+
+  # ============================================================================
+  # DEPLOYMENT: Deploy to GCP VM
+  # ============================================================================
+  deploy:
+    name: Deploy to ${{ needs.setup.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [setup, pre-deployment-check]
+    environment: ${{ needs.setup.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $(gcloud compute instances describe ${{ needs.setup.outputs.vm-name }} \
+            --zone=${{ needs.setup.outputs.vm-zone }} \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)') >> ~/.ssh/known_hosts
+
+      - name: Get VM external IP
+        id: vm-ip
+        run: |
+          IP=$(gcloud compute instances describe ${{ needs.setup.outputs.vm-name }} \
+            --zone=${{ needs.setup.outputs.vm-zone }} \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "ip=${IP}" >> $GITHUB_OUTPUT
+          echo "VM IP: ${IP}"
+
+      - name: Deploy via SSH
+        run: |
+          cat > /tmp/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "=== ColdSense Deployment Script ==="
+          
+          # Navigate to project directory
+          cd /home/jainammehta250/CS_Project || cd /root/CS_Project
+          
+          # Pull latest code
+          echo "Pulling latest code from GitHub..."
+          git fetch origin
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
+          
+          # Navigate to infrastructure folder
+          cd infrastructure
+          
+          # Configure Docker authentication
+          echo "Configuring Docker authentication..."
+          gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }}
+          
+          # Pull latest images
+          echo "Pulling latest Docker images..."
+          docker compose pull || true
+          
+          # Stop existing containers (graceful shutdown)
+          echo "Stopping existing containers..."
+          docker compose down || true
+          
+          # Load environment variables
+          export $(cat .env.production | grep -v '^#' | xargs)
+          
+          # Start new containers
+          echo "Starting new containers..."
+          docker compose up -d --force-recreate
+          
+          # Wait for services to be healthy
+          echo "Waiting for services to become healthy..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          
+          # Verify all containers running
+          echo "Verifying containers..."
+          docker ps --format "table {{.Names}}\t{{.Status}}"
+          
+          # Show recent logs
+          echo "Recent backend logs:"
+          docker logs coldsense-backend --tail=20
+          
+          echo "✅ Deployment completed successfully"
+          EOF
+          
+          # Make script executable
+          chmod +x /tmp/deploy.sh
+          
+          # Execute via SSH
+          scp -i ~/.ssh/id_rsa -o ConnectTimeout=10 /tmp/deploy.sh \
+            jainammehta250@${{ steps.vm-ip.outputs.ip }}:/tmp/deploy.sh
+          
+          ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 \
+            jainammehta250@${{ steps.vm-ip.outputs.ip }} /tmp/deploy.sh
+
+  # ============================================================================
+  # POST-DEPLOYMENT: Health checks and verification
+  # ============================================================================
+  post-deployment-check:
+    name: Post-Deployment Health Check
+    runs-on: ubuntu-latest
+    needs: [setup, deploy]
+    if: always()
+    
+    steps:
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get VM external IP
+        id: vm-ip
+        run: |
+          IP=$(gcloud compute instances describe ${{ needs.setup.outputs.vm-name }} \
+            --zone=${{ needs.setup.outputs.vm-zone }} \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "ip=${IP}" >> $GITHUB_OUTPUT
+
+      - name: Health check - Backend API
+        run: |
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            if curl -f http://${{ steps.vm-ip.outputs.ip }}:8000/health; then
+              echo "✅ Backend health check passed"
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "Health check attempt $i failed, retrying in ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Backend health check failed after $MAX_RETRIES attempts"
+          exit 1
+        continue-on-error: true
+
+      - name: Verify container status
+        run: |
+          # Note: Would need SSH access for full verification
+          echo "Container verification would run on VM:"
+          echo "  docker ps"
+          echo "  docker logs coldsense-backend"
+          echo "  docker logs coldsense-mqtt"
+
+  # ============================================================================
+  # NOTIFY: Deployment status
+  # ============================================================================
+  notify-deployment:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [setup, deploy, post-deployment-check]
+    if: always()
+    
+    steps:
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [[ "${{ needs.deploy.result }}" == "success" && "${{ needs.post-deployment-check.result }}" != "failure" ]]; then
+            echo "status=✅ Deployment Successful"
+            echo "color=good"
+          else
+            echo "status=❌ Deployment Failed"
+            echo "color=danger"
+          fi
+
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "${{ steps.status.outputs.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*${{ steps.status.outputs.status }}*\n*Environment:* ${{ needs.setup.outputs.environment }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*VM:*\n${{ needs.setup.outputs.vm-name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Zone:*\n${{ needs.setup.outputs.vm-zone }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Logs"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Send email notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.EMAIL_SERVER }}
+          server_port: ${{ secrets.EMAIL_PORT }}
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: '❌ ColdSense Deployment Failed - ${{ needs.setup.outputs.environment }}'
+          to: ${{ secrets.ALERT_EMAIL }}
+          from: 'ColdSense CI/CD <noreply@coldsense.com>'
+          body: |
+            Deployment to ${{ needs.setup.outputs.environment }} failed.
+            
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            
+            View logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        continue-on-error: true

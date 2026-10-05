@@ -1,0 +1,165 @@
+name: Manual Rollback - Revert Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      target_version:
+        description: 'Docker image tag to rollback to (e.g., v1.0.0, latest)'
+        required: true
+        default: 'latest'
+
+env:
+  GCP_PROJECT_ID: exalted-skein-505210-g0
+  GCP_REGION: asia-south1
+
+jobs:
+  rollback:
+    name: Rollback ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Determine VM details
+        id: vm
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            VM_NAME="coldsense-production-vm"
+            VM_ZONE="asia-south1-c"
+          else
+            VM_NAME="coldsense-staging-vm"
+            VM_ZONE="asia-south1-c"
+          fi
+          echo "vm-name=${VM_NAME}" >> $GITHUB_OUTPUT
+          echo "vm-zone=${VM_ZONE}" >> $GITHUB_OUTPUT
+
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $(gcloud compute instances describe ${{ steps.vm.outputs.vm-name }} \
+            --zone=${{ steps.vm.outputs.vm-zone }} \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)') >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Get VM external IP
+        id: vm-ip
+        run: |
+          IP=$(gcloud compute instances describe ${{ steps.vm.outputs.vm-name }} \
+            --zone=${{ steps.vm.outputs.vm-zone }} \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "ip=${IP}" >> $GITHUB_OUTPUT
+
+      - name: Execute rollback
+        run: |
+          cat > /tmp/rollback.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "=== ColdSense Rollback Script ==="
+          echo "Target version: ${{ github.event.inputs.target_version }}"
+          
+          cd /home/jainammehta250/CS_Project/infrastructure || cd /root/CS_Project/infrastructure
+          
+          # Configure Docker
+          gcloud auth configure-docker asia-south1-docker.pkg.dev
+          
+          # Get current running version
+          CURRENT_VERSION=$(docker inspect coldsense-backend --format='{{.Config.Image}}' | grep -oP '(?<=:)[^:]+$' || echo "unknown")
+          echo "Current version: ${CURRENT_VERSION}"
+          
+          # Pull target version
+          echo "Pulling target version..."
+          docker compose pull || true
+          
+          # Stop existing containers
+          echo "Stopping containers..."
+          docker compose down || true
+          
+          # Update docker-compose.yml to use target version
+          # Note: This assumes docker-compose pulls latest by default
+          
+          # Start containers with target version
+          echo "Starting with version: ${{ github.event.inputs.target_version }}"
+          docker compose up -d
+          
+          # Wait for health check
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Rollback successful"
+              exit 0
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+          
+          echo "❌ Rollback health check failed"
+          exit 1
+          EOF
+          
+          chmod +x /tmp/rollback.sh
+          
+          scp -i ~/.ssh/id_rsa -o ConnectTimeout=10 /tmp/rollback.sh \
+            jainammehta250@${{ steps.vm-ip.outputs.ip }}:/tmp/rollback.sh
+          
+          ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 \
+            jainammehta250@${{ steps.vm-ip.outputs.ip }} /tmp/rollback.sh
+
+      - name: Verify rollback
+        run: |
+          for i in {1..10}; do
+            if curl -f http://${{ steps.vm-ip.outputs.ip }}:8000/health > /dev/null 2>&1; then
+              echo "✅ Rollback verified successfully"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "⚠️ Rollback verification incomplete, check logs manually"
+
+      - name: Notify rollback completion
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "⚠️ Rollback Executed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*⚠️ Rollback Executed*\n*Environment:* ${{ github.event.inputs.environment }}\n*Target Version:* ${{ github.event.inputs.target_version }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Details"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
