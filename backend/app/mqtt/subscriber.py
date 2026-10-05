@@ -290,7 +290,7 @@ def on_message(client, userdata, msg):
                         "last_reading_unit": temp_unit,
                         "status": "Online",
                         "gateway_id": gateway_id,
-                    }).eq("room_id", room_id).eq("sensor_type", "temperature").eq("gateway_id", gateway_id).execute()
+                    }).eq("room_id", room_id).eq("sensor_type", "Temperature").eq("gateway_id", gateway_id).execute()
                     
                     # Update humidity sensor device with reading value
                     supabase.table("sensor_devices").update({
@@ -299,7 +299,7 @@ def on_message(client, userdata, msg):
                         "last_reading_unit": humidity_unit,
                         "status": "Online",
                         "gateway_id": gateway_id,
-                    }).eq("room_id", room_id).eq("sensor_type", "humidity").eq("gateway_id", gateway_id).execute()
+                    }).eq("room_id", room_id).eq("sensor_type", "Humidity").eq("gateway_id", gateway_id).execute()
                     
                     print(f"{Color.GREEN}✓ Updated sensor_devices: temp={temp_value}{temp_unit}, humidity={humidity_value}{humidity_unit}{Color.END}")
                     
@@ -344,7 +344,7 @@ def on_message(client, userdata, msg):
                 return
             
             # Try to convert to float if numeric type
-            if sensor_type in ("temperature", "humidity", "pressure", "co2", "oxygen", "energy", "solar"):
+            if sensor_type in ("Temperature", "Humidity", "Pressure", "SuctionPressure", "DischargePressure", "CO2", "Oxygen", "Energy", "Solar", "Battery"):
                 try:
                     value = float(value)
                 except (ValueError, TypeError):
@@ -381,57 +381,59 @@ def on_message(client, userdata, msg):
 
 def _normalize_sensor_type(sensor_name: str) -> str | None:
     """
-    Map sensor_name from topic to canonical sensor_type.
+    Map sensor_name from topic to canonical sensor_type (capitalized to match database format).
     
     Examples:
-      temp1 → temperature
-      humidity_combo1 → humidity (for combined, we split separately)
-      door1 → door
-      pressure1 → pressure
+      temp1 → Temperature
+      humidity_combo1 → Humidity (for combined, we split separately)
+      door1 → Door
+      pressure1 → Pressure
     """
     name_lower = sensor_name.lower().replace('-', '_').replace(' ', '')
     
     # Temperature
     if any(x in name_lower for x in ['temp', 'temperature']):
-        return 'temperature'
+        return 'Temperature'
     
     # Humidity
     if any(x in name_lower for x in ['humid', 'humidity']):
-        return 'humidity'
+        return 'Humidity'
     
     # Pressure
     if 'pressure' in name_lower or 'suction' in name_lower or 'discharge' in name_lower:
         if 'discharge' in name_lower:
-            return 'pressure'  # Will be mapped to discharge_pressure in aggregation
-        return 'pressure'
+            return 'DischargePressure'
+        if 'suction' in name_lower:
+            return 'SuctionPressure'
+        return 'Pressure'
     
     # Door
     if any(x in name_lower for x in ['door', 'gate']):
-        return 'door'
+        return 'Door'
     
     # CO2
     if 'co2' in name_lower or 'carbon' in name_lower:
-        return 'co2'
+        return 'CO2'
     
     # Oxygen
     if 'oxygen' in name_lower or 'o2' in name_lower:
-        return 'oxygen'
+        return 'Oxygen'
     
     # Energy
     if any(x in name_lower for x in ['energy', 'kwh', 'consumption', 'power']):
-        return 'energy'
+        return 'Energy'
     
     # Solar
     if 'solar' in name_lower or 'panel' in name_lower:
-        return 'solar'
+        return 'Solar'
     
     # Motion
     if 'motion' in name_lower or 'pir' in name_lower:
-        return 'motion'
+        return 'Motion'
     
     # Compressor
     if 'compressor' in name_lower or 'compresser' in name_lower:
-        return 'compressor'
+        return 'Compressor'
     
     # Unknown
     logger.warning("Could not normalize sensor type for: %s", sensor_name)
