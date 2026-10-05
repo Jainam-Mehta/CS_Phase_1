@@ -279,11 +279,12 @@ def on_message(client, userdata, msg):
             "Hum": ("Humidity", "%"),
             "humidity": ("Humidity", "%"),
             
-            # Door sensors
+            # Door sensors (both formats: Door1/Door2 and SlaveNo for door count)
             "Door1": ("Door", "Status"),
             "Door2": ("Door", "Status"),
             "Door3": ("Door", "Status"),
             "Door4": ("Door", "Status"),
+            "SlaveNo": ("Door", "Status"),  # Door sensor count/number
             
             # Gas sensors
             "CO2": ("CO2", "ppm"),

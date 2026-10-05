@@ -7,6 +7,10 @@
 # STARTING GCP SERVICES
 # ==========================
 
+gcloud init
+gcloud auth login
+
+
 # 1. Start the VM (from local machine)
 gcloud compute instances start coldsense-production-vm --zone=asia-south1-c
 
@@ -60,6 +64,7 @@ docker ps
 exit
 
 # 6. Stop the VM instance (from local machine)
+gcloud compute instances stop coldsense-production-vm --zone=asia-south1-c
  
 
 # ==========================
