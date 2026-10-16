@@ -1,55 +1,44 @@
 """
-MQTT Subscriber — ColdSense Backend (Multi-Gateway Architecture)
+ColdSense MQTT Subscriber - NEW ARCHITECTURE
+Topic Format: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
+Example: coldsense/gw1/MHNKIGP01/S01/R01
 
-Topic Format (5-part hierarchy):
-  coldsense/{gateway_id}/{site_id}/{room_id}/{sensor_name}
+Payload: Aggregated message with ALL room sensors:
+{
+    "TS": "261012144329",
+    "fver": 0.1,
+    "SS": -77,
+    "device": [
+        {"id": 1, "slave_id": 1, "data": {"Temp1": "25.5", "Humidity1": "65.0"}},
+        {"id": 2, "slave_id": 3, "data": {"Temp3": "26.2", "Humidity3": "62.5"}},
+        {"id": 3, "slave_id": 2, "data": {"Temp2": "24.8", "Hum2": "61.0"}},
+        {"id": 4, "slave_id": 4, "data": {"voltage4": "230", "currentN": "0.5"}}
+    ],
+    "DIGI": "Off"
+}
 
-Real Examples:
-  coldsense/gateway1/site-001/room-001/temp1
-  coldsense/gateway1/site-001/room-001/humidity_combo1
-  coldsense/gateway2/site-002/room-001/door1
-
-Payload Format (single sensor per topic):
-  Standard sensor:
-  {
-    "value": 28.8,
-    "unit": "°C",
-    "timestamp": "2026-08-26T12:35:45Z",  (optional - backend generates if missing)
-    "sensor_id": "TEMP-001"
-  }
-
-  Combined sensor (temp+humidity):
-  {
-    "temperature": 28.8,
-    "humidity": 65.5,
-    "temp_unit": "°C",
-    "humidity_unit": "%",
-    "timestamp": "2026-08-26T12:35:45Z",
-    "sensor_id": "COMBO-001"
-  }
-
-Supports:
-  - Multiple gateways per site
-  - Multiple rooms per site
-  - Multiple sensors per room
-  - Combined sensors (auto-split into separate records)
+KEY CHANGES:
+1. Parse codes (S01, R01) from topic and resolve to UUIDs
+2. Process aggregated device array (not separate topics per sensor)
+3. Track slave_id for each reading to prevent consolidation
+4. Update sensor_devices with slave_id filter (not blanket updates)
 """
 
 import json
 import logging
 import threading
+import re
 import sys
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 
 from app.config import MQTT_BROKER, MQTT_PORT
-from app.services.sensor_service import save_sensor_reading, save_cold_storage_condition
-from app.services.door_service import process_door_state_change
+from app.database.supabase import supabase
 
 logger = logging.getLogger(__name__)
 
-# Color codes for terminal output
+
 class Color:
     GREEN = '\033[92m'
     BLUE = '\033[94m'
@@ -59,64 +48,8 @@ class Color:
     BOLD = '\033[1m'
     END = '\033[0m'
 
-# Wildcard - catches ALL coldsense topics
-SUBSCRIBE_TOPIC = "coldsense/#"  # Subscribes to all gateways, sites, rooms, sensors
 
-# Sensor type normalization mapping (case-insensitive)
-# Maps various gateway sensor type formats to canonical internal types
-SENSOR_TYPE_MAPPING = {
-    # Temperature variants
-    'temperature': 'temperature',
-    'temp': 'temperature',
-    'temp_c': 'temperature',
-    'temperature_c': 'temperature',
-    'ambient_temperature': 'ambient_temperature',
-    'ambient_temp': 'ambient_temperature',
-    'ambient_temp_c': 'ambient_temperature',
-    'ambient-temperature': 'ambient_temperature',
-    'ambienttemperature': 'ambient_temperature',
-    
-    # Humidity variants
-    'humidity': 'humidity',
-    'humid': 'humidity',
-    'humidity_rh': 'humidity',
-    'ambient_humidity': 'ambient_humidity',
-    'ambient_humid': 'ambient_humidity',
-    'ambient_humidity_rh': 'ambient_humidity',
-    'ambient-humidity': 'ambient_humidity',
-    'ambienthumidity': 'ambient_humidity',
-    
-    # Pressure variants
-    'pressure': 'pressure',
-    'press': 'pressure',
-    'suction_pressure': 'suction_pressure',
-    'suctionpressure': 'suction_pressure',
-    'suction-pressure': 'suction_pressure',
-    'discharge_pressure': 'discharge_pressure',
-    'dischargepressure': 'discharge_pressure',
-    'discharge-pressure': 'discharge_pressure',
-    
-    # Door and compressor
-    'door': 'door',
-    'door_status': 'door',
-    'doorstatus': 'door',
-    'door-status': 'door',
-    'compressor': 'compressor',
-    'compressor_status': 'compressor',
-    'compressorstatus': 'compressor',
-    'compressor-status': 'compressor',
-    
-    # Energy and solar
-    'energy': 'energy',
-    'energy_consumption': 'energy',
-    'consumption': 'energy',
-    'kwh': 'energy',
-    'kw_h': 'energy',
-    'solar': 'solar',
-    'solar_percentage': 'solar',
-    'solarpercentage': 'solar',
-    'solar-percentage': 'solar',
-}
+SUBSCRIBE_TOPIC = "coldsense/#"
 
 
 def on_connect(client, userdata, flags, rc):
@@ -125,13 +58,10 @@ def on_connect(client, userdata, flags, rc):
         logger.info(msg)
         print(f"\n{Color.GREEN}{msg}{Color.END}")
         client.subscribe(SUBSCRIBE_TOPIC)
-        msg = f"✓ Subscribed to wildcard topic: {SUBSCRIBE_TOPIC}"
-        logger.info(msg)
-        print(f"{Color.GREEN}{msg}{Color.END}\n")
+        print(f"{Color.GREEN}✓ Subscribed to: {SUBSCRIBE_TOPIC}{Color.END}\n")
     else:
-        msg = f"✗ MQTT connection failed with code {rc}"
-        logger.error(msg)
-        print(f"{Color.RED}{msg}{Color.END}")
+        logger.error("✗ MQTT connection failed: rc=%s", rc)
+        print(f"{Color.RED}✗ Connection failed: {rc}{Color.END}")
 
 
 def on_disconnect(client, userdata, rc):
@@ -141,478 +71,340 @@ def on_disconnect(client, userdata, rc):
 
 def on_message(client, userdata, msg):
     """
-    Process MQTT messages from IoT gateway.
+    Main MQTT message handler for NEW aggregated payload format.
     
-    Topic: coldsense/{gateway_id}/{site_id}/{room_id}/{sensor_name}
-    Payload: Single sensor with value OR combined sensor with temperature+humidity
-    
-    Handles 1-20+ sensors per room (each on separate topic).
-    Automatically splits combined sensors into separate records.
+    Flow:
+    1. Parse topic: coldsense/gw1/MHNKIGP01/S01/R01
+    2. Resolve codes to UUIDs: S01→site_uuid, R01→room_uuid
+    3. Parse aggregated payload
+    4. Process each device in array
+    5. Update sensor_devices with slave_id filter (CRITICAL FIX)
+    6. Store in cold_storage_conditions with sensor_id reference
     """
     try:
         topic = msg.topic
         payload_raw = msg.payload.decode()
         timestamp_received = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         
+        print(f"\n{Color.BOLD}{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}")
+        print(f"{Color.GREEN}📨 MQTT MESSAGE RECEIVED{Color.END} [{timestamp_received}]")
+        print(f"{Color.CYAN}Topic: {topic}{Color.END}")
+        
+        # Parse JSON payload
         try:
             payload = json.loads(payload_raw)
         except json.JSONDecodeError as e:
-            logger.error("✗ JSON decode error on topic %s: %s | raw: %s", topic, e, payload_raw[:200])
-            print(f"{Color.RED}✗ JSON decode error: {e}{Color.END}")
+            logger.error("JSON decode error: %s | payload: %s", e, payload_raw[:200])
+            print(f"{Color.RED}✗ Invalid JSON{Color.END}")
             return
         
-        # Print to console with colors
-        print(f"\n{Color.BOLD}{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}")
-        print(f"{Color.GREEN}📨 DATA RECEIVED{Color.END} [{timestamp_received}]")
-        print(f"{Color.CYAN}Topic: {topic}{Color.END}")
-        print(f"{Color.CYAN}QoS: {msg.qos}{Color.END}")
-        print(f"{Color.BLUE}Payload (JSON):{Color.END}")
-        print(json.dumps(payload, indent=2))
+        print(f"{Color.BLUE}Payload structure:{Color.END}")
+        print(f"  - Timestamp: {payload.get('TS')}")
+        print(f"  - Firmware: {payload.get('fver')}")
+        print(f"  - Signal: {payload.get('SS')} dBm")
+        print(f"  - Devices: {len(payload.get('device', []))} found")
         
-        logger.info("📨 MQTT message on topic: %s", topic)
-        logger.debug("Payload: %s", payload)
-
-        # ── Parse topic: coldsense / {gateway_id} / {site_id} / {room_id} / {sensor_name}
+        # ─── STEP 1: PARSE NEW TOPIC FORMAT ──────────────────────────────
+        # Topic: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
+        # Example: coldsense/gw1/MHNKIGP01/S01/R01
+        
         parts = topic.split("/")
-        
         if len(parts) != 5 or parts[0] != "coldsense":
-            logger.warning("Invalid topic format: %s (expected: coldsense/gateway_id/site_id/room_id/sensor_name)", topic)
-            print(f"{Color.YELLOW}⚠ Invalid topic format{Color.END}")
+            logger.warning("Invalid topic format: %s (expected: coldsense/gw/loc/site/room)", topic)
+            print(f"{Color.RED}✗ Invalid topic format{Color.END}")
             return
         
-        gateway_id = parts[1]
-        site_id = parts[2]
-        room_id = parts[3]
-        sensor_name = parts[4]
+        gateway_id = parts[1]           # gw1
+        location_code = parts[2]        # MHNKIGP01
+        site_code = parts[3]            # S01
+        room_code = parts[4]            # R01
         
-        # Validate required fields
-        if not all([gateway_id, site_id, room_id, sensor_name]):
-            logger.warning("Missing required topic parts in: %s", topic)
-            print(f"{Color.YELLOW}⚠ Missing topic parts{Color.END}")
+        logger.info("✓ Parsed topic: gw=%s, location=%s, site_code=%s, room_code=%s",
+                   gateway_id, location_code, site_code, room_code)
+        print(f"{Color.GREEN}✓ Parsed topic components{Color.END}")
+        
+        # ─── STEP 2: RESOLVE CODES TO UUIDs ──────────────────────────────
+        # Use sensor_location_mapping table to convert S01→uuid, R01→uuid
+        
+        # Resolve site_code to site_id
+        site_mapping = supabase.table("sensor_location_mapping") \
+            .select("mapped_entity_id") \
+            .eq("location_code", site_code) \
+            .eq("code_type", "site") \
+            .limit(1) \
+            .execute()
+        
+        if not site_mapping.data:
+            logger.error("❌ Site code '%s' not found in sensor_location_mapping", site_code)
+            print(f"{Color.RED}✗ Site code {site_code} not mapped{Color.END}")
+            print(f"{Color.YELLOW}  Run setup script to add mapping{Color.END}")
             return
         
-        print(f"{Color.YELLOW}Extracted Values:{Color.END}")
-        for key, value in payload.items():
-            print(f"  • {key}: {Color.BOLD}{value}{Color.END}")
+        site_id = site_mapping.data[0]["mapped_entity_id"]
         
-        logger.info("✅ Parsed topic: gateway=%s, site=%s, room=%s, sensor=%s", 
-                   gateway_id, site_id, room_id, sensor_name)
+        # Resolve room_code to room_id
+        room_mapping = supabase.table("sensor_location_mapping") \
+            .select("mapped_entity_id") \
+            .eq("site_id", site_id) \
+            .eq("location_code", room_code) \
+            .eq("code_type", "room") \
+            .limit(1) \
+            .execute()
         
-        # ── Validate schema early ──────────────────────────────────────────
-        if not isinstance(payload, dict):
-            logger.warning("Payload is not a dict: %s", type(payload))
+        if not room_mapping.data:
+            logger.error("❌ Room code '%s' not found for site '%s'", room_code, site_id)
+            print(f"{Color.RED}✗ Room code {room_code} not mapped for site{Color.END}")
             return
         
-        # ── Transform GCP payload format to standard format ─────────────────
-        # GCP sends short names: {"Temp": "29.5", "Hum": "45.70", ...}
-        # Transform to: {"temperature": 29.5, "humidity": 45.70}
-        if "Temp" in payload or "Hum" in payload:
-            transformed = {}
-            
-            # Map Temp → temperature
-            if "Temp" in payload:
-                try:
-                    transformed["temperature"] = float(payload["Temp"])
-                except (ValueError, TypeError):
-                    logger.warning("Could not convert Temp to float: %s", payload["Temp"])
-                    transformed["temperature"] = payload["Temp"]
-            
-            # Map Hum → humidity
-            if "Hum" in payload:
-                try:
-                    transformed["humidity"] = float(payload["Hum"])
-                except (ValueError, TypeError):
-                    logger.warning("Could not convert Hum to float: %s", payload["Hum"])
-                    transformed["humidity"] = payload["Hum"]
-            
-            payload = transformed
-            logger.info("✓ Transformed GCP payload: %s", payload)
-            print(f"{Color.BLUE}✓ Mapped GCP format (Temp/Hum) → standard format (temperature/humidity){Color.END}")
+        room_id = room_mapping.data[0]["mapped_entity_id"]
         
-        # ── Validate room exists and belongs to the site ───────────────────
-        try:
-            from app.database.supabase import supabase
-            
-            room_check = supabase.table("cold_storage_rooms") \
-                .select("id, site_id") \
-                .eq("id", room_id) \
-                .eq("site_id", site_id) \
-                .limit(1) \
-                .execute()
-            
-            if not room_check.data:
-                logger.error(
-                    "✗ Invalid room_id=%s for site_id=%s — room not found or doesn't belong to site",
-                    room_id, site_id
-                )
-                print(f"{Color.RED}✗ Room not found or doesn't belong to site{Color.END}")
-                return
-            
-            logger.debug("✓ Validated: room_id=%s belongs to site_id=%s", room_id, site_id)
-            print(f"{Color.GREEN}✓ Room validated{Color.END}")
-        except Exception as e:
-            logger.error("Failed to validate room/site relationship: %s", e)
-            print(f"{Color.YELLOW}⚠ Could not validate room (continuing anyway): {e}{Color.END}")
+        logger.info("✓ Resolved: site_id=%s (from %s), room_id=%s (from %s)",
+                   site_id, site_code, room_id, room_code)
+        print(f"{Color.GREEN}✓ Resolved codes to UUIDs{Color.END}")
+        print(f"  - {site_code} → {site_id}")
+        print(f"  - {room_code} → {room_id}")
         
-        # ── Update gateway heartbeat (optional) ────────────────────────────
-        try:
-            _update_gateway_heartbeat(site_id, gateway_id)
-        except Exception as e:
-            logger.warning("Failed to update gateway heartbeat: %s", e)
+        # ─── STEP 3: PROCESS AGGREGATED PAYLOAD ──────────────────────────
+        # Payload structure: {"device": [{"id": 1, "slave_id": 1, "data": {...}}, ...]}
         
-        # ── Parse payload and extract values ───────────────────────────────
-        # ALWAYS use server time, ignore payload timestamp (GCP device time is unreliable)
+        if "device" not in payload or not isinstance(payload["device"], list):
+            logger.warning("Invalid payload: missing 'device' array")
+            print(f"{Color.RED}✗ Payload missing 'device' array{Color.END}")
+            return
+        
         timestamp = datetime.now(timezone.utc).isoformat()
-        sensor_id = payload.get("sensor_id", sensor_name)
+        devices = payload["device"]
+        total_sensors = 0
         
-        # ── UNIVERSAL SENSOR HANDLER ──────────────────────────────────────
-        # Maps GCP payload keys to sensor types and processes all sensors
+        print(f"\n{Color.BLUE}Processing {len(devices)} device(s):{Color.END}")
         
-        from app.database.supabase import supabase
-        now = datetime.now(timezone.utc).isoformat()
-        
-        # Define payload key → (sensor_type, unit) mapping
-        payload_mapping = {
-            # Temperature & Humidity (both GCP format and standard format)
-            "Temp": ("Temperature", "°C"),
-            "temperature": ("Temperature", "°C"),
-            "Hum": ("Humidity", "%"),
-            "humidity": ("Humidity", "%"),
+        # Process each device in the aggregated array
+        for device_obj in devices:
+            device_id = device_obj.get("id")
+            slave_id = device_obj.get("slave_id")
+            data = device_obj.get("data", {})
             
-            # Door sensors (both formats: Door1/Door2 and SlaveNo for door count)
-            "Door1": ("Door", "Status"),
-            "Door2": ("Door", "Status"),
-            "Door3": ("Door", "Status"),
-            "Door4": ("Door", "Status"),
-            "SlaveNo": ("Door", "Status"),  # Door sensor count/number
+            if not data:
+                logger.debug("Device %s has no data, skipping", device_id)
+                continue
             
-            # Gas sensors
-            "CO2": ("CO2", "ppm"),
-            "Oxygen": ("Oxygen", "%"),
-            "O2": ("Oxygen", "%"),
-            "Ammonia": ("Ammonia", "ppm"),
-            "Ethylene": ("Ethylene", "ppm"),
+            logger.debug("Processing device_id=%s, slave_id=%s", device_id, slave_id)
+            print(f"  • Device {device_id} (Slave {slave_id}): {len(data)} sensors")
             
-            # Pressure sensors
-            "Pressure": ("Pressure", "psi"),
-            "SuctionPressure": ("SuctionPressure", "psi"),
-            "DischargePressure": ("DischargePressure", "psi"),
+            # ─── STEP 4: PROCESS EACH SENSOR IN THIS DEVICE ───────────────
+            # data = {"Temp1": "25.5", "Humidity1": "65.0"} OR 
+            #        {"Temp2": "24.8", "Hum2": "61.0"}
             
-            # Power & Energy
-            "Battery": ("Battery", "%"),
-            "Solar": ("Solar", "W"),
-            "Energy": ("Energy", "kWh"),
-            
-            # Environmental
-            "AmbientTemperature": ("AmbientTemperature", "°C"),
-            "AmbientHumidity": ("AmbientHumidity", "%"),
-        }
-        
-        sensors_processed = 0
-        
-        # Process each key in payload
-        for payload_key, (sensor_type, default_unit) in payload_mapping.items():
-            if payload_key in payload:
+            for mqtt_key, raw_value in data.items():
                 try:
-                    value = payload[payload_key]
-                    unit = payload.get(f"{payload_key}_unit", default_unit)
-                    
-                    # Convert to float for numeric types
+                    # Convert value to float
                     try:
-                        value_numeric = float(value)
+                        value = float(raw_value) if isinstance(raw_value, (int, float, str)) else raw_value
                     except (ValueError, TypeError):
-                        # For non-numeric (like door status), keep as-is
-                        value_numeric = value
+                        logger.warning("Cannot convert %s to float for key %s", raw_value, mqtt_key)
+                        value = raw_value
                     
-                    # Update sensor_devices table
-                    supabase.table("sensor_devices").update({
-                        "last_reading": now,
-                        "last_reading_value": value_numeric,
-                        "last_reading_unit": unit,
-                        "status": "Online",
-                        "gateway_id": gateway_id,
-                    }).eq("room_id", room_id).eq("sensor_type", sensor_type).eq("gateway_id", gateway_id).execute()
+                    # Map MQTT key to sensor type
+                    sensor_type, unit = _map_mqtt_key_to_sensor(mqtt_key)
+                    if not sensor_type:
+                        logger.debug("Skipping unknown MQTT key: %s", mqtt_key)
+                        continue
                     
-                    logger.info("✓ Updated %s sensor: value=%s%s", sensor_type, value_numeric, unit)
-                    print(f"{Color.GREEN}✓ {sensor_type}: {value_numeric}{unit}{Color.END}")
-                    sensors_processed += 1
+                    # Extract sensor number (Temp1→1, Humidity2→2, etc.)
+                    sensor_number = _extract_sensor_number(mqtt_key)
+                    
+                    logger.debug("  → %s: %s=%s%s (sensor #%s)",
+                               mqtt_key, sensor_type, value, unit, sensor_number)
+                    
+                    # ─── STEP 5: CRITICAL UPDATE WITH SLAVE_ID FILTER ────
+                    # This is the FIX: Update ONLY this specific slave, not all sensors
+                    _process_single_sensor(
+                        room_id=room_id,
+                        site_id=site_id,
+                        gateway_id=gateway_id,
+                        slave_id=slave_id,
+                        device_id=device_id,
+                        sensor_type=sensor_type,
+                        sensor_number=sensor_number,
+                        mqtt_key=mqtt_key,
+                        value=value,
+                        unit=unit,
+                        timestamp=timestamp
+                    )
+                    
+                    total_sensors += 1
                     
                 except Exception as e:
-                    logger.error("Error processing %s: %s", payload_key, e)
-                    print(f"{Color.YELLOW}⚠ Error processing {payload_key}: {e}{Color.END}")
+                    logger.error("Error processing sensor %s: %s", mqtt_key, e)
+                    continue
         
-        # Special handling: combined temp+humidity in ONE database row
-        if "temperature" in payload or "Temp" in payload:
-            temp_key = "temperature" if "temperature" in payload else "Temp"
-            hum_key = "humidity" if "humidity" in payload else "Hum"
-            
-            if hum_key in payload:
-                try:
-                    temp_value = float(payload[temp_key])
-                    humidity_value = float(payload[hum_key])
-                    
-                    condition_data = {
-                        "site_id": site_id,
-                        "room_id": room_id,
-                        "gateway_id": gateway_id,
-                        "temperature": temp_value,
-                        "humidity": humidity_value,
-                        "recorded_at": timestamp,
-                    }
-                    
-                    resp = supabase.table("cold_storage_conditions").insert(condition_data).execute()
-                    if resp.data:
-                        logger.info("✓ Saved temp+humidity to cold_storage_conditions")
-                        print(f"{Color.GREEN}✓ Archived to cold_storage_conditions{Color.END}")
-                    
-                except (ValueError, TypeError) as e:
-                    logger.warning("Could not save combined temp+humidity: %s", e)
+        # Update gateway status
+        try:
+            supabase.table("gateways").upsert({
+                "site_id": site_id,
+                "gateway_id": gateway_id,
+                "status": "online",
+                "last_heartbeat": timestamp
+            }).execute()
+            logger.debug("✓ Updated gateway heartbeat")
+        except Exception as e:
+            logger.warning("Failed to update gateway: %s", e)
         
-        # Handle case where no recognized keys were found
-        if sensors_processed == 0:
-            logger.warning("No recognized sensor keys in payload: %s", payload)
-            print(f"{Color.YELLOW}⚠ No recognized sensor keys found{Color.END}")
-            return
-        
-        logger.info("✓ Successfully processed %d sensor(s)", sensors_processed)
+        logger.info("✓ Processed %d total sensors from aggregated payload", total_sensors)
+        print(f"\n{Color.GREEN}✓ Successfully processed {total_sensors} sensors{Color.END}")
         print(f"{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}\n")
-
+        
     except Exception as e:
         logger.exception("✗ Unhandled error in on_message: %s", e)
         print(f"{Color.RED}✗ Error: {e}{Color.END}")
 
 
-def _normalize_sensor_type(sensor_name: str) -> str | None:
-    """
-    Map sensor_name from topic to canonical sensor_type (capitalized to match database format).
+def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
+    """Map MQTT payload key to (sensor_type, unit)."""
+    key_lower = mqtt_key.lower()
     
-    Examples:
-      temp1 → Temperature
-      humidity_combo1 → Humidity (for combined, we split separately)
-      door1 → Door
-      pressure1 → Pressure
-    """
-    name_lower = sensor_name.lower().replace('-', '_').replace(' ', '')
+    if key_lower.startswith(('temp', 't')) and not key_lower.endswith('_unit'):
+        return ('Temperature', '°C')
+    elif key_lower.startswith(('hum', 'h')) and not key_lower.endswith('_unit'):
+        return ('Humidity', '%')
+    elif key_lower.startswith(('voltage', 'volt', 'v_')):
+        return ('Voltage', 'V')
+    elif key_lower.startswith(('current', 'i_')):
+        return ('Current', 'A')
+    elif key_lower.startswith(('door', 'd_')):
+        return ('Door', 'Status')
+    elif key_lower.startswith(('pressure', 'psi', 'p_')):
+        return ('Pressure', 'psi')
     
-    # Temperature
-    if any(x in name_lower for x in ['temp', 'temperature']):
-        return 'Temperature'
-    
-    # Humidity
-    if any(x in name_lower for x in ['humid', 'humidity']):
-        return 'Humidity'
-    
-    # Pressure
-    if 'pressure' in name_lower or 'suction' in name_lower or 'discharge' in name_lower:
-        if 'discharge' in name_lower:
-            return 'DischargePressure'
-        if 'suction' in name_lower:
-            return 'SuctionPressure'
-        return 'Pressure'
-    
-    # Door
-    if any(x in name_lower for x in ['door', 'gate']):
-        return 'Door'
-    
-    # CO2
-    if 'co2' in name_lower or 'carbon' in name_lower:
-        return 'CO2'
-    
-    # Oxygen
-    if 'oxygen' in name_lower or 'o2' in name_lower:
-        return 'Oxygen'
-    
-    # Energy
-    if any(x in name_lower for x in ['energy', 'kwh', 'consumption', 'power']):
-        return 'Energy'
-    
-    # Solar
-    if 'solar' in name_lower or 'panel' in name_lower:
-        return 'Solar'
-    
-    # Motion
-    if 'motion' in name_lower or 'pir' in name_lower:
-        return 'Motion'
-    
-    # Compressor
-    if 'compressor' in name_lower or 'compresser' in name_lower:
-        return 'Compressor'
-    
-    # Unknown
-    logger.warning("Could not normalize sensor type for: %s", sensor_name)
-    return None
+    return None, 'Unknown'
 
 
-def _process_sensor_reading(
-    gateway_id: str,
-    site_id: str,
+def _extract_sensor_number(mqtt_key: str) -> int:
+    """Extract number from MQTT key (Temp1→1, Humidity2→2, etc.)."""
+    match = re.search(r'(\d+)', mqtt_key)
+    return int(match.group(1)) if match else None
+
+
+def _process_single_sensor(
     room_id: str,
-    sensor_name: str,
+    site_id: str,
+    gateway_id: str,
+    slave_id: int,
+    device_id: int,
     sensor_type: str,
-    value: any,
+    sensor_number: int,
+    mqtt_key: str,
+    value,
     unit: str,
-    timestamp: str,
-    sensor_id: str
+    timestamp: str
 ) -> None:
     """
-    Process a single sensor reading:
-    1. Create/update sensor_device record
-    2. Save to sensor_readings (history)
-    3. Aggregate into cold_storage_conditions
-    """
-    from app.database.supabase import supabase
-    from app.services.sensor_service import save_sensor_reading, save_cold_storage_condition
+    Process ONE sensor reading (KEY FIX).
     
+    Critical: Filter by slave_id when updating, not just sensor_type.
+    This prevents all temperature sensors from showing the same value.
+    """
     try:
-        # 1. Get or create sensor_device
-        sensor_device_id = _get_or_create_sensor_device(
-            room_id=room_id,
-            sensor_name=sensor_name,
-            sensor_type=sensor_type,
-            gateway_id=gateway_id,
-            sensor_id=sensor_id
-        )
+        # ─── GET OR CREATE SENSOR_DEVICE (with slave_id) ─────────────────
+        # KEY FIX: Query includes slave_id to get the correct sensor
         
-        if not sensor_device_id:
-            logger.error("Failed to get/create sensor_device for %s", sensor_name)
-            return
+        sensor_query = supabase.table("sensor_devices") \
+            .select("id") \
+            .eq("room_id", room_id) \
+            .eq("sensor_type", sensor_type) \
+            .eq("slave_id", slave_id) \
+            .eq("gateway_id", gateway_id) \
+            .limit(1) \
+            .execute()
         
-        # 2. Update last reading in sensor_devices
-        now = datetime.now(timezone.utc).isoformat()
-        try:
-            supabase.table("sensor_devices").update({
-                "last_reading": now,
-                "last_reading_value": value,
-                "last_reading_unit": unit,
+        if sensor_query.data:
+            sensor_device_id = sensor_query.data[0]["id"]
+            logger.debug("Found existing sensor_device: %s", sensor_device_id)
+        else:
+            # Create new sensor_device with slave_id
+            sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
+            insert_result = supabase.table("sensor_devices").insert({
+                "room_id": room_id,
+                "site_id": site_id,
+                "sensor_type": sensor_type,
+                "sensor_name": sensor_name,
+                "slave_id": slave_id,
+                "device_id": device_id,
+                "protocol": "MQTT",
+                "mqtt_identifier": mqtt_key,
+                "gateway_location_code": gateway_id,
+                "gateway_id": gateway_id,
                 "status": "Online",
-                "gateway_id": gateway_id,
-            }).eq("id", sensor_device_id).execute()
+                "last_reading": timestamp,
+            }).select().execute()
             
-            logger.debug("✓ Updated sensor_device %s with reading: %s %s", sensor_device_id, value, unit)
-            print(f"{Color.GREEN}✓ Updated sensor_devices table: {sensor_name} = {value}{unit}{Color.END}")
-        except Exception as e:
-            logger.error("Failed to update sensor_device: %s", e)
-            print(f"{Color.YELLOW}⚠ Could not update sensor_devices (continuing): {e}{Color.END}")
+            if insert_result.data:
+                sensor_device_id = insert_result.data[0]["id"]
+                logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
+            else:
+                logger.error("Failed to create sensor_device for %s", mqtt_key)
+                return
         
-        # 3. Save to sensor_readings for history
-        try:
-            save_sensor_reading({
-                "room_sensor_id": sensor_device_id,
-                "reading_value": value,
-                "unit": unit,
-                "recorded_at": timestamp,
-                "gateway_id": gateway_id,
-            })
-        except Exception as e:
-            logger.error("Failed to save sensor_reading: %s", e)
+        # ─── UPDATE SENSOR_DEVICES (KEY FIX: with slave_id filter) ───────
+        # Only update the specific sensor by slave_id, not all sensors of this type
         
-        # 4. Aggregate into cold_storage_conditions
-        condition_data = {
-            "site_id": site_id,
-            "room_id": room_id,
+        now = datetime.now(timezone.utc).isoformat()
+        supabase.table("sensor_devices").update({
+            "last_reading": now,
+            "last_reading_value": value,
+            "last_reading_unit": unit,
+            "status": "Online",
+        }).eq("id", sensor_device_id).execute()
+        
+        logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
+        
+        # ─── INSERT INTO SENSOR_READINGS (history) ───────────────────────
+        supabase.table("sensor_readings").insert({
+            "room_sensor_id": sensor_device_id,
+            "sensor_id": sensor_device_id,
+            "reading_value": value,
+            "unit": unit,
+            "recorded_at": timestamp,
             "gateway_id": gateway_id,
+            "slave_id": slave_id,
+            "mqtt_payload_key": mqtt_key,
+        }).execute()
+        
+        logger.debug("✓ Recorded in sensor_readings")
+        
+        # ─── INSERT INTO COLD_STORAGE_CONDITIONS (with sensor tracking) ───
+        # NEW: Reference the specific sensor_device via sensor_id
+        
+        condition_data = {
+            "room_id": room_id,
+            "site_id": site_id,
+            "gateway_id": gateway_id,
+            "sensor_id": sensor_device_id,
+            "slave_id": slave_id,
+            "reading_source": f"{sensor_type}_{sensor_number}" if sensor_number else sensor_type,
+            "sensor_type": sensor_type,
             "recorded_at": timestamp,
         }
         
-        # Map sensor type to condition field
-        if sensor_type == 'temperature':
+        # Map value to appropriate column based on type
+        if sensor_type == 'Temperature':
             condition_data["temperature"] = value
-        elif sensor_type == 'humidity':
+        elif sensor_type == 'Humidity':
             condition_data["humidity"] = value
-        elif sensor_type == 'door':
+        elif sensor_type == 'Voltage':
+            condition_data["voltage"] = value
+        elif sensor_type == 'Door':
             condition_data["door_status"] = str(value)
-        elif sensor_type == 'pressure':
+        elif sensor_type == 'Pressure':
             condition_data["suction_pressure"] = value
-        elif sensor_type == 'co2':
-            condition_data["co2_level"] = value
-        elif sensor_type == 'energy':
-            condition_data["energy_consumption_kwh"] = value
-        elif sensor_type == 'solar':
-            condition_data["solar_percentage"] = value
         
-        try:
-            save_cold_storage_condition(condition_data)
-        except Exception as e:
-            logger.error("Failed to save cold_storage_condition: %s", e)
+        supabase.table("cold_storage_conditions").insert(condition_data).execute()
         
-        logger.info("✓ Processed sensor reading: %s=%s%s via %s", 
-                   sensor_name, value, unit, gateway_id)
+        logger.info("✓ Stored in cold_storage_conditions: %s=%s%s (slave_id=%s)",
+                   sensor_type, value, unit, slave_id)
         
     except Exception as e:
-        logger.exception("Error processing sensor reading: %s", e)
-
-
-def _get_or_create_sensor_device(
-    room_id: str,
-    sensor_name: str,
-    sensor_type: str,
-    gateway_id: str,
-    sensor_id: str
-) -> str | None:
-    """
-    Get or create a sensor_device record.
-    Returns the sensor_device ID.
-    """
-    from app.database.supabase import supabase
-    
-    try:
-        # Try to find existing sensor by room + sensor_name + gateway
-        result = supabase.table("sensor_devices").select("id").eq("room_id", room_id).eq("sensor_name", sensor_name).eq("gateway_id", gateway_id).limit(1).execute()
-        
-        if result.data:
-            return result.data[0]["id"]
-        
-        # Create new sensor_device
-        insert_result = supabase.table("sensor_devices").insert({
-            "room_id": room_id,
-            "sensor_name": sensor_name,
-            "sensor_type": sensor_type,
-            "gateway_id": gateway_id,
-            "sensor_code": sensor_id,
-            "status": "Online",
-            "last_reading": datetime.now(timezone.utc).isoformat(),
-        }).select().execute()
-        
-        if insert_result.data:
-            logger.info("✓ Created sensor_device: %s (%s)", sensor_name, insert_result.data[0]["id"])
-            return insert_result.data[0]["id"]
-        else:
-            logger.error("Failed to create sensor_device")
-            return None
-            
-    except Exception as e:
-        logger.error("Error in _get_or_create_sensor_device: %s", e)
-        return None
-
-
-def _update_gateway_heartbeat(site_id: str, gateway_id: str) -> None:
-    """
-    Update or create gateway heartbeat record.
-    Used to track which gateways are online.
-    """
-    from app.database.supabase import supabase
-    
-    try:
-        # Try to update existing gateway
-        update_result = supabase.table("gateways").update({
-            "last_heartbeat": datetime.now(timezone.utc).isoformat(),
-            "status": "online",
-        }).eq("site_id", site_id).eq("gateway_id", gateway_id).execute()
-        
-        # If no rows updated, try to insert new gateway
-        if not update_result.data:
-            supabase.table("gateways").insert({
-                "site_id": site_id,
-                "gateway_id": gateway_id,
-                "status": "online",
-                "last_heartbeat": datetime.now(timezone.utc).isoformat(),
-            }).execute()
-            logger.debug("✓ Created gateway record: %s", gateway_id)
-        else:
-            logger.debug("✓ Updated gateway heartbeat: %s", gateway_id)
-            
-    except Exception as e:
-        logger.warning("Failed to update gateway heartbeat: %s", e)
+        logger.exception("Error processing sensor: %s", e)
 
 
 def _build_client() -> mqtt.Client:
@@ -620,32 +412,30 @@ def _build_client() -> mqtt.Client:
         callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
         client_id="ColdSense_Subscriber"
     )
-    client.on_connect    = on_connect
+    client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.on_message    = on_message
+    client.on_message = on_message
     client.reconnect_delay_set(min_delay=5, max_delay=30)
     return client
 
 
 def start_subscriber():
-    """Start MQTT subscriber in a background daemon thread."""
+    """Start MQTT subscriber in background daemon thread."""
     def _run():
         client = _build_client()
         try:
             client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
-            logger.info("🚀 MQTT subscriber loop started")
+            logger.info("🚀 MQTT subscriber started")
             client.loop_forever()
         except Exception as e:
             logger.error("✗ MQTT subscriber failed: %s", e)
-
+    
     thread = threading.Thread(target=_run, daemon=True, name="mqtt-subscriber")
     thread.start()
-    logger.info("MQTT subscriber thread launched → listening on %s", SUBSCRIBE_TOPIC)
+    logger.info("MQTT subscriber thread launched")
 
 
-# ── Standalone entrypoint ─────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import sys
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -653,19 +443,19 @@ if __name__ == "__main__":
     )
     print(f"\n{Color.BOLD}{Color.CYAN}")
     print("=" * 60)
-    print("ColdSense MQTT Subscriber - Sensor Data Monitor")
+    print("ColdSense MQTT Subscriber (NEW ARCHITECTURE)")
     print("=" * 60)
     print(f"{Color.END}")
     print(f"{Color.BLUE}Broker: {MQTT_BROKER}:{MQTT_PORT}{Color.END}")
     print(f"{Color.BLUE}Topic:  {SUBSCRIBE_TOPIC}{Color.END}\n")
-
+    
     client = _build_client()
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
-        print(f"{Color.GREEN}✓ Connected. Listening for sensor messages...{Color.END}\n")
-        client.loop_forever()  # Blocks here indefinitely
+        print(f"{Color.GREEN}✓ Connected. Listening...{Color.END}\n")
+        client.loop_forever()
     except KeyboardInterrupt:
-        print(f"\n{Color.YELLOW}🛑 Subscriber stopped by user{Color.END}")
+        print(f"\n{Color.YELLOW}🛑 Stopped by user{Color.END}")
     except Exception as e:
-        print(f"{Color.RED}❌ Fatal error: {e}{Color.END}")
+        print(f"{Color.RED}❌ Error: {e}{Color.END}")
         sys.exit(1)
