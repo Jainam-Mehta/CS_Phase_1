@@ -411,13 +411,55 @@ def _process_single_sensor(
             sensor_device_id = sensor_query.data[0]["id"]
             logger.debug("Found existing sensor_device: %s", sensor_device_id)
         else:
-            # Sensor doesn't exist - don't try to create, just skip storing to sensor_devices
-            # The cold_storage_conditions table will still record the reading with sensor_id=None
-            # and the dashboard will aggregate by room/slave_id instead
-            logger.debug("Sensor not found and creation disabled: %s (slave_id=%s)", sensor_type, slave_id)
-            sensor_device_id = None
+            # Create sensor_device record (REQUIRED for frontend display)
+            sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
+            sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
+            try:
+                insert_result = supabase.table("sensor_devices").insert({
+                    "room_id": room_id,
+                    "site_id": site_id,
+                    "sensor_type": sensor_type,
+                    "sensor_name": sensor_name,
+                    "sensor_code": sensor_code,
+                    "slave_id": slave_id,
+                    "device_id": device_id,
+                    "protocol": "MQTT",
+                    "mqtt_identifier": mqtt_key,
+                    "gateway_id": gateway_id,
+                    "status": "Online",
+                    "last_reading": timestamp,
+                }).execute()
+                
+                if insert_result.data:
+                    sensor_device_id = insert_result.data[0]["id"]
+                    logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
+                else:
+                    logger.warning("Failed to create sensor_device for %s", mqtt_key)
+                    sensor_device_id = None
+            except Exception as create_error:
+                if "already exists" in str(create_error) or "23505" in str(create_error):
+                    # Duplicate key - query again
+                    logger.debug("Sensor creation conflict, retrying query")
+                    retry_query = supabase.table("sensor_devices") \
+                        .select("id") \
+                        .eq("room_id", room_id) \
+                        .eq("sensor_type", sensor_type) \
+                        .eq("slave_id", slave_id) \
+                        .eq("gateway_id", gateway_id) \
+                        .limit(1) \
+                        .execute()
+                    if retry_query.data:
+                        sensor_device_id = retry_query.data[0]["id"]
+                        logger.debug("✓ Recovered sensor_device: %s", sensor_device_id)
+                    else:
+                        logger.warning("Could not recover sensor after duplicate error")
+                        sensor_device_id = None
+                else:
+                    logger.warning("Error creating sensor_device: %s", create_error)
+                    sensor_device_id = None
         
-        # ─── UPDATE SENSOR_DEVICES (if sensor exists) ───────────────────────
+        # ─── UPDATE SENSOR_DEVICES with latest reading ───────────────────────
+        # Update with the new reading value and timestamp
         if sensor_device_id:
             now = datetime.now(timezone.utc).isoformat()
             supabase.table("sensor_devices").update({
