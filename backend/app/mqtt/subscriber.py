@@ -411,86 +411,38 @@ def _process_single_sensor(
             sensor_device_id = sensor_query.data[0]["id"]
             logger.debug("Found existing sensor_device: %s", sensor_device_id)
         else:
-            # Try to create new sensor_device with slave_id
-            sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
-            sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
-            try:
-                insert_result = supabase.table("sensor_devices").insert({
-                    "room_id": room_id,
-                    "site_id": site_id,
-                    "sensor_type": sensor_type,
-                    "sensor_name": sensor_name,
-                    "sensor_code": sensor_code,  # REQUIRED: Cannot be null
-                    "slave_id": slave_id,
-                    "device_id": device_id,
-                    "protocol": "MQTT",
-                    "mqtt_identifier": mqtt_key,
-                    "gateway_location_code": gateway_id,
-                    "gateway_id": gateway_id,
-                    "status": "Online",
-                    "last_reading": timestamp,
-                }).execute()
-                
-                if insert_result.data:
-                    sensor_device_id = insert_result.data[0]["id"]
-                    logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
-                else:
-                    logger.error("Failed to create sensor_device for %s", mqtt_key)
-                    return
-            except Exception as insert_error:
-                # Handle duplicate key: sensor already exists, retrieve it
-                error_str = str(insert_error)
-                if "already exists" in error_str or "23505" in error_str:
-                    logger.debug("Sensor already exists (race condition), attempting to retrieve: %s", mqtt_key)
-                    try:
-                        # Re-query without protocol filter (in case existing sensor lacks this field)
-                        sensor_query = supabase.table("sensor_devices") \
-                            .select("id") \
-                            .eq("room_id", room_id) \
-                            .eq("sensor_type", sensor_type) \
-                            .eq("slave_id", slave_id) \
-                            .eq("gateway_id", gateway_id) \
-                            .limit(1) \
-                            .execute()
-                        if sensor_query.data:
-                            sensor_device_id = sensor_query.data[0]["id"]
-                            logger.debug("✓ Retrieved existing sensor_device: %s", sensor_device_id)
-                        else:
-                            logger.error("✗ Sensor exists (duplicate error) but cannot find it in database. Skipping this reading.")
-                            return
-                    except Exception as recovery_error:
-                        logger.error("✗ Recovery failed: %s", recovery_error)
-                        return
-                else:
-                    logger.error("✗ Unexpected error inserting sensor: %s", insert_error)
-                    raise
+            # Sensor doesn't exist - don't try to create, just skip storing to sensor_devices
+            # The cold_storage_conditions table will still record the reading with sensor_id=None
+            # and the dashboard will aggregate by room/slave_id instead
+            logger.debug("Sensor not found and creation disabled: %s (slave_id=%s)", sensor_type, slave_id)
+            sensor_device_id = None
         
-        # ─── UPDATE SENSOR_DEVICES (KEY FIX: with slave_id filter) ───────
-        # Only update the specific sensor by slave_id, not all sensors of this type
+        # ─── UPDATE SENSOR_DEVICES (if sensor exists) ───────────────────────
+        if sensor_device_id:
+            now = datetime.now(timezone.utc).isoformat()
+            supabase.table("sensor_devices").update({
+                "last_reading": now,
+                "last_reading_value": value,
+                "last_reading_unit": unit,
+                "status": "Online",
+            }).eq("id", sensor_device_id).execute()
+            
+            logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
         
-        now = datetime.now(timezone.utc).isoformat()
-        supabase.table("sensor_devices").update({
-            "last_reading": now,
-            "last_reading_value": value,
-            "last_reading_unit": unit,
-            "status": "Online",
-        }).eq("id", sensor_device_id).execute()
-        
-        logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
-        
-        # ─── INSERT INTO SENSOR_READINGS (history) ───────────────────────
-        supabase.table("sensor_readings").insert({
-            "room_sensor_id": sensor_device_id,
-            "sensor_id": sensor_device_id,
-            "reading_value": value,
-            "unit": unit,
-            "recorded_at": timestamp,
-            "gateway_id": gateway_id,
-            "slave_id": slave_id,
-            "mqtt_payload_key": mqtt_key,
-        }).execute()
-        
-        logger.debug("✓ Recorded in sensor_readings")
+        # ─── INSERT INTO SENSOR_READINGS (if sensor exists) ──────────────────
+        if sensor_device_id:
+            supabase.table("sensor_readings").insert({
+                "room_sensor_id": sensor_device_id,
+                "sensor_id": sensor_device_id,
+                "reading_value": value,
+                "unit": unit,
+                "recorded_at": timestamp,
+                "gateway_id": gateway_id,
+                "slave_id": slave_id,
+                "mqtt_payload_key": mqtt_key,
+            }).execute()
+            
+            logger.debug("✓ Recorded in sensor_readings")
         
         # ─── INSERT INTO COLD_STORAGE_CONDITIONS (with sensor tracking) ───
         # NEW: Reference the specific sensor_device via sensor_id
