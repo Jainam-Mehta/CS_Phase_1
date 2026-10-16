@@ -4,7 +4,11 @@ Topic Formats Supported:
 1. General: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
    Example: coldsense/gw1/MHNKIGP01/S01/R01
    
-2. Gateway-Specific: cdsense/{site_code}/{room_code}
+2. Gateway-Specific with Details: cdsense/{gateway}/{location_code}/{site_code}/{room_code}
+   Example: cdsense/gw1/MHNKIGP01/S01/R01
+   (Uses 'cdsense' prefix for this specific gateway)
+
+3. Gateway-Specific Simplified: cdsense/{site_code}/{room_code}
    Example: cdsense/S01/R01
    (Uses 'gw-default' as gateway_id when specific gateway not in topic)
 
@@ -27,7 +31,8 @@ KEY CHANGES:
 2. Process aggregated device array (not separate topics per sensor)
 3. Track slave_id for each reading to prevent consolidation
 4. Update sensor_devices with slave_id filter (not blanket updates)
-5. Support gateway-specific topic names (e.g., 'cdsense' for this gateway)
+5. Support gateway-specific topic names (coldsense, cdsense, or both)
+6. Flexible parsing: supports both full and simplified gateway topic formats
 """
 
 import json
@@ -112,38 +117,41 @@ def on_message(client, userdata, msg):
         print(f"  - Devices: {len(payload.get('device', []))} found")
         
         # ─── STEP 1: PARSE TOPIC FORMAT ──────────────────────────────────
-        # Supports TWO formats:
+        # Supports THREE formats:
         # 1. coldsense/{gateway}/{location_code}/{site_code}/{room_code}
         #    Example: coldsense/gw1/MHNKIGP01/S01/R01
-        # 2. cdsense/{site_code}/{room_code}
+        # 2. cdsense/{gateway}/{location_code}/{site_code}/{room_code}
+        #    Example: cdsense/gw1/MHNKIGP01/S01/R01 (gateway-specific prefix)
+        # 3. cdsense/{site_code}/{room_code}
         #    Example: cdsense/S01/R01 (uses 'gw-default' as gateway_id)
         
         parts = topic.split("/")
         topic_prefix = parts[0] if parts else ""
         
         # Determine topic format
-        if topic_prefix == "coldsense" and len(parts) == 5:
-            # Format 1: Full topic with gateway
+        if (topic_prefix == "coldsense" or topic_prefix == "cdsense") and len(parts) == 5:
+            # Format 1 or 2: Full topic with gateway and location_code
             gateway_id = parts[1]           # gw1
             location_code = parts[2]        # MHNKIGP01
             site_code = parts[3]            # S01
             room_code = parts[4]            # R01
-            logger.info("✓ Parsed coldsense topic: gw=%s, location=%s, site_code=%s, room_code=%s",
-                       gateway_id, location_code, site_code, room_code)
+            logger.info("✓ Parsed %s topic (full): gw=%s, location=%s, site_code=%s, room_code=%s",
+                       topic_prefix, gateway_id, location_code, site_code, room_code)
         elif topic_prefix == "cdsense" and len(parts) == 3:
-            # Format 2: Gateway-specific topic (simplified)
+            # Format 3: Gateway-specific topic (simplified, no gateway/location in topic)
             site_code = parts[1]            # S01
             room_code = parts[2]            # R01
             gateway_id = "gw-default"       # Default gateway identifier
             location_code = "DEFAULT"       # Generic location code
-            logger.info("✓ Parsed cdsense topic (gateway-specific): site_code=%s, room_code=%s",
+            logger.info("✓ Parsed cdsense topic (gateway-specific simplified): site_code=%s, room_code=%s",
                        site_code, room_code)
         else:
-            logger.warning("Invalid topic format: %s (expected: coldsense/gw/loc/site/room or cdsense/site/room)", topic)
+            logger.warning("Invalid topic format: %s (expected: [coldsense|cdsense]/gw/loc/site/room or cdsense/site/room)", topic)
             print(f"{Color.RED}✗ Invalid topic format: {topic}{Color.END}")
             return
         
         print(f"{Color.GREEN}✓ Parsed topic components (Gateway: {gateway_id}){Color.END}")
+        print(f"  - Prefix: {topic_prefix}")
         print(f"  - Site Code: {site_code}")
         print(f"  - Room Code: {room_code}")
         
