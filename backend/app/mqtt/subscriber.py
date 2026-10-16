@@ -328,7 +328,7 @@ def on_message(client, userdata, msg):
                 "gateway_id": gateway_id,
                 "status": "online",
                 "last_heartbeat": timestamp
-            }).execute()
+            }, on_conflict="site_id,gateway_id").execute()
             logger.debug("✓ Updated gateway heartbeat")
         except Exception as e:
             logger.warning("Failed to update gateway: %s", e)
@@ -404,6 +404,7 @@ def _process_single_sensor(
             .eq("sensor_type", sensor_type) \
             .eq("slave_id", slave_id) \
             .eq("gateway_id", gateway_id) \
+            .eq("protocol", "MQTT") \
             .limit(1) \
             .execute()
         
@@ -414,28 +415,50 @@ def _process_single_sensor(
             # Create new sensor_device with slave_id
             sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
             sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
-            insert_result = supabase.table("sensor_devices").insert({
-                "room_id": room_id,
-                "site_id": site_id,
-                "sensor_type": sensor_type,
-                "sensor_name": sensor_name,
-                "sensor_code": sensor_code,  # REQUIRED: Cannot be null
-                "slave_id": slave_id,
-                "device_id": device_id,
-                "protocol": "MQTT",
-                "mqtt_identifier": mqtt_key,
-                "gateway_location_code": gateway_id,
-                "gateway_id": gateway_id,
-                "status": "Online",
-                "last_reading": timestamp,
-            }).execute()
-            
-            if insert_result.data:
-                sensor_device_id = insert_result.data[0]["id"]
-                logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
-            else:
-                logger.error("Failed to create sensor_device for %s", mqtt_key)
-                return
+            try:
+                insert_result = supabase.table("sensor_devices").insert({
+                    "room_id": room_id,
+                    "site_id": site_id,
+                    "sensor_type": sensor_type,
+                    "sensor_name": sensor_name,
+                    "sensor_code": sensor_code,  # REQUIRED: Cannot be null
+                    "slave_id": slave_id,
+                    "device_id": device_id,
+                    "protocol": "MQTT",
+                    "mqtt_identifier": mqtt_key,
+                    "gateway_location_code": gateway_id,
+                    "gateway_id": gateway_id,
+                    "status": "Online",
+                    "last_reading": timestamp,
+                }).execute()
+                
+                if insert_result.data:
+                    sensor_device_id = insert_result.data[0]["id"]
+                    logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
+                else:
+                    logger.error("Failed to create sensor_device for %s", mqtt_key)
+                    return
+            except Exception as insert_error:
+                # Handle duplicate key: race condition where another process inserted it
+                if "already exists" in str(insert_error) or "23505" in str(insert_error):
+                    logger.debug("Sensor already exists (race condition), querying again: %s", mqtt_key)
+                    sensor_query = supabase.table("sensor_devices") \
+                        .select("id") \
+                        .eq("room_id", room_id) \
+                        .eq("sensor_type", sensor_type) \
+                        .eq("slave_id", slave_id) \
+                        .eq("gateway_id", gateway_id) \
+                        .eq("protocol", "MQTT") \
+                        .limit(1) \
+                        .execute()
+                    if sensor_query.data:
+                        sensor_device_id = sensor_query.data[0]["id"]
+                        logger.debug("Recovered sensor_device: %s", sensor_device_id)
+                    else:
+                        logger.error("Failed to recover sensor_device after race condition")
+                        return
+                else:
+                    raise
         
         # ─── UPDATE SENSOR_DEVICES (KEY FIX: with slave_id filter) ───────
         # Only update the specific sensor by slave_id, not all sensors of this type
@@ -498,7 +521,7 @@ def _process_single_sensor(
                    sensor_type, value, unit, slave_id)
         
     except Exception as e:
-        logger.exception("Error processing sensor: %s", e)
+        logger.warning("Error processing sensor (non-fatal): %s", e)
 
 
 def _build_client() -> mqtt.Client:
