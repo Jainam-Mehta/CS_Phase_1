@@ -270,6 +270,52 @@ def on_message(client, userdata, msg):
                     logger.error("Error processing sensor %s: %s", mqtt_key, e)
                     continue
         
+        # ─── STEP 6: PROCESS TOP-LEVEL DIGI FIELD (DOOR SENSOR) ──────────
+        # Some gateways send door status at top level: "DIGI": "On" or "Off"
+        if "DIGI" in payload:
+            try:
+                digi_value = payload.get("DIGI")
+                digi_status = "open" if digi_value and digi_value.lower() in ("on", "1", "true") else "closed"
+                
+                # Find the Door sensor in this room with the last slave_id (or a default)
+                door_sensors = supabase.table("sensor_devices") \
+                    .select("id, slave_id") \
+                    .eq("room_id", room_id) \
+                    .eq("sensor_type", "Door") \
+                    .order("created_at", {"ascending": False}) \
+                    .limit(1) \
+                    .execute()
+                
+                if door_sensors.data:
+                    door_sensor = door_sensors.data[0]
+                    door_slave_id = door_sensor.get("slave_id")
+                    
+                    # Use a high slave_id if not set (e.g., 100 for DIGI)
+                    if not door_slave_id:
+                        door_slave_id = 100
+                    
+                    logger.info("Processing DIGI door sensor: status=%s, slave_id=%s", digi_status, door_slave_id)
+                    
+                    _process_single_sensor(
+                        room_id=room_id,
+                        site_id=site_id,
+                        gateway_id=gateway_id,
+                        slave_id=door_slave_id,
+                        device_id=999,  # Special ID for DIGI
+                        sensor_type="Door",
+                        sensor_number=None,
+                        mqtt_key="DIGI",
+                        value=digi_status,
+                        unit="Status",
+                        timestamp=timestamp
+                    )
+                    total_sensors += 1
+                    print(f"  • DIGI (Door Sensor): {digi_status}")
+                else:
+                    logger.debug("No door sensor found in room for DIGI processing")
+            except Exception as e:
+                logger.warning("Error processing DIGI field: %s", e)
+        
         # Update gateway status
         try:
             supabase.table("gateways").upsert({
