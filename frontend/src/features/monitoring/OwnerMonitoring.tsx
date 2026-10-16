@@ -48,6 +48,7 @@ const OwnerMonitoring: React.FC = () => {
   });
   const [rooms, setRooms] = useState<any[]>([]);
   const [siteName, setSiteName] = useState<string>('');
+  const [sensorAverages, setSensorAverages] = useState<any>(null);
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
@@ -94,36 +95,54 @@ const OwnerMonitoring: React.FC = () => {
       if (!roomToUse || resolvedRooms.length === 0) {
         setDbSensors([]);
         setInventory([]);
+        setSensorAverages(null);
         setLoading(false);
         return;
       }
 
       const roomIds = [roomToUse];
 
-      // Fetch sensors from sensor_devices table
+      // ✅ FIX: Fetch sensors from sensor_devices table
+      // Each sensor now has its OWN last_reading_value (not overwritten)
       const { data: sensorData } = await supabase
         .from('sensor_devices')
         .select('*')
         .in('room_id', roomIds)
-        .order('sensor_type', { ascending: true });
+        .order('created_at', { ascending: true });
       
-      // Group sensors by type and add numbering (Temperature 1, Temperature 2, etc.)
-      const sensorsByType: Record<string, number> = {};
+      // ✅ FIX: Display name now uses slave_id if available
       const numberedSensors = (sensorData || []).map(sensor => {
         const type = sensor.sensor_type || 'Unknown';
-        sensorsByType[type] = (sensorsByType[type] || 0) + 1;
-        const number = sensorsByType[type];
+        
+        // Use slave_id for unique identification if available
+        const displayName = sensor.slave_id 
+          ? `${type} ${sensor.slave_id}`  // e.g., "Temperature 1", "Temperature 3"
+          : type;
         
         return {
           ...sensor,
-          display_name: number > 1 || sensorsByType[type] > 1 
-            ? `${type} ${number}` 
-            : type,
-          sensor_number: number
+          display_name: displayName,
+          // ✅ Each sensor has distinct last_reading_value now
+          sensor_value: sensor.last_reading_value,
+          sensor_unit: sensor.last_reading_unit,
+          is_active: sensor.status?.toLowerCase() === 'online' && sensor.last_reading_value !== null,
         };
       });
       
       setDbSensors(numberedSensors);
+
+      // ✅ NEW: Fetch sensor averages from the averaging endpoint
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/storage/averages/room/${roomToUse}`);
+        if (response.ok) {
+          const averagesData = await response.json();
+          setSensorAverages(averagesData);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch sensor averages:', error);
+        // Non-fatal - dashboard will still show individual sensors
+      }
 
       // Get unique farmers count
       const { data: allocationData } = await supabase
@@ -411,6 +430,37 @@ const OwnerMonitoring: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Sensor Averages - NEW */}
+      {sensorAverages && (sensorAverages.avg_temperature !== null || sensorAverages.avg_humidity !== null) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {sensorAverages.avg_temperature !== null && (
+            <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-2xl p-6 shadow-sm border border-red-200 dark:border-red-800">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-red-600 dark:text-red-400 uppercase tracking-wider">Average Temperature</h3>
+                <Thermometer className="w-5 h-5 text-red-500" />
+              </div>
+              <p className="text-4xl font-bold text-red-900 dark:text-red-100">{sensorAverages.avg_temperature}°C</p>
+              <p className="text-xs text-red-700 dark:text-red-300 mt-2">
+                {sensorAverages.temp_sensor_count} sensor{sensorAverages.temp_sensor_count !== 1 ? 's' : ''} • Last {sensorAverages.time_window_minutes}m
+              </p>
+            </div>
+          )}
+          
+          {sensorAverages.avg_humidity !== null && (
+            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-2xl p-6 shadow-sm border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Average Humidity</h3>
+                <Droplets className="w-5 h-5 text-blue-500" />
+              </div>
+              <p className="text-4xl font-bold text-blue-900 dark:text-blue-100">{sensorAverages.avg_humidity}%</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                {sensorAverages.humidity_sensor_count} sensor{sensorAverages.humidity_sensor_count !== 1 ? 's' : ''} • Last {sensorAverages.time_window_minutes}m
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sensor Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
