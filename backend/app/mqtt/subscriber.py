@@ -414,7 +414,7 @@ def _process_single_sensor(
                 "gateway_id": gateway_id,
                 "status": "Online",
                 "last_reading": timestamp,
-            }).select().execute()
+            }).execute()
             
             if insert_result.data:
                 sensor_device_id = insert_result.data[0]["id"]
