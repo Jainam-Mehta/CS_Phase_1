@@ -404,7 +404,6 @@ def _process_single_sensor(
             .eq("sensor_type", sensor_type) \
             .eq("slave_id", slave_id) \
             .eq("gateway_id", gateway_id) \
-            .eq("protocol", "MQTT") \
             .limit(1) \
             .execute()
         
@@ -412,7 +411,7 @@ def _process_single_sensor(
             sensor_device_id = sensor_query.data[0]["id"]
             logger.debug("Found existing sensor_device: %s", sensor_device_id)
         else:
-            # Create new sensor_device with slave_id
+            # Try to create new sensor_device with slave_id
             sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
             sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
             try:
@@ -439,25 +438,31 @@ def _process_single_sensor(
                     logger.error("Failed to create sensor_device for %s", mqtt_key)
                     return
             except Exception as insert_error:
-                # Handle duplicate key: race condition where another process inserted it
-                if "already exists" in str(insert_error) or "23505" in str(insert_error):
-                    logger.debug("Sensor already exists (race condition), querying again: %s", mqtt_key)
-                    sensor_query = supabase.table("sensor_devices") \
-                        .select("id") \
-                        .eq("room_id", room_id) \
-                        .eq("sensor_type", sensor_type) \
-                        .eq("slave_id", slave_id) \
-                        .eq("gateway_id", gateway_id) \
-                        .eq("protocol", "MQTT") \
-                        .limit(1) \
-                        .execute()
-                    if sensor_query.data:
-                        sensor_device_id = sensor_query.data[0]["id"]
-                        logger.debug("Recovered sensor_device: %s", sensor_device_id)
-                    else:
-                        logger.error("Failed to recover sensor_device after race condition")
+                # Handle duplicate key: sensor already exists, retrieve it
+                error_str = str(insert_error)
+                if "already exists" in error_str or "23505" in error_str:
+                    logger.debug("Sensor already exists (race condition), attempting to retrieve: %s", mqtt_key)
+                    try:
+                        # Re-query without protocol filter (in case existing sensor lacks this field)
+                        sensor_query = supabase.table("sensor_devices") \
+                            .select("id") \
+                            .eq("room_id", room_id) \
+                            .eq("sensor_type", sensor_type) \
+                            .eq("slave_id", slave_id) \
+                            .eq("gateway_id", gateway_id) \
+                            .limit(1) \
+                            .execute()
+                        if sensor_query.data:
+                            sensor_device_id = sensor_query.data[0]["id"]
+                            logger.debug("✓ Retrieved existing sensor_device: %s", sensor_device_id)
+                        else:
+                            logger.error("✗ Sensor exists (duplicate error) but cannot find it in database. Skipping this reading.")
+                            return
+                    except Exception as recovery_error:
+                        logger.error("✗ Recovery failed: %s", recovery_error)
                         return
                 else:
+                    logger.error("✗ Unexpected error inserting sensor: %s", insert_error)
                     raise
         
         # ─── UPDATE SENSOR_DEVICES (KEY FIX: with slave_id filter) ───────
