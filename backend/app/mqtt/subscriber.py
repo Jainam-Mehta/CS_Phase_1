@@ -401,11 +401,13 @@ def _process_single_sensor(
         else:
             # Create new sensor_device with slave_id
             sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
+            sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
             insert_result = supabase.table("sensor_devices").insert({
                 "room_id": room_id,
                 "site_id": site_id,
                 "sensor_type": sensor_type,
                 "sensor_name": sensor_name,
+                "sensor_code": sensor_code,  # REQUIRED: Cannot be null
                 "slave_id": slave_id,
                 "device_id": device_id,
                 "protocol": "MQTT",
