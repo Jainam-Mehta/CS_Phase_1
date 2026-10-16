@@ -22,6 +22,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install runtime dependencies (including curl for health checks and debugging)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
