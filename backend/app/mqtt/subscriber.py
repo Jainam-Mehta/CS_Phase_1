@@ -248,6 +248,11 @@ def on_message(client, userdata, msg):
                     logger.debug("  → %s: %s=%s%s (sensor #%s)",
                                mqtt_key, sensor_type, value, unit, sensor_number)
                     
+                    # Skip if sensor_type is not supported (e.g., Voltage, Current)
+                    if not sensor_type:
+                        logger.debug("Skipping unsupported MQTT key: %s (no database mapping)", mqtt_key)
+                        continue
+                    
                     # ─── STEP 5: CRITICAL UPDATE WITH SLAVE_ID FILTER ────
                     # This is the FIX: Update ONLY this specific slave, not all sensors
                     _process_single_sensor(
@@ -338,7 +343,11 @@ def on_message(client, userdata, msg):
 
 
 def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
-    """Map MQTT payload key to (sensor_type, unit)."""
+    """Map MQTT payload key to (sensor_type, unit).
+    
+    Note: Only returns sensor types that are in the database constraint.
+    Voltage and Current readings are skipped (no database columns for them yet).
+    """
     key_lower = mqtt_key.lower()
     
     if key_lower.startswith(('temp', 't')) and not key_lower.endswith('_unit'):
@@ -346,13 +355,16 @@ def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
     elif key_lower.startswith(('hum', 'h')) and not key_lower.endswith('_unit'):
         return ('Humidity', '%')
     elif key_lower.startswith(('voltage', 'volt', 'v_')):
-        return ('Voltage', 'V')
+        # Voltage readings skipped - no database column support yet
+        return None, 'Unknown'
     elif key_lower.startswith(('current', 'i_')):
-        return ('Current', 'A')
+        # Current readings skipped - no database column support yet
+        return None, 'Unknown'
     elif key_lower.startswith(('door', 'd_')):
         return ('Door', 'Status')
     elif key_lower.startswith(('pressure', 'psi', 'p_')):
-        return ('Pressure', 'psi')
+        # Changed from 'Pressure' to 'SuctionPressure' for consistency with frontend
+        return ('SuctionPressure', 'psi')
     
     return None, 'Unknown'
 
@@ -471,12 +483,14 @@ def _process_single_sensor(
             condition_data["temperature"] = value
         elif sensor_type == 'Humidity':
             condition_data["humidity"] = value
-        elif sensor_type == 'Voltage':
-            condition_data["voltage"] = value
         elif sensor_type == 'Door':
             condition_data["door_status"] = str(value)
-        elif sensor_type == 'Pressure':
-            condition_data["suction_pressure"] = value
+        elif sensor_type == 'SuctionPressure':
+            # FIXED: Correct column name is pressure_suction, not suction_pressure
+            condition_data["pressure_suction"] = value
+        elif sensor_type == 'DischargePressure':
+            condition_data["pressure_discharge"] = value
+        # Note: Voltage and Current readings are skipped by _map_mqtt_key_to_sensor()
         
         supabase.table("cold_storage_conditions").insert(condition_data).execute()
         
