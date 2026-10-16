@@ -1,7 +1,12 @@
 """
 ColdSense MQTT Subscriber - NEW ARCHITECTURE
-Topic Format: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
-Example: coldsense/gw1/MHNKIGP01/S01/R01
+Topic Formats Supported:
+1. General: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
+   Example: coldsense/gw1/MHNKIGP01/S01/R01
+   
+2. Gateway-Specific: cdsense/{site_code}/{room_code}
+   Example: cdsense/S01/R01
+   (Uses 'gw-default' as gateway_id when specific gateway not in topic)
 
 Payload: Aggregated message with ALL room sensors:
 {
@@ -22,6 +27,7 @@ KEY CHANGES:
 2. Process aggregated device array (not separate topics per sensor)
 3. Track slave_id for each reading to prevent consolidation
 4. Update sensor_devices with slave_id filter (not blanket updates)
+5. Support gateway-specific topic names (e.g., 'cdsense' for this gateway)
 """
 
 import json
@@ -49,7 +55,7 @@ class Color:
     END = '\033[0m'
 
 
-SUBSCRIBE_TOPIC = "coldsense/#"
+SUBSCRIBE_TOPICS = ["coldsense/#", "cdsense/#"]
 
 
 def on_connect(client, userdata, flags, rc):
@@ -57,8 +63,9 @@ def on_connect(client, userdata, flags, rc):
         msg = f"✓ MQTT connected to {MQTT_BROKER}:{MQTT_PORT}"
         logger.info(msg)
         print(f"\n{Color.GREEN}{msg}{Color.END}")
-        client.subscribe(SUBSCRIBE_TOPIC)
-        print(f"{Color.GREEN}✓ Subscribed to: {SUBSCRIBE_TOPIC}{Color.END}\n")
+        for topic in SUBSCRIBE_TOPICS:
+            client.subscribe(topic)
+        print(f"{Color.GREEN}✓ Subscribed to: {', '.join(SUBSCRIBE_TOPICS)}{Color.END}\n")
     else:
         logger.error("✗ MQTT connection failed: rc=%s", rc)
         print(f"{Color.RED}✗ Connection failed: {rc}{Color.END}")
@@ -104,24 +111,41 @@ def on_message(client, userdata, msg):
         print(f"  - Signal: {payload.get('SS')} dBm")
         print(f"  - Devices: {len(payload.get('device', []))} found")
         
-        # ─── STEP 1: PARSE NEW TOPIC FORMAT ──────────────────────────────
-        # Topic: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
-        # Example: coldsense/gw1/MHNKIGP01/S01/R01
+        # ─── STEP 1: PARSE TOPIC FORMAT ──────────────────────────────────
+        # Supports TWO formats:
+        # 1. coldsense/{gateway}/{location_code}/{site_code}/{room_code}
+        #    Example: coldsense/gw1/MHNKIGP01/S01/R01
+        # 2. cdsense/{site_code}/{room_code}
+        #    Example: cdsense/S01/R01 (uses 'gw-default' as gateway_id)
         
         parts = topic.split("/")
-        if len(parts) != 5 or parts[0] != "coldsense":
-            logger.warning("Invalid topic format: %s (expected: coldsense/gw/loc/site/room)", topic)
-            print(f"{Color.RED}✗ Invalid topic format{Color.END}")
+        topic_prefix = parts[0] if parts else ""
+        
+        # Determine topic format
+        if topic_prefix == "coldsense" and len(parts) == 5:
+            # Format 1: Full topic with gateway
+            gateway_id = parts[1]           # gw1
+            location_code = parts[2]        # MHNKIGP01
+            site_code = parts[3]            # S01
+            room_code = parts[4]            # R01
+            logger.info("✓ Parsed coldsense topic: gw=%s, location=%s, site_code=%s, room_code=%s",
+                       gateway_id, location_code, site_code, room_code)
+        elif topic_prefix == "cdsense" and len(parts) == 3:
+            # Format 2: Gateway-specific topic (simplified)
+            site_code = parts[1]            # S01
+            room_code = parts[2]            # R01
+            gateway_id = "gw-default"       # Default gateway identifier
+            location_code = "DEFAULT"       # Generic location code
+            logger.info("✓ Parsed cdsense topic (gateway-specific): site_code=%s, room_code=%s",
+                       site_code, room_code)
+        else:
+            logger.warning("Invalid topic format: %s (expected: coldsense/gw/loc/site/room or cdsense/site/room)", topic)
+            print(f"{Color.RED}✗ Invalid topic format: {topic}{Color.END}")
             return
         
-        gateway_id = parts[1]           # gw1
-        location_code = parts[2]        # MHNKIGP01
-        site_code = parts[3]            # S01
-        room_code = parts[4]            # R01
-        
-        logger.info("✓ Parsed topic: gw=%s, location=%s, site_code=%s, room_code=%s",
-                   gateway_id, location_code, site_code, room_code)
-        print(f"{Color.GREEN}✓ Parsed topic components{Color.END}")
+        print(f"{Color.GREEN}✓ Parsed topic components (Gateway: {gateway_id}){Color.END}")
+        print(f"  - Site Code: {site_code}")
+        print(f"  - Room Code: {room_code}")
         
         # ─── STEP 2: RESOLVE CODES TO UUIDs ──────────────────────────────
         # Use sensor_location_mapping table to convert S01→uuid, R01→uuid
