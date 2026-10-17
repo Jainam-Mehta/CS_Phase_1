@@ -108,6 +108,38 @@ async def ingest_gcp_sensor_data(data: GCPSensorData):
         
         print(f"✅ Sensor reading recorded: {sensor_id or data.sensor_code} = {data.reading_value}{data.reading_unit}")
         
+        # 3. Insert into cold_storage_conditions for dashboard display
+        # This is what the Dashboard and Monitoring pages use to display live data
+        try:
+            condition_data = {
+                "room_id": room_id,
+                "sensor_id": sensor_id,
+                "gateway_id": data.gateway_id,
+                "recorded_at": timestamp,
+                "sensor_type": data.sensor_type,
+            }
+            
+            # Map sensor_type to appropriate column
+            sensor_type_lower = data.sensor_type.lower()
+            if "temp" in sensor_type_lower:
+                condition_data["temperature"] = data.reading_value
+            elif "humid" in sensor_type_lower:
+                condition_data["humidity"] = data.reading_value
+            elif "door" in sensor_type_lower:
+                condition_data["door_status"] = str(data.reading_value)
+            elif "pressure" in sensor_type_lower and "suction" in sensor_type_lower:
+                condition_data["pressure_suction"] = data.reading_value
+            elif "pressure" in sensor_type_lower and "discharge" in sensor_type_lower:
+                condition_data["pressure_discharge"] = data.reading_value
+            else:
+                # Generic sensor - store in temperature for now
+                condition_data["temperature"] = data.reading_value
+            
+            supabase.table("cold_storage_conditions").insert(condition_data).execute()
+            print(f"✅ Stored in cold_storage_conditions: {data.sensor_type}={data.reading_value}{data.reading_unit}")
+        except Exception as e:
+            print(f"⚠️ Could not store in cold_storage_conditions: {e}")
+        
         return {
             "status": "success",
             "message": f"Sensor {data.sensor_code} reading ingested",
