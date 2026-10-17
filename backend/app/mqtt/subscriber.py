@@ -390,9 +390,9 @@ def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float, s
     
     if site_id == NASHIK_SITE_ID:
         if sensor_type in ('Temperature', 'Humidity'):
-            # Slave 3: Different sensor model, uses different scaling (no conversion needed)
+            # Slave 3: Different sensor model, 10x scaled (needs 0.1 multiplier)
             if slave_id == 3:
-                return value  # No scaling, use as-is
+                return value * 0.1
             # Slaves 1, 2: Standard 0.01 scaling (100x scaled raw values)
             elif slave_id in (1, 2):
                 return value * 0.01

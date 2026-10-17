@@ -95,40 +95,40 @@ const OwnerDashboard: React.FC = () => {
         // Merge latest temperature and humidity from potentially different records
         // (Gateway may send them separately)
         let latestComplete = null;
-        let latestTemp = null;
-        let latestHumidity = null;
+        let tempReadings: number[] = [];
+        let humidityReadings: number[] = [];
         
         if (condData && condData.length > 0) {
-          // Get latest temperature reading
-          for (const record of condData) {
-            if (record.temperature !== null && !latestTemp) {
-              latestTemp = record;
-              break;
+          // Collect all temperature and humidity readings from the most recent batch
+          // (typically all records from the same timestamp or within a short window)
+          const mostRecentTimestamp = condData[0].recorded_at;
+          const recentWindow = condData.filter(
+            r => r.recorded_at === mostRecentTimestamp || 
+                 (new Date(r.recorded_at).getTime() - new Date(mostRecentTimestamp).getTime()) < 5000
+          );
+          
+          // Collect all valid readings from this window
+          for (const record of recentWindow) {
+            if (record.temperature !== null) {
+              tempReadings.push(parseFloat(record.temperature));
+            }
+            if (record.humidity !== null) {
+              humidityReadings.push(parseFloat(record.humidity));
             }
           }
           
-          // Get latest humidity reading
-          for (const record of condData) {
-            if (record.humidity !== null && !latestHumidity) {
-              latestHumidity = record;
-              break;
-            }
+          // Start with the most recent record as base
+          latestComplete = condData[0];
+          
+          // Calculate averages if we have multiple readings
+          if (tempReadings.length > 0) {
+            const avgTemp = tempReadings.reduce((a, b) => a + b, 0) / tempReadings.length;
+            latestComplete.temperature = parseFloat(avgTemp.toFixed(2));
           }
           
-          // Merge them into a single object with the most recent timestamp
-          if (latestTemp || latestHumidity) {
-            // Start with the most recent record overall
-            latestComplete = condData[0];
-            
-            // If we found a temperature record, use its temp value
-            if (latestTemp) {
-              latestComplete.temperature = latestTemp.temperature;
-            }
-            
-            // If we found a humidity record, use its humidity value
-            if (latestHumidity) {
-              latestComplete.humidity = latestHumidity.humidity;
-            }
+          if (humidityReadings.length > 0) {
+            const avgHumidity = humidityReadings.reduce((a, b) => a + b, 0) / humidityReadings.length;
+            latestComplete.humidity = parseFloat(avgHumidity.toFixed(2));
           }
         }
 
