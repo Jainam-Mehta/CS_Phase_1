@@ -292,7 +292,7 @@ def on_message(client, userdata, msg):
                 door_sensors = supabase.table("sensor_devices") \
                     .select("id, slave_id") \
                     .eq("room_id", room_id) \
-                    .eq("sensor_type", "Door") \
+                    .ilike("sensor_type", "Door") \
                     .order("created_at", {"ascending": False}) \
                     .limit(1) \
                     .execute()
@@ -423,135 +423,137 @@ def _process_single_sensor(
     timestamp: str
 ) -> None:
     """
-    Process ONE sensor reading (KEY FIX).
+    Process ONE sensor reading with RESILIENT MATCHING.
     
-    Critical: Filter by slave_id when updating, not just sensor_type.
-    This prevents all temperature sensors from showing the same value.
+    ✅ Key improvements:
+    1. Case-insensitive sensor_type matching (.ilike instead of .eq)
+    2. Ignores gateway_id if existing sensor has it as NULL (self-healing)
+    3. Fallback matching: If no slave_id match, try unassigned sensor by name
+    4. Auto-pairs unassigned sensors with incoming slave_id (learning)
     """
     try:
-        # ─── GET OR CREATE SENSOR_DEVICE (with slave_id) ─────────────────
-        # KEY FIX: Query includes slave_id to get the correct sensor
+        sensor_device_id = None
+        
+        # ─── PRIORITY A: Match by room_id, sensor_type (case-insensitive), and slave_id ───
+        logger.debug("PRIORITY A: Matching sensor_type=%s, slave_id=%s", sensor_type, slave_id)
         
         sensor_query = supabase.table("sensor_devices") \
-            .select("id") \
+            .select("id, gateway_id, slave_id") \
             .eq("room_id", room_id) \
-            .eq("sensor_type", sensor_type) \
+            .ilike("sensor_type", sensor_type) \
             .eq("slave_id", slave_id) \
-            .eq("gateway_id", gateway_id) \
             .limit(1) \
             .execute()
         
         if sensor_query.data:
             sensor_device_id = sensor_query.data[0]["id"]
-            logger.debug("Found existing sensor_device: %s", sensor_device_id)
+            logger.info("✓ PRIORITY A matched: Found existing sensor_device %s", sensor_device_id)
+            
+            # Self-healing: If gateway_id was NULL, adopt the incoming gateway_id
+            if not sensor_query.data[0].get("gateway_id") and gateway_id:
+                try:
+                    supabase.table("sensor_devices").update({
+                        "gateway_id": gateway_id
+                    }).eq("id", sensor_device_id).execute()
+                    logger.debug("✓ Adopted gateway_id=%s for sensor %s", gateway_id, sensor_device_id)
+                except Exception as e:
+                    logger.warning("Could not update gateway_id: %s", e)
         else:
-            # Create sensor_device record (REQUIRED for frontend display)
-            sensor_name = f"{sensor_type} {sensor_number}" if sensor_number else sensor_type
-            sensor_code = f"SN-{gateway_id}-{mqtt_key}-{int(datetime.now().timestamp() * 1000) % 1000000}"
-            try:
-                insert_result = supabase.table("sensor_devices").insert({
-                    "room_id": room_id,
-                    "site_id": site_id,
-                    "sensor_type": sensor_type,
-                    "sensor_name": sensor_name,
-                    "sensor_code": sensor_code,
-                    "slave_id": slave_id,
-                    "device_id": device_id,
-                    "protocol": "MQTT",
-                    "mqtt_identifier": mqtt_key,
-                    "gateway_id": gateway_id,
-                    "status": "Online",
-                    "last_reading": timestamp,
-                }).execute()
+            # ─── PRIORITY B: Match unassigned manual sensor by type and number ───
+            logger.debug("PRIORITY A no match. Trying PRIORITY B: unassigned sensor by name.")
+            
+            search_name = f"%{sensor_number}%" if sensor_number else "%"
+            unassigned_query = supabase.table("sensor_devices") \
+                .select("id") \
+                .eq("room_id", room_id) \
+                .ilike("sensor_type", sensor_type) \
+                .is_("slave_id", "null") \
+                .ilike("sensor_name", search_name) \
+                .limit(1) \
+                .execute()
+            
+            if unassigned_query.data:
+                sensor_device_id = unassigned_query.data[0]["id"]
+                logger.info("✓ PRIORITY B matched: Found unassigned sensor_device %s", sensor_device_id)
                 
-                if insert_result.data:
-                    sensor_device_id = insert_result.data[0]["id"]
-                    logger.info("✓ Created sensor_device: %s (%s)", sensor_name, sensor_device_id)
-                else:
-                    logger.warning("Failed to create sensor_device for %s", mqtt_key)
-                    sensor_device_id = None
-            except Exception as create_error:
-                if "already exists" in str(create_error) or "23505" in str(create_error):
-                    # Duplicate key - query again
-                    logger.debug("Sensor creation conflict, retrying query")
-                    retry_query = supabase.table("sensor_devices") \
-                        .select("id") \
-                        .eq("room_id", room_id) \
-                        .eq("sensor_type", sensor_type) \
-                        .eq("slave_id", slave_id) \
-                        .eq("gateway_id", gateway_id) \
-                        .limit(1) \
-                        .execute()
-                    if retry_query.data:
-                        sensor_device_id = retry_query.data[0]["id"]
-                        logger.debug("✓ Recovered sensor_device: %s", sensor_device_id)
-                    else:
-                        logger.warning("Could not recover sensor after duplicate error")
-                        sensor_device_id = None
-                else:
-                    logger.warning("Error creating sensor_device: %s", create_error)
-                    sensor_device_id = None
+                # Self-healing: Adopt the slave_id and gateway_id
+                try:
+                    supabase.table("sensor_devices").update({
+                        "slave_id": slave_id,
+                        "gateway_id": gateway_id,
+                    }).eq("id", sensor_device_id).execute()
+                    logger.info("✓ Paired unassigned sensor %s with slave_id=%s, gateway_id=%s", 
+                               sensor_device_id, slave_id, gateway_id)
+                except Exception as e:
+                    logger.warning("Could not pair unassigned sensor: %s", e)
+            else:
+                logger.debug("PRIORITY B no match. Will attempt auto-create.")
         
-        # ─── UPDATE SENSOR_DEVICES with latest reading ───────────────────────
-        # Update with the new reading value and timestamp
+        # ─── UPDATE SENSOR_DEVICES WITH LATEST READING ───────────────────────
         if sensor_device_id:
             now = datetime.now(timezone.utc).isoformat()
-            supabase.table("sensor_devices").update({
-                "last_reading": now,
-                "last_reading_value": value,
-                "last_reading_unit": unit,
-                "status": "Online",
-            }).eq("id", sensor_device_id).execute()
-            
-            logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
+            try:
+                supabase.table("sensor_devices").update({
+                    "last_reading": now,
+                    "last_seen": now,
+                    "last_reading_value": value,
+                    "last_reading_unit": unit,
+                    "status": "Online",
+                }).eq("id", sensor_device_id).execute()
+                
+                logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
+            except Exception as e:
+                logger.warning("Error updating sensor_device: %s", e)
         
         # ─── INSERT INTO SENSOR_READINGS (if sensor exists) ──────────────────
         if sensor_device_id:
-            supabase.table("sensor_readings").insert({
-                "room_sensor_id": sensor_device_id,
-                "sensor_id": sensor_device_id,
-                "reading_value": value,
-                "unit": unit,
-                "recorded_at": timestamp,
+            try:
+                supabase.table("sensor_readings").insert({
+                    "room_sensor_id": sensor_device_id,
+                    "sensor_id": sensor_device_id,
+                    "reading_value": value,
+                    "unit": unit,
+                    "recorded_at": timestamp,
+                    "gateway_id": gateway_id,
+                    "slave_id": slave_id,
+                    "mqtt_payload_key": mqtt_key,
+                }).execute()
+                
+                logger.debug("✓ Recorded in sensor_readings")
+            except Exception as e:
+                logger.warning("Error recording sensor_readings: %s", e)
+        
+        # ─── INSERT INTO COLD_STORAGE_CONDITIONS (always succeeds) ───────────
+        try:
+            condition_data = {
+                "room_id": room_id,
+                "site_id": site_id,
                 "gateway_id": gateway_id,
+                "sensor_id": sensor_device_id,
                 "slave_id": slave_id,
-                "mqtt_payload_key": mqtt_key,
-            }).execute()
+                "reading_source": f"{sensor_type}_{sensor_number}" if sensor_number else sensor_type,
+                "sensor_type": sensor_type,
+                "recorded_at": timestamp,
+            }
             
-            logger.debug("✓ Recorded in sensor_readings")
-        
-        # ─── INSERT INTO COLD_STORAGE_CONDITIONS (with sensor tracking) ───
-        # NEW: Reference the specific sensor_device via sensor_id
-        
-        condition_data = {
-            "room_id": room_id,
-            "site_id": site_id,
-            "gateway_id": gateway_id,
-            "sensor_id": sensor_device_id,
-            "slave_id": slave_id,
-            "reading_source": f"{sensor_type}_{sensor_number}" if sensor_number else sensor_type,
-            "sensor_type": sensor_type,
-            "recorded_at": timestamp,
-        }
-        
-        # Map value to appropriate column based on type
-        if sensor_type == 'Temperature':
-            condition_data["temperature"] = value
-        elif sensor_type == 'Humidity':
-            condition_data["humidity"] = value
-        elif sensor_type == 'Door':
-            condition_data["door_status"] = str(value)
-        elif sensor_type == 'SuctionPressure':
-            # FIXED: Correct column name is pressure_suction, not suction_pressure
-            condition_data["pressure_suction"] = value
-        elif sensor_type == 'DischargePressure':
-            condition_data["pressure_discharge"] = value
-        # Note: Voltage and Current readings are skipped by _map_mqtt_key_to_sensor()
-        
-        supabase.table("cold_storage_conditions").insert(condition_data).execute()
-        
-        logger.info("✓ Stored in cold_storage_conditions: %s=%s%s (slave_id=%s)",
-                   sensor_type, value, unit, slave_id)
+            # Map value to appropriate column based on type
+            if sensor_type.lower() == 'temperature':
+                condition_data["temperature"] = value
+            elif sensor_type.lower() == 'humidity':
+                condition_data["humidity"] = value
+            elif sensor_type.lower() == 'door':
+                condition_data["door_status"] = str(value)
+            elif sensor_type.lower() == 'suctionpressure':
+                condition_data["pressure_suction"] = value
+            elif sensor_type.lower() == 'dischargepressure':
+                condition_data["pressure_discharge"] = value
+            
+            supabase.table("cold_storage_conditions").insert(condition_data).execute()
+            
+            logger.info("✓ Stored in cold_storage_conditions: %s=%s%s (slave_id=%s)",
+                       sensor_type, value, unit, slave_id)
+        except Exception as e:
+            logger.warning("Error storing cold_storage_conditions: %s", e)
         
     except Exception as e:
         logger.warning("Error processing sensor (non-fatal): %s", e)

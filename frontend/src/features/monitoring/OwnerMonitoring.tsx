@@ -161,40 +161,61 @@ const OwnerMonitoring: React.FC = () => {
       try {
         const { data: conditionsData } = await supabase
           .from('cold_storage_conditions')
-          .select('room_id, sensor_type, temperature, humidity, recorded_at')
+          .select('room_id, sensor_id, slave_id, sensor_type, temperature, humidity, door_status, recorded_at')
           .eq('room_id', roomToUse)
           .order('recorded_at', { ascending: false })
-          .limit(100); // Get last 100 records to find latest per sensor
+          .limit(100);
 
         if (conditionsData && conditionsData.length > 0) {
-          // Create a map of sensor_type → latest reading
-          const latestByType: Record<string, any> = {};
-          for (const condition of conditionsData) {
-            const sensorType = condition.sensor_type?.toLowerCase() || 'unknown';
-            if (!latestByType[sensorType]) {
-              latestByType[sensorType] = condition;
+          // Create a map of sensor_type + slave_id → latest reading
+          // This prevents collapsing all Temperature sensors to one value
+          const latestBySlave: Record<string, any> = {};
+          for (const cond of conditionsData) {
+            const type = (cond.sensor_type || '').toLowerCase();
+            // Key by slave_id if available, otherwise by sensor_id or just type
+            const key = cond.slave_id != null 
+              ? `${type}_${cond.slave_id}` 
+              : (cond.sensor_id ? `${type}_${cond.sensor_id}` : type);
+            
+            if (!latestBySlave[key]) {
+              latestBySlave[key] = cond;
             }
           }
 
           // Update sensor data with cold_storage_conditions readings
           const updatedSensors = numberedSensors.map(sensor => {
-            const sensorTypeKey = sensor.sensor_type?.toLowerCase() || 'unknown';
-            const latestCondition = latestByType[sensorTypeKey];
+            const type = (sensor.sensor_type || '').toLowerCase();
+            // Try to match by type + slave_id first, then by type alone as fallback
+            const key = sensor.slave_id != null 
+              ? `${type}_${sensor.slave_id}` 
+              : type;
+            const condition = latestBySlave[key] || latestBySlave[type];
 
-            if (latestCondition && !sensor.sensor_value) {
+            if (condition && sensor.last_reading_value == null) {
               // Use reading from cold_storage_conditions if sensor_devices doesn't have it
-              if (sensorTypeKey === 'temperature' && latestCondition.temperature !== null) {
+              let readingVal = null;
+              let readingUnit = '';
+              
+              if (type.includes('temp') && condition.temperature != null) {
+                readingVal = condition.temperature;
+                readingUnit = '°C';
+              } else if (type.includes('hum') && condition.humidity != null) {
+                readingVal = condition.humidity;
+                readingUnit = '%';
+              } else if (type.includes('door') && condition.door_status != null) {
+                readingVal = condition.door_status;
+                readingUnit = '';
+              }
+
+              if (readingVal != null) {
                 return {
                   ...sensor,
-                  sensor_value: latestCondition.temperature,
-                  sensor_unit: '°C',
-                  is_active: true
-                };
-              } else if (sensorTypeKey === 'humidity' && latestCondition.humidity !== null) {
-                return {
-                  ...sensor,
-                  sensor_value: latestCondition.humidity,
-                  sensor_unit: '%',
+                  last_reading_value: readingVal,      // ← Store in primary field
+                  last_reading_unit: readingUnit,
+                  sensor_value: readingVal,            // ← Also store in fallback field
+                  sensor_unit: readingUnit,
+                  last_seen: condition.recorded_at,
+                  status: 'Online',
                   is_active: true
                 };
               }
@@ -309,9 +330,10 @@ const OwnerMonitoring: React.FC = () => {
             sensorsToAdd.push({
               room_id: roomData.id,
               site_id: selectedFacilityId,
-              sensor_type: 'temperature',
+              sensor_type: 'Temperature',  // ← TitleCase for consistency
               sensor_name: `Temperature ${tempNumber}`,
               sensor_code: `TEMP_${String(tempNumber).padStart(3, '0')}`,
+              slave_id: tempNumber,  // ← ADD THIS LINE (1, 2, 3, etc.)
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -321,9 +343,10 @@ const OwnerMonitoring: React.FC = () => {
             sensorsToAdd.push({
               room_id: roomData.id,
               site_id: selectedFacilityId,
-              sensor_type: 'humidity',
+              sensor_type: 'Humidity',  // ← TitleCase for consistency
               sensor_name: `Humidity ${humidityNumber}`,
               sensor_code: `HUM_${String(humidityNumber).padStart(3, '0')}`,
+              slave_id: humidityNumber,  // ← ADD THIS LINE (1, 2, 3, etc.)
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -341,9 +364,10 @@ const OwnerMonitoring: React.FC = () => {
             sensorsToAdd.push({
               room_id: roomData.id,
               site_id: selectedFacilityId,
-              sensor_type: 'ambient_temperature',
+              sensor_type: 'AmbientTemperature',
               sensor_name: `Ambient Temperature ${ambTempNumber}`,
               sensor_code: `AMB_TEMP_${String(ambTempNumber).padStart(3, '0')}`,
+              slave_id: ambTempNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -353,9 +377,10 @@ const OwnerMonitoring: React.FC = () => {
             sensorsToAdd.push({
               room_id: roomData.id,
               site_id: selectedFacilityId,
-              sensor_type: 'ambient_humidity',
+              sensor_type: 'AmbientHumidity',
               sensor_name: `Ambient Humidity ${ambHumNumber}`,
               sensor_code: `AMB_HUM_${String(ambHumNumber).padStart(3, '0')}`,
+              slave_id: ambHumNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -374,9 +399,10 @@ const OwnerMonitoring: React.FC = () => {
           sensorsToAdd.push({
             room_id: roomData.id,
             site_id: selectedFacilityId,
-            sensor_type: normalizedType,
+            sensor_type: addSensorForm.sensor_type,  // Use as-is (already TitleCase from AVAILABLE_SENSOR_TYPES)
             sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
             sensor_code: `${normalizedType.toUpperCase().replace(/_/g, '-')}_${String(sensorNumber).padStart(3, '0')}`,
+            slave_id: sensorNumber,  // ← ADD THIS LINE
             status: 'Online',
             is_active: true,
             created_at: new Date().toISOString()
@@ -430,8 +456,12 @@ const OwnerMonitoring: React.FC = () => {
 
   const isSensorActive = (s: any) => {
     const st = s.status?.toLowerCase();
-    // A sensor is ONLY active if status is online/active AND it has reported at least one reading
-    const hasPassedReading = s.last_reading_value != null || s.reading != null || (s.last_seen != null && s.last_seen !== '');
+    // A sensor is active if status is online/active AND it has a reading (from any source)
+    const hasPassedReading = 
+      s.last_reading_value != null ||      // From sensor_devices
+      s.sensor_value != null ||            // From cold_storage_conditions fallback
+      s.reading != null ||                 // From frontend state
+      (s.last_seen != null && s.last_seen !== '');
     return (st === 'active' || st === 'online') && hasPassedReading;
   };
 
@@ -562,13 +592,13 @@ const OwnerMonitoring: React.FC = () => {
                 dbSensors.map((sensor: any, index) => {
                   // Get actual reading value with unit - NO HARDCODED DEMO FALLBACKS
                   const getReadingDisplay = () => {
-                    if (sensor.reading != null) {
-                      return sensor.reading;
-                    }
-
-                    if (sensor.last_reading_value != null) {
-                      const unit = sensor.last_reading_unit || '';
-                      return `${sensor.last_reading_value} ${unit}`.trim();
+                    // Check all possible sources of reading value (priority order)
+                    const val = sensor.last_reading_value ?? sensor.sensor_value ?? sensor.reading;
+                    
+                    if (val != null) {
+                      // Use unit from primary field, then fallback field
+                      const unit = sensor.last_reading_unit ?? sensor.sensor_unit ?? '';
+                      return `${val} ${unit}`.trim();
                     }
                     
                     if (sensor.sensor_type?.toLowerCase().includes('battery') && sensor.battery_percentage != null) {
