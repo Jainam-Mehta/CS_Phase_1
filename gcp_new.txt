@@ -73,7 +73,7 @@ sudo systemctl stop coldsense-backend
 
 # Start the backend manually (if needed)
 sudo systemctl start coldsense-backend
-
+ 
 # View memory and CPU usage of backend process
 ps aux | grep python
 

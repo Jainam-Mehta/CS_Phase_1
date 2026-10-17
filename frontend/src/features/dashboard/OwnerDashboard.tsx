@@ -275,20 +275,28 @@ const OwnerDashboard: React.FC = () => {
         
         let energyData: any[] = [];
         try {
+          // Try energy_consumption table first (with correct column name)
           const { data, error } = await supabase
             .from('energy_consumption')
-            .select('total_kwh, reading_date')
+            .select('total_kwh, recorded_at')  // Use recorded_at instead of reading_date
             .eq('site_id', selectedFacilityId)
-            .gte('reading_date', eightDaysAgo.toISOString())
-            .order('reading_date', { ascending: true });
+            .gte('recorded_at', eightDaysAgo.toISOString())
+            .order('recorded_at', { ascending: true });
           
-          if (!error) {
-            energyData = data || [];
+          if (!error && data && data.length > 0) {
+            // Transform recorded_at to reading_date for consistency in processing
+            energyData = (data || []).map(d => ({
+              ...d,
+              reading_date: d.recorded_at
+            }));
           } else {
-            console.warn('Error fetching energy consumption:', error);
+            console.warn('No energy consumption data found or error:', error);
+            // Fallback: generate empty data so chart still renders
+            energyData = [];
           }
         } catch (err) {
           console.warn('Could not fetch energy consumption data:', err);
+          energyData = [];
         }
           
         // Group by day - last 8 days including today

@@ -6,8 +6,7 @@ SELECT
   r.capacity_kg
 FROM public.sites s
 LEFT JOIN public.cold_storage_rooms r ON s.id = r.site_id
-WHERE s.owner_profile_id = '7d4156f4-c879-4a96-bf37-18447af196ea'
+WHERE s.owner_profile_id = '69c0d035-9d8a-4060-9f7e-987980022e8c'
 ORDER BY s.created_at DESC, r.created_at DESC;
 
-
-7d4156f4-c879-4a96-bf37-18447af196ea
+69c0d035-9d8a-4060-9f7e-987980022e8c
