@@ -131,17 +131,29 @@ const OwnerMonitoring: React.FC = () => {
       
       setDbSensors(numberedSensors);
 
-      // ✅ NEW: Fetch sensor averages from the averaging endpoint
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiUrl}/api/storage/averages/room/${roomToUse}`);
-        if (response.ok) {
-          const averagesData = await response.json();
-          setSensorAverages(averagesData);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch sensor averages:', error);
-        // Non-fatal - dashboard will still show individual sensors
+      // ✅ NEW: Fetch sensor averages from the averaging endpoint (NON-BLOCKING)
+      // This runs in the background without blocking the main sensor fetch
+      if (roomToUse) {
+        (async () => {
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+            
+            const response = await fetch(`${apiUrl}/api/storage/averages/room/${roomToUse}`, {
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              const averagesData = await response.json();
+              setSensorAverages(averagesData);
+            }
+          } catch (error) {
+            // Silently fail - not critical for display
+            console.debug('Averaging endpoint unavailable (non-blocking)');
+          }
+        })();
       }
 
       // ✅ NEW: Fetch latest readings from cold_storage_conditions table
