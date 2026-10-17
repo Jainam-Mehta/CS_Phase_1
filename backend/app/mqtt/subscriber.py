@@ -253,6 +253,12 @@ def on_message(client, userdata, msg):
                         logger.debug("Skipping unsupported MQTT key: %s (no database mapping)", mqtt_key)
                         continue
                     
+                    # ✅ APPLY SITE-SPECIFIC SCALING (e.g., Nashik site needs 0.01 factor)
+                    value = _apply_site_specific_scaling(site_id, sensor_type, value)
+                    
+                    logger.debug("  → %s: %s=%s%s (sensor #%s, after scaling)",
+                               mqtt_key, sensor_type, value, unit, sensor_number)
+                    
                     # ─── STEP 5: CRITICAL UPDATE WITH SLAVE_ID FILTER ────
                     # This is the FIX: Update ONLY this specific slave, not all sensors
                     _process_single_sensor(
@@ -367,6 +373,25 @@ def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
         return ('SuctionPressure', 'psi')
     
     return None, 'Unknown'
+
+
+def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float) -> float:
+    """
+    Apply site-specific scaling factors.
+    
+    Some gateways send raw values that need scaling:
+    - Nashik site (796b7749-d427-4563-b90a-aa0170afd835): Multiply by 0.01 for Temperature/Humidity
+    - Other sites: Use values as-is
+    """
+    # Nashik site ID
+    NASHIK_SITE_ID = "796b7749-d427-4563-b90a-aa0170afd835"
+    
+    if site_id == NASHIK_SITE_ID:
+        if sensor_type in ('Temperature', 'Humidity'):
+            # Raw values are 100x scaled, convert back
+            return value * 0.01
+    
+    return value
 
 
 def _extract_sensor_number(mqtt_key: str) -> int:
