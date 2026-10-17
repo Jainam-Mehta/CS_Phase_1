@@ -144,6 +144,59 @@ const OwnerMonitoring: React.FC = () => {
         // Non-fatal - dashboard will still show individual sensors
       }
 
+      // ✅ NEW: Fetch latest readings from cold_storage_conditions table
+      // This ensures we show data even if sensor_devices.last_reading_value is null
+      try {
+        const { data: conditionsData } = await supabase
+          .from('cold_storage_conditions')
+          .select('room_id, sensor_type, temperature, humidity, recorded_at')
+          .eq('room_id', roomToUse)
+          .order('recorded_at', { ascending: false })
+          .limit(100); // Get last 100 records to find latest per sensor
+
+        if (conditionsData && conditionsData.length > 0) {
+          // Create a map of sensor_type → latest reading
+          const latestByType: Record<string, any> = {};
+          for (const condition of conditionsData) {
+            const sensorType = condition.sensor_type?.toLowerCase() || 'unknown';
+            if (!latestByType[sensorType]) {
+              latestByType[sensorType] = condition;
+            }
+          }
+
+          // Update sensor data with cold_storage_conditions readings
+          const updatedSensors = numberedSensors.map(sensor => {
+            const sensorTypeKey = sensor.sensor_type?.toLowerCase() || 'unknown';
+            const latestCondition = latestByType[sensorTypeKey];
+
+            if (latestCondition && !sensor.sensor_value) {
+              // Use reading from cold_storage_conditions if sensor_devices doesn't have it
+              if (sensorTypeKey === 'temperature' && latestCondition.temperature !== null) {
+                return {
+                  ...sensor,
+                  sensor_value: latestCondition.temperature,
+                  sensor_unit: '°C',
+                  is_active: true
+                };
+              } else if (sensorTypeKey === 'humidity' && latestCondition.humidity !== null) {
+                return {
+                  ...sensor,
+                  sensor_value: latestCondition.humidity,
+                  sensor_unit: '%',
+                  is_active: true
+                };
+              }
+            }
+            return sensor;
+          });
+
+          setDbSensors(updatedSensors);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch cold_storage_conditions:', error);
+        // Non-fatal - dashboard will still show individual sensors from sensor_devices
+      }
+
       // Get unique farmers count
       const { data: allocationData } = await supabase
         .from('batch_room_allocations')

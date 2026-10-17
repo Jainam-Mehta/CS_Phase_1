@@ -76,9 +76,11 @@ async def ingest_gcp_sensor_data(data: GCPSensorData):
             try:
                 supabase.table("sensor_devices").update({
                     "last_reading_value": data.reading_value,
+                    "last_reading_unit": data.reading_unit,
                     "last_seen": timestamp,
+                    "status": "Online",
                 }).eq("id", sensor_id).execute()
-                print(f"✅ Updated sensor_devices: {sensor_id}")
+                print(f"✅ Updated sensor_devices: {sensor_id} = {data.reading_value}{data.reading_unit}")
             except Exception as e:
                 print(f"⚠️ Could not update sensor_devices: {e}")
         else:
