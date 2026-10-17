@@ -103,6 +103,8 @@ services:
       MQTT_PORT: 1883
       SIMULATION_INTERVAL: 60
       NUM_FACILITIES: 10
+      SUPABASE_URL: https://vzoypfctadgyflzwodmp.supabase.co
+      SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
     depends_on:
       - mqtt-broker
     networks:
