@@ -92,18 +92,43 @@ const OwnerDashboard: React.FC = () => {
           .order('recorded_at', { ascending: false })
           .limit(100);
 
-        // Find the most recent record that has temperature AND humidity
+        // Merge latest temperature and humidity from potentially different records
+        // (Gateway may send them separately)
         let latestComplete = null;
+        let latestTemp = null;
+        let latestHumidity = null;
+        
         if (condData && condData.length > 0) {
+          // Get latest temperature reading
           for (const record of condData) {
-            if (record.temperature !== null && record.humidity !== null) {
-              latestComplete = record;
+            if (record.temperature !== null && !latestTemp) {
+              latestTemp = record;
               break;
             }
           }
-          // Fallback: if no complete record, just use the latest one
-          if (!latestComplete) {
+          
+          // Get latest humidity reading
+          for (const record of condData) {
+            if (record.humidity !== null && !latestHumidity) {
+              latestHumidity = record;
+              break;
+            }
+          }
+          
+          // Merge them into a single object with the most recent timestamp
+          if (latestTemp || latestHumidity) {
+            // Start with the most recent record overall
             latestComplete = condData[0];
+            
+            // If we found a temperature record, use its temp value
+            if (latestTemp) {
+              latestComplete.temperature = latestTemp.temperature;
+            }
+            
+            // If we found a humidity record, use its humidity value
+            if (latestHumidity) {
+              latestComplete.humidity = latestHumidity.humidity;
+            }
           }
         }
 
