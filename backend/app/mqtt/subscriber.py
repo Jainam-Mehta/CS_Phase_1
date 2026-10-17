@@ -253,8 +253,8 @@ def on_message(client, userdata, msg):
                         logger.debug("Skipping unsupported MQTT key: %s (no database mapping)", mqtt_key)
                         continue
                     
-                    # ✅ APPLY SITE-SPECIFIC SCALING (e.g., Nashik site needs 0.01 factor)
-                    value = _apply_site_specific_scaling(site_id, sensor_type, value)
+                    # ✅ APPLY SITE-SPECIFIC SCALING (e.g., Nashik site needs 0.01 factor, Slave 3 needs 0.001)
+                    value = _apply_site_specific_scaling(site_id, sensor_type, value, slave_id)
                     
                     logger.debug("  → %s: %s=%s%s (sensor #%s, after scaling)",
                                mqtt_key, sensor_type, value, unit, sensor_number)
@@ -375,12 +375,14 @@ def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
     return None, 'Unknown'
 
 
-def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float) -> float:
+def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float, slave_id: int = None) -> float:
     """
-    Apply site-specific scaling factors.
+    Apply site-specific and slave-specific scaling factors.
     
     Some gateways send raw values that need scaling:
-    - Nashik site (796b7749-d427-4563-b90a-aa0170afd835): Multiply by 0.01 for Temperature/Humidity
+    - Nashik site (796b7749-d427-4563-b90a-aa0170afd835):
+      - Slaves 1, 2: Multiply by 0.01 for Temperature/Humidity (raw values 100x scaled)
+      - Slave 3: No scaling (raw values already correct, different sensor model)
     - Other sites: Use values as-is
     """
     # Nashik site ID
@@ -388,8 +390,15 @@ def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float) -
     
     if site_id == NASHIK_SITE_ID:
         if sensor_type in ('Temperature', 'Humidity'):
-            # Raw values are 100x scaled, convert back
-            return value * 0.01
+            # Slave 3: Different sensor model, uses different scaling (no conversion needed)
+            if slave_id == 3:
+                return value  # No scaling, use as-is
+            # Slaves 1, 2: Standard 0.01 scaling (100x scaled raw values)
+            elif slave_id in (1, 2):
+                return value * 0.01
+            # Default: Use 0.01 if slave_id not specified
+            else:
+                return value * 0.01
     
     return value
 
