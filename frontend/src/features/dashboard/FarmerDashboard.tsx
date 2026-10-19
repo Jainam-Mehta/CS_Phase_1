@@ -278,7 +278,7 @@ function FarmerDashboardCore() {
     const loadLiveConditions = async () => {
       try {
         // Fetch latest temperature reading
-        const { data: tempData } = await supabase
+        const { data: tempData, error: tempError } = await supabase
           .from('cold_storage_conditions')
           .select('temperature, recorded_at')
           .eq('room_id', activeRoomId)
@@ -287,8 +287,10 @@ function FarmerDashboardCore() {
           .limit(1)
           .maybeSingle();
 
+        console.log('[FarmerDashboard] Temp query result:', { tempError, tempData });
+
         // Fetch latest humidity reading
-        const { data: humData } = await supabase
+        const { data: humData, error: humError } = await supabase
           .from('cold_storage_conditions')
           .select('humidity, recorded_at')
           .eq('room_id', activeRoomId)
@@ -296,6 +298,8 @@ function FarmerDashboardCore() {
           .order('recorded_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        console.log('[FarmerDashboard] Humidity query result:', { humError, humData });
 
         if (tempData || humData) {
           console.log('Latest readings:', { temp: tempData?.temperature, hum: humData?.humidity });
@@ -309,7 +313,7 @@ function FarmerDashboardCore() {
         }
 
         // Fetch temperature history for chart
-        const { data: tempHistory } = await supabase
+        const { data: tempHistory, error: tempHistError } = await supabase
           .from('cold_storage_conditions')
           .select('temperature, recorded_at')
           .eq('room_id', activeRoomId)
@@ -317,8 +321,10 @@ function FarmerDashboardCore() {
           .order('recorded_at', { ascending: true })
           .limit(100);
 
+        console.log('[FarmerDashboard] Temp history query:', { tempHistError, count: tempHistory?.length });
+
         // Fetch humidity history for chart
-        const { data: humHistory } = await supabase
+        const { data: humHistory, error: humHistError } = await supabase
           .from('cold_storage_conditions')
           .select('humidity, recorded_at')
           .eq('room_id', activeRoomId)
@@ -326,39 +332,46 @@ function FarmerDashboardCore() {
           .order('recorded_at', { ascending: true })
           .limit(100);
 
+        console.log('[FarmerDashboard] Humidity history query:', { humHistError, count: humHistory?.length });
+
         // Merge temperature and humidity data into timeline
         const mergedHistory: any[] = [];
-        const tempMap = new Map();
-        const humMap = new Map();
+        const timeMap = new Map();
 
         if (tempHistory) {
           tempHistory.forEach((t: any) => {
             const time = new Date(t.recorded_at).toLocaleTimeString();
-            tempMap.set(time, { time, value: t.temperature, humidity: null });
+            timeMap.set(time, { 
+              time, 
+              value: parseFloat(t.temperature) || 0, 
+              humidity: 0 
+            });
           });
         }
 
         if (humHistory) {
           humHistory.forEach((h: any) => {
             const time = new Date(h.recorded_at).toLocaleTimeString();
-            if (tempMap.has(time)) {
-              tempMap.get(time).humidity = h.humidity;
+            if (timeMap.has(time)) {
+              timeMap.get(time).humidity = parseFloat(h.humidity) || 0;
             } else {
-              humMap.set(time, { time, value: null, humidity: h.humidity });
+              timeMap.set(time, { 
+                time, 
+                value: 0, 
+                humidity: parseFloat(h.humidity) || 0 
+              });
             }
           });
         }
 
-        // Combine maps
-        mergedHistory.push(...Array.from(tempMap.values()));
-        mergedHistory.push(...Array.from(humMap.values()));
-        
-        // Sort by time
-        mergedHistory.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        // Convert to array and sort
+        const finalHistory = Array.from(timeMap.values());
+        finalHistory.sort((a, b) => new Date(`1970/01/01 ${a.time}`).getTime() - new Date(`1970/01/01 ${b.time}`).getTime());
 
-        if (mergedHistory.length > 0) {
-          console.log('Temperature history loaded:', mergedHistory.length, 'records');
-          setTemperatureHistory(mergedHistory);
+        console.log('[FarmerDashboard] Merged history:', { count: finalHistory.length, sample: finalHistory.slice(0, 3) });
+
+        if (finalHistory.length > 0) {
+          setTemperatureHistory(finalHistory);
         }
       } catch (err) {
         console.error('Error loading conditions:', err);
@@ -367,9 +380,9 @@ function FarmerDashboardCore() {
 
     loadLiveConditions();
 
-    // Subscribe to temperature updates
-    const tempChannel = supabase
-      .channel(`room_temp_${activeRoomId}`)
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel(`room_conditions_${activeRoomId}`)
       .on(
         'postgres_changes',
         {
@@ -380,19 +393,21 @@ function FarmerDashboardCore() {
         },
         (payload: any) => {
           const newCondition = payload.new;
-          if (newCondition.temperature) {
+          console.log('[FarmerDashboard] Real-time update:', newCondition);
+          
+          if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
             console.log('Real-time temperature update:', newCondition.temperature);
             setLiveConditions(prev => ({
               ...prev,
-              temp: newCondition.temperature || 0,
+              temp: parseFloat(newCondition.temperature) || 0,
               date: newCondition.recorded_at
             }));
           }
-          if (newCondition.humidity) {
+          if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
             console.log('Real-time humidity update:', newCondition.humidity);
             setLiveConditions(prev => ({
               ...prev,
-              hum: newCondition.humidity || 0,
+              hum: parseFloat(newCondition.humidity) || 0,
               date: newCondition.recorded_at
             }));
           }
@@ -402,16 +417,20 @@ function FarmerDashboardCore() {
           setTemperatureHistory(prev => {
             const existing = prev.find(h => h.time === time);
             if (existing) {
-              if (newCondition.temperature) existing.value = newCondition.temperature;
-              if (newCondition.humidity) existing.humidity = newCondition.humidity;
+              if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
+                existing.value = parseFloat(newCondition.temperature) || 0;
+              }
+              if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
+                existing.humidity = parseFloat(newCondition.humidity) || 0;
+              }
               return [...prev];
             } else {
               return [
                 ...prev,
                 {
                   time,
-                  value: newCondition.temperature || null,
-                  humidity: newCondition.humidity || null
+                  value: newCondition.temperature !== null ? parseFloat(newCondition.temperature) : 0,
+                  humidity: newCondition.humidity !== null ? parseFloat(newCondition.humidity) : 0
                 }
               ].slice(-100);
             }
@@ -421,7 +440,7 @@ function FarmerDashboardCore() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(tempChannel);
+      supabase.removeChannel(channel);
     };
   }, [activeRoomId]);
 
