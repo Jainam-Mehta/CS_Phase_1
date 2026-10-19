@@ -397,7 +397,7 @@ function FarmerDashboardCore() {
           
           if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
             console.log('Real-time temperature update:', newCondition.temperature);
-            setLiveConditions(prev => ({
+            setLiveConditions((prev: any) => ({
               ...prev,
               temp: parseFloat(newCondition.temperature) || 0,
               date: newCondition.recorded_at
@@ -405,7 +405,7 @@ function FarmerDashboardCore() {
           }
           if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
             console.log('Real-time humidity update:', newCondition.humidity);
-            setLiveConditions(prev => ({
+            setLiveConditions((prev: any) => ({
               ...prev,
               hum: parseFloat(newCondition.humidity) || 0,
               date: newCondition.recorded_at
@@ -414,7 +414,7 @@ function FarmerDashboardCore() {
 
           // Update history
           const time = new Date(newCondition.recorded_at).toLocaleTimeString();
-          setTemperatureHistory(prev => {
+          setTemperatureHistory((prev: any[]) => {
             const existing = prev.find(h => h.time === time);
             if (existing) {
               if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
