@@ -17,11 +17,15 @@ from app.database.supabase import supabase
 
 logger = logging.getLogger(__name__)
 
-# HARDCODED - These are your specific IDs
+# HARDCODED - These are your specific IDs (Production)
 SITE_CODE = "S01"
 ROOM_CODE = "R01"
 GATEWAY_ID = "gw1"
 LOCATION_CODE = "MHNKIGP01"
+
+# Production UUIDs - MHNKIGP001 facility
+SITE_ID = "36ed749d-7c72-4e93-9074-19cfebd9ea09"  # MHNKIGP001
+ROOM_ID = "59e5a40d-1526-433a-add3-e7f5acea96bb"  # RM-4939 (5000 kg capacity)
 
 # Colors for terminal output
 class Color:
@@ -35,35 +39,13 @@ class Color:
 
 
 def resolve_site_and_room():
-    """Get the UUIDs for S01 and R01 from Supabase"""
+    """Get the UUIDs for the test environment"""
     try:
-        # Get site UUID from S01
-        site_resp = supabase.table("sensor_location_mapping").select("mapped_entity_id").eq(
-            "location_code", SITE_CODE
-        ).eq("code_type", "site").limit(1).execute()
-        
-        if not site_resp.data:
-            print(f"{Color.RED}❌ Site {SITE_CODE} not found in mappings{Color.END}")
-            return None, None
-        
-        site_id = site_resp.data[0]["mapped_entity_id"]
-        print(f"{Color.GREEN}✓ Site {SITE_CODE} → {site_id}{Color.END}")
-        
-        # Get room UUID from R01
-        room_resp = supabase.table("sensor_location_mapping").select("mapped_entity_id").eq(
-            "site_id", site_id
-        ).eq("location_code", ROOM_CODE).eq("code_type", "room").limit(1).execute()
-        
-        if not room_resp.data:
-            print(f"{Color.RED}❌ Room {ROOM_CODE} not found in mappings{Color.END}")
-            return site_id, None
-        
-        room_id = room_resp.data[0]["mapped_entity_id"]
-        print(f"{Color.GREEN}✓ Room {ROOM_CODE} → {room_id}{Color.END}")
-        
-        return site_id, room_id
+        print(f"{Color.GREEN}✓ Site S01 → {SITE_ID}{Color.END}")
+        print(f"{Color.GREEN}✓ Room R01 → {ROOM_ID}{Color.END}")
+        return SITE_ID, ROOM_ID
     except Exception as e:
-        print(f"{Color.RED}❌ Error resolving IDs: {e}{Color.END}")
+        print(f"{Color.RED}❌ Error: {e}{Color.END}")
         return None, None
 
 
