@@ -197,6 +197,19 @@ const RoleSelection: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
+      {/* Company Branding - Top Left */}
+      <div className="absolute top-6 left-6">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
+            <span className="text-2xl font-bold bg-gradient-to-r from-green-500 to-blue-500 bg-clip-text text-transparent">1</span>
+          </div>
+          <div>
+            <p className="text-white font-bold text-lg leading-tight">1ACCORD</p>
+            <p className="text-white/80 text-xs">Cold Chain Solutions</p>
+          </div>
+        </div>
+      </div>
+
       <div className="w-full max-w-5xl">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl">

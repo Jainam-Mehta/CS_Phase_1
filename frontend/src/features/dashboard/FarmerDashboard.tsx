@@ -345,10 +345,9 @@ function FarmerDashboardCore() {
         if (tempHistory) {
           tempHistory.forEach((t: any) => {
             const utcDate = new Date(t.recorded_at);
-            // Add 5:30 hours for IST offset
-            utcDate.setHours(utcDate.getHours() + 5);
-            utcDate.setMinutes(utcDate.getMinutes() + 30);
-            const time = utcDate.toLocaleTimeString();
+            // Convert UTC to IST (UTC+5:30) using proper date arithmetic
+            const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+            const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             timeMap.set(time, { 
               time, 
               value: parseFloat(t.temperature) || 0, 
@@ -360,10 +359,9 @@ function FarmerDashboardCore() {
         if (humHistory) {
           humHistory.forEach((h: any) => {
             const utcDate = new Date(h.recorded_at);
-            // Add 5:30 hours for IST offset
-            utcDate.setHours(utcDate.getHours() + 5);
-            utcDate.setMinutes(utcDate.getMinutes() + 30);
-            const time = utcDate.toLocaleTimeString();
+            // Convert UTC to IST (UTC+5:30) using proper date arithmetic
+            const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+            const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             if (timeMap.has(time)) {
               timeMap.get(time).humidity = parseFloat(h.humidity) || 0;
             } else {
@@ -426,10 +424,9 @@ function FarmerDashboardCore() {
 
           // Update history
           const utcDate = new Date(newCondition.recorded_at);
-          // Add 5:30 hours for IST offset
-          utcDate.setHours(utcDate.getHours() + 5);
-          utcDate.setMinutes(utcDate.getMinutes() + 30);
-          const time = utcDate.toLocaleTimeString();
+          // Convert UTC to IST (UTC+5:30) using proper date arithmetic
+          const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+          const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
           setTemperatureHistory((prev: any[]) => {
             const existing = prev.find(h => h.time === time);
             if (existing) {
