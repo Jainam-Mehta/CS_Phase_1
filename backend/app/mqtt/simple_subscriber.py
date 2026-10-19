@@ -49,7 +49,7 @@ def resolve_site_and_room():
         return None, None
 
 
-def on_connect(client, userdata, flags, rc, properties=None):
+def on_connect(client, userdata, flags, rc, **kwargs):
     """MQTT connection callback"""
     if rc == 0:
         topic = f"cdsense/{GATEWAY_ID}/{LOCATION_CODE}/{SITE_CODE}/{ROOM_CODE}"
@@ -70,7 +70,7 @@ def on_disconnect(client, userdata, rc):
         print(f"{Color.YELLOW}⚠ MQTT disconnected, reconnecting...{Color.END}")
 
 
-def on_message(client, userdata, msg):
+def on_message(client, userdata, msg, **kwargs):
     """MQTT message callback - parse and store to Supabase"""
     try:
         topic = msg.topic
