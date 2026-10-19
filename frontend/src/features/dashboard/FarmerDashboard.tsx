@@ -379,10 +379,12 @@ function FarmerDashboardCore() {
             const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             // Format value: divide by 100 for display (1206 → 12.06)
             const formattedTemp = t.temperature ? parseFloat((t.temperature / 100).toFixed(2)) : 0;
+            const timestamp = istTime.getTime(); // Use milliseconds for proper sorting
             timeMap.set(time, { 
               time, 
               value: formattedTemp, 
-              humidity: 0 
+              humidity: 0,
+              timestamp
             });
           });
         }
@@ -395,21 +397,27 @@ function FarmerDashboardCore() {
             const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             // Format value: divide by 100 for display (6000 → 60.00)
             const formattedHum = h.humidity ? parseFloat((h.humidity / 100).toFixed(2)) : 0;
+            const timestamp = istTime.getTime();
             if (timeMap.has(time)) {
               timeMap.get(time).humidity = formattedHum;
+              // Update timestamp if this humidity reading is newer
+              if (timestamp > timeMap.get(time).timestamp) {
+                timeMap.get(time).timestamp = timestamp;
+              }
             } else {
               timeMap.set(time, { 
                 time, 
                 value: 0, 
-                humidity: formattedHum
+                humidity: formattedHum,
+                timestamp
               });
             }
           });
         }
 
-        // Convert to array and sort
+        // Convert to array and sort by timestamp (not by formatted time string)
         const finalHistory = Array.from(timeMap.values());
-        finalHistory.sort((a, b) => new Date(`1970/01/01 ${a.time}`).getTime() - new Date(`1970/01/01 ${b.time}`).getTime());
+        finalHistory.sort((a, b) => a.timestamp - b.timestamp);
 
         console.log('[FarmerDashboard] Merged history:', { count: finalHistory.length, sample: finalHistory.slice(0, 3) });
 
