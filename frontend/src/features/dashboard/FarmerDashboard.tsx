@@ -269,6 +269,103 @@ function FarmerDashboardCore() {
     }
   }, [activeProductId, products]);
 
+  // Load live conditions and subscribe to real-time updates when active room changes
+  useEffect(() => {
+    if (!activeRoomId) return;
+
+    console.log('[FarmerDashboard] Loading live conditions for room:', activeRoomId);
+
+    const loadLiveConditions = async () => {
+      try {
+        // Fetch latest conditions
+        const { data: latestCondition, error } = await supabase
+          .from('cold_storage_conditions')
+          .select('temperature, humidity, created_at')
+          .eq('room_id', activeRoomId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error loading live conditions:', error);
+          return;
+        }
+
+        if (latestCondition) {
+          console.log('Latest condition:', latestCondition);
+          setLiveConditions({
+            temp: latestCondition.temperature || 0,
+            hum: latestCondition.humidity || 0,
+            ambientTemp: 0,
+            ambientHum: 0,
+            date: latestCondition.created_at
+          });
+        }
+
+        // Fetch temperature history for chart (last 24 hours or last 100 readings)
+        const { data: history, error: historyError } = await supabase
+          .from('cold_storage_conditions')
+          .select('temperature, humidity, created_at')
+          .eq('room_id', activeRoomId)
+          .order('created_at', { ascending: true })
+          .limit(100);
+
+        if (!historyError && history && history.length > 0) {
+          console.log('Temperature history loaded:', history.length, 'records');
+          const formattedHistory = history.map((h: any) => ({
+            time: new Date(h.created_at).toLocaleTimeString(),
+            value: h.temperature,
+            humidity: h.humidity
+          }));
+          setTemperatureHistory(formattedHistory);
+        }
+      } catch (err) {
+        console.error('Error loading conditions:', err);
+      }
+    };
+
+    loadLiveConditions();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel(`room_conditions_${activeRoomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'cold_storage_conditions',
+          filter: `room_id=eq.${activeRoomId}`
+        },
+        (payload: any) => {
+          const newCondition = payload.new;
+          console.log('Real-time update:', newCondition);
+          setLiveConditions({
+            temp: newCondition.temperature || 0,
+            hum: newCondition.humidity || 0,
+            ambientTemp: 0,
+            ambientHum: 0,
+            date: newCondition.created_at
+          });
+
+          // Update history with new data
+          setTemperatureHistory(prev => [
+            ...prev,
+            {
+              time: new Date(newCondition.created_at).toLocaleTimeString(),
+              value: newCondition.temperature,
+              humidity: newCondition.humidity
+            }
+          ].slice(-100)); // Keep only last 100 records
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeRoomId]);
+
   if (loading) {
      return <div className="p-8 flex justify-center pt-24"><RefreshCw className="animate-spin w-8 h-8 text-primary-600" /></div>;
   }
