@@ -126,19 +126,41 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         latest_reading_time = None
         
         if temp_data:
-            temps = [float(t["temperature"]) for t in temp_data if t["temperature"] is not None]
+            temps = []
+            for t in temp_data:
+                if t["temperature"] is not None:
+                    raw_val = float(t["temperature"])
+                    # Normalize sensor readings: convert to 2 decimal places
+                    # 4-digit (1206) -> 12.06, 3-digit (206) -> 2.06
+                    if raw_val > 100:
+                        # 4-digit format: divide by 100
+                        normalized = raw_val / 100.0
+                    else:
+                        # 3-digit or less format: divide by 100
+                        normalized = raw_val / 100.0
+                    temps.append(normalized)
+            
             if temps:
-                # Average the raw values, then divide by 100 for proper decimal formatting
-                avg_temp_raw = sum(temps) / len(temps)
-                avg_temperature = avg_temp_raw / 100.0
+                avg_temperature = sum(temps) / len(temps)
                 latest_reading_time = temp_data[0]["recorded_at"]
         
         if humidity_data:
-            humidities = [float(h["humidity"]) for h in humidity_data if h["humidity"] is not None]
+            humidities = []
+            for h in humidity_data:
+                if h["humidity"] is not None:
+                    raw_val = float(h["humidity"])
+                    # Normalize sensor readings: convert to 2 decimal places
+                    # 4-digit (6000) -> 60.00, 3-digit (600) -> 6.00
+                    if raw_val > 100:
+                        # 4-digit format: divide by 100
+                        normalized = raw_val / 100.0
+                    else:
+                        # 3-digit or less format: divide by 100
+                        normalized = raw_val / 100.0
+                    humidities.append(normalized)
+            
             if humidities:
-                # Average the raw values, then divide by 100 for proper decimal formatting
-                avg_hum_raw = sum(humidities) / len(humidities)
-                avg_humidity = avg_hum_raw / 100.0
+                avg_humidity = sum(humidities) / len(humidities)
                 if not latest_reading_time or humidity_data[0]["recorded_at"] > latest_reading_time:
                     latest_reading_time = humidity_data[0]["recorded_at"]
         

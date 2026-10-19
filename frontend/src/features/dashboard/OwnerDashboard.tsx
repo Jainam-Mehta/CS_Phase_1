@@ -83,6 +83,28 @@ const OwnerDashboard: React.FC = () => {
 
         setDbSensors(sensorData || []);
 
+        // ✅ NEW: Fetch averaged sensor data (System Live values)
+        let avgSensorData = null;
+        if (roomToUse) {
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const response = await fetch(`${apiUrl}/api/storage/averages/room/${roomToUse}`, {
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              avgSensorData = await response.json();
+              console.log('Averaged sensor data fetched:', avgSensorData);
+            }
+          } catch (error) {
+            console.debug('Averaging endpoint unavailable');
+          }
+        }
+
         // Fetch latest conditions - get most recent record with both temp and humidity
         // Query all conditions for these rooms and merge the latest data
         const { data: condData } = await supabase
@@ -120,13 +142,19 @@ const OwnerDashboard: React.FC = () => {
           // Start with the most recent record as base
           latestComplete = condData[0];
           
-          // Calculate averages if we have multiple readings
-          if (tempReadings.length > 0) {
+          // Use averaged values from API if available (System Live), otherwise calculate from raw data
+          if (avgSensorData?.avg_temperature) {
+            // Parse the trimmed float value (could be "12.06" or "12")
+            latestComplete.temperature = parseFloat(avgSensorData.avg_temperature);
+          } else if (tempReadings.length > 0) {
             const avgTemp = tempReadings.reduce((a, b) => a + b, 0) / tempReadings.length;
             latestComplete.temperature = parseFloat(avgTemp.toFixed(2));
           }
           
-          if (humidityReadings.length > 0) {
+          if (avgSensorData?.avg_humidity) {
+            // Parse the trimmed float value
+            latestComplete.humidity = parseFloat(avgSensorData.avg_humidity);
+          } else if (humidityReadings.length > 0) {
             const avgHumidity = humidityReadings.reduce((a, b) => a + b, 0) / humidityReadings.length;
             latestComplete.humidity = parseFloat(avgHumidity.toFixed(2));
           }
