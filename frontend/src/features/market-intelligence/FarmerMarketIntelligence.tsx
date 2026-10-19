@@ -16,6 +16,7 @@ const FarmerMarketIntelligence: React.FC = () => {
   const [uniqueProducts, setUniqueProducts] = useState<string[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [totalRevenueFromSales, setTotalRevenueFromSales] = useState<number>(0);
+  const [ownerPricePerCrate, setOwnerPricePerCrate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Use market prices hook (fetches from API/store with 24hr cache)
@@ -34,6 +35,7 @@ const FarmerMarketIntelligence: React.FC = () => {
           .from('batch_room_allocations')
           .select(`
             quantity_kg,
+            room_id,
             batches!inner(
               product_id,
               initial_quantity_kg,
@@ -72,6 +74,21 @@ const FarmerMarketIntelligence: React.FC = () => {
               };
             });
             setBatches(transformedBatches);
+            
+            // Fetch owner's custom price for this room
+            if (activeRoomId) {
+              const { data: roomAccessData } = await supabase
+                .from('farmer_room_access')
+                .select('price_per_crate')
+                .eq('farmer_id', profile.id)
+                .eq('room_id', activeRoomId)
+                .eq('status', 'Approved')
+                .maybeSingle();
+              
+              if (roomAccessData?.price_per_crate) {
+                setOwnerPricePerCrate(roomAccessData.price_per_crate);
+              }
+            }
         }
         
         // Fetch sales revenue for this farmer
@@ -142,8 +159,8 @@ const FarmerMarketIntelligence: React.FC = () => {
   });
 
   // Storage costs calculation
-  // TODO: Fetch from cold_storage_facilities.storage_rate_per_crate_month table
-  const storageRatePerCrate = 1.2; // ₹/crate/month - Will be set by owner
+  // Use owner's custom price if available (from farmer_room_access table), otherwise default
+  const storageRatePerCrate = ownerPricePerCrate ?? 1.2; // ₹/crate/month - Default or owner's custom price
   totalStorageCosts = totalCrates * storageRatePerCrate;
   
   // Revenue earned calculation - from actual completed sales
@@ -257,12 +274,17 @@ const FarmerMarketIntelligence: React.FC = () => {
                              <Receipt className="w-6 h-6 text-orange-600 dark:text-orange-400" />
                          </div>
                          <div className="p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
-                           <p className="text-xs font-bold text-orange-700 dark:text-orange-300">₹{storageRatePerCrate}/crate/month</p>
+                           <p className="text-xs font-bold text-orange-700 dark:text-orange-300">
+                             ₹{storageRatePerCrate}/crate/month {ownerPricePerCrate ? '✓' : ''}
+                           </p>
                          </div>
                      </div>
                      <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-2">Storage Costs</p>
                      <p className="text-4xl font-extrabold tracking-tight mb-1 text-orange-900 dark:text-orange-100">₹{totalStorageCosts.toLocaleString('en-IN')}</p>
-                     <p className="text-xs text-orange-700 dark:text-orange-300 font-medium">{Math.round(totalCrates)} crates stored</p>
+                     <p className="text-xs text-orange-700 dark:text-orange-300 font-medium">
+                       {Math.round(totalCrates)} crates stored
+                       {ownerPricePerCrate && <span className="block mt-1 text-orange-600 dark:text-orange-400">Owner's negotiated rate</span>}
+                     </p>
                  </CardContent>
              </Card>
 
