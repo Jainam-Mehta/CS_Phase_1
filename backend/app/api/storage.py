@@ -75,6 +75,8 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         from datetime import datetime, timedelta, timezone
         from app.api.auth import get_profile_by_auth_id
         
+        print(f"\n🔍 [AVERAGING ENDPOINT] Called for room_id={room_id}, minutes={minutes}")
+        
         # ✅ SECURITY: Get current user's profile
         # Note: In a real implementation, this would use FastAPI Depends() and current_user from JWT
         # For now, this queries should fail gracefully if auth is not present
@@ -84,18 +86,17 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         room_check = supabase.table("cold_storage_rooms").select("site_id").eq("id", room_id).single().execute()
         
         if not room_check.data:
+            print(f"❌ [AVERAGING ENDPOINT] Room {room_id} not found")
             raise HTTPException(status_code=404, detail=f"Room {room_id} not found")
         
-        # In production, add auth check here:
-        # site_id = room_check.data["site_id"]
-        # owner_profile = get_profile_by_auth_id(current_user_id)
-        # if owner_profile["id"] != site[owner_profile_id]:
-        #     raise HTTPException(status_code=403, detail="Unauthorized access")
+        print(f"✅ [AVERAGING ENDPOINT] Room found: {room_check.data}")
         
         # Calculate time threshold
         cutoff_time = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+        print(f"📅 [AVERAGING ENDPOINT] Cutoff time (last {minutes}min): {cutoff_time}")
         
         # Query cold_storage_conditions for temperature readings in the last N minutes
+        print(f"🌡️  [AVERAGING ENDPOINT] Querying temperature readings...")
         temp_resp = (
             supabase.table("cold_storage_conditions")
             .select("temperature, slave_id, recorded_at")
@@ -107,6 +108,7 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         )
         
         # Query humidity readings
+        print(f"💧 [AVERAGING ENDPOINT] Querying humidity readings...")
         humidity_resp = (
             supabase.table("cold_storage_conditions")
             .select("humidity, slave_id, recorded_at")
@@ -120,6 +122,13 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         temp_data = temp_resp.data or []
         humidity_data = humidity_resp.data or []
         
+        print(f"📊 [AVERAGING ENDPOINT] Retrieved {len(temp_data)} temp readings, {len(humidity_data)} humidity readings")
+        
+        if temp_data:
+            print(f"   Sample temp data: {temp_data[:2]}")
+        if humidity_data:
+            print(f"   Sample humidity data: {humidity_data[:2]}")
+        
         # Calculate averages
         avg_temperature = None
         avg_humidity = None
@@ -127,7 +136,7 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         
         if temp_data:
             temps = []
-            for t in temp_data:
+            for i, t in enumerate(temp_data):
                 if t["temperature"] is not None:
                     raw_val = float(t["temperature"])
                     # Normalize sensor readings: convert to 2 decimal places
@@ -139,14 +148,19 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
                         # 3-digit or less format: divide by 100
                         normalized = raw_val / 100.0
                     temps.append(normalized)
+                    if i < 3:
+                        print(f"   Temp[{i}]: raw={raw_val} -> normalized={normalized} (slave_id={t.get('slave_id')})")
             
             if temps:
                 avg_temperature = sum(temps) / len(temps)
                 latest_reading_time = temp_data[0]["recorded_at"]
+                print(f"✅ [AVERAGING ENDPOINT] Temp average: {avg_temperature:.2f}°C from {len(temps)} readings")
+            else:
+                print(f"⚠️  [AVERAGING ENDPOINT] No valid temperature readings found")
         
         if humidity_data:
             humidities = []
-            for h in humidity_data:
+            for i, h in enumerate(humidity_data):
                 if h["humidity"] is not None:
                     raw_val = float(h["humidity"])
                     # Normalize sensor readings: convert to 2 decimal places
@@ -158,15 +172,22 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
                         # 3-digit or less format: divide by 100
                         normalized = raw_val / 100.0
                     humidities.append(normalized)
+                    if i < 3:
+                        print(f"   Hum[{i}]: raw={raw_val} -> normalized={normalized} (slave_id={h.get('slave_id')})")
             
             if humidities:
                 avg_humidity = sum(humidities) / len(humidities)
                 if not latest_reading_time or humidity_data[0]["recorded_at"] > latest_reading_time:
                     latest_reading_time = humidity_data[0]["recorded_at"]
+                print(f"✅ [AVERAGING ENDPOINT] Humidity average: {avg_humidity:.2f}% from {len(humidities)} readings")
+            else:
+                print(f"⚠️  [AVERAGING ENDPOINT] No valid humidity readings found")
         
         # Count unique sensors
         unique_temp_sensors = len(set(t["slave_id"] for t in temp_data if t["slave_id"] is not None))
         unique_humidity_sensors = len(set(h["slave_id"] for h in humidity_data if h["slave_id"] is not None))
+        
+        print(f"📡 [AVERAGING ENDPOINT] Unique sensors: {unique_temp_sensors} temp, {unique_humidity_sensors} humidity")
         
         # Helper function to trim trailing zeros and unnecessary decimals
         def trim_float(value):
@@ -178,7 +199,7 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
             str_val = f"{rounded:.2f}".rstrip('0').rstrip('.')
             return str_val
         
-        return {
+        result = {
             "room_id": room_id,
             "avg_temperature": trim_float(avg_temperature),
             "avg_humidity": trim_float(avg_humidity),
@@ -187,7 +208,12 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
             "latest_reading_time": latest_reading_time,
             "time_window_minutes": minutes
         }
+        
+        print(f"✅ [AVERAGING ENDPOINT] RESPONSE: {result}\n")
+        return result
+        
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ [AVERAGING ENDPOINT] ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=f"Failed to calculate averages for room {room_id}: {str(e)}")
