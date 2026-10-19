@@ -277,47 +277,88 @@ function FarmerDashboardCore() {
 
     const loadLiveConditions = async () => {
       try {
-        // Fetch latest conditions
-        const { data: latestCondition, error } = await supabase
+        // Fetch latest temperature reading
+        const { data: tempData } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature, humidity, recorded_at')
+          .select('temperature, recorded_at')
           .eq('room_id', activeRoomId)
+          .not('temperature', 'is', null)
           .order('recorded_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (error) {
-          console.error('Error loading live conditions:', error);
-          return;
-        }
+        // Fetch latest humidity reading
+        const { data: humData } = await supabase
+          .from('cold_storage_conditions')
+          .select('humidity, recorded_at')
+          .eq('room_id', activeRoomId)
+          .not('humidity', 'is', null)
+          .order('recorded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (latestCondition) {
-          console.log('Latest condition:', latestCondition);
+        if (tempData || humData) {
+          console.log('Latest readings:', { temp: tempData?.temperature, hum: humData?.humidity });
           setLiveConditions({
-            temp: latestCondition.temperature || 0,
-            hum: latestCondition.humidity || 0,
+            temp: tempData?.temperature || 0,
+            hum: humData?.humidity || 0,
             ambientTemp: 0,
             ambientHum: 0,
-            date: latestCondition.recorded_at
+            date: tempData?.recorded_at || humData?.recorded_at
           });
         }
 
-        // Fetch temperature history for chart (last 100 readings)
-        const { data: history, error: historyError } = await supabase
+        // Fetch temperature history for chart
+        const { data: tempHistory } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature, humidity, recorded_at')
+          .select('temperature, recorded_at')
           .eq('room_id', activeRoomId)
+          .not('temperature', 'is', null)
           .order('recorded_at', { ascending: true })
           .limit(100);
 
-        if (!historyError && history && history.length > 0) {
-          console.log('Temperature history loaded:', history.length, 'records');
-          const formattedHistory = history.map((h: any) => ({
-            time: new Date(h.recorded_at).toLocaleTimeString(),
-            value: h.temperature,
-            humidity: h.humidity
-          }));
-          setTemperatureHistory(formattedHistory);
+        // Fetch humidity history for chart
+        const { data: humHistory } = await supabase
+          .from('cold_storage_conditions')
+          .select('humidity, recorded_at')
+          .eq('room_id', activeRoomId)
+          .not('humidity', 'is', null)
+          .order('recorded_at', { ascending: true })
+          .limit(100);
+
+        // Merge temperature and humidity data into timeline
+        const mergedHistory: any[] = [];
+        const tempMap = new Map();
+        const humMap = new Map();
+
+        if (tempHistory) {
+          tempHistory.forEach((t: any) => {
+            const time = new Date(t.recorded_at).toLocaleTimeString();
+            tempMap.set(time, { time, value: t.temperature, humidity: null });
+          });
+        }
+
+        if (humHistory) {
+          humHistory.forEach((h: any) => {
+            const time = new Date(h.recorded_at).toLocaleTimeString();
+            if (tempMap.has(time)) {
+              tempMap.get(time).humidity = h.humidity;
+            } else {
+              humMap.set(time, { time, value: null, humidity: h.humidity });
+            }
+          });
+        }
+
+        // Combine maps
+        mergedHistory.push(...Array.from(tempMap.values()));
+        mergedHistory.push(...Array.from(humMap.values()));
+        
+        // Sort by time
+        mergedHistory.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+        if (mergedHistory.length > 0) {
+          console.log('Temperature history loaded:', mergedHistory.length, 'records');
+          setTemperatureHistory(mergedHistory);
         }
       } catch (err) {
         console.error('Error loading conditions:', err);
@@ -326,9 +367,9 @@ function FarmerDashboardCore() {
 
     loadLiveConditions();
 
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel(`room_conditions_${activeRoomId}`)
+    // Subscribe to temperature updates
+    const tempChannel = supabase
+      .channel(`room_temp_${activeRoomId}`)
       .on(
         'postgres_changes',
         {
@@ -339,30 +380,48 @@ function FarmerDashboardCore() {
         },
         (payload: any) => {
           const newCondition = payload.new;
-          console.log('Real-time update:', newCondition);
-          setLiveConditions({
-            temp: newCondition.temperature || 0,
-            hum: newCondition.humidity || 0,
-            ambientTemp: 0,
-            ambientHum: 0,
-            date: newCondition.recorded_at
-          });
+          if (newCondition.temperature) {
+            console.log('Real-time temperature update:', newCondition.temperature);
+            setLiveConditions(prev => ({
+              ...prev,
+              temp: newCondition.temperature || 0,
+              date: newCondition.recorded_at
+            }));
+          }
+          if (newCondition.humidity) {
+            console.log('Real-time humidity update:', newCondition.humidity);
+            setLiveConditions(prev => ({
+              ...prev,
+              hum: newCondition.humidity || 0,
+              date: newCondition.recorded_at
+            }));
+          }
 
-          // Update history with new data
-          setTemperatureHistory(prev => [
-            ...prev,
-            {
-              time: new Date(newCondition.recorded_at).toLocaleTimeString(),
-              value: newCondition.temperature,
-              humidity: newCondition.humidity
+          // Update history
+          const time = new Date(newCondition.recorded_at).toLocaleTimeString();
+          setTemperatureHistory(prev => {
+            const existing = prev.find(h => h.time === time);
+            if (existing) {
+              if (newCondition.temperature) existing.value = newCondition.temperature;
+              if (newCondition.humidity) existing.humidity = newCondition.humidity;
+              return [...prev];
+            } else {
+              return [
+                ...prev,
+                {
+                  time,
+                  value: newCondition.temperature || null,
+                  humidity: newCondition.humidity || null
+                }
+              ].slice(-100);
             }
-          ].slice(-100)); // Keep only last 100 records
+          });
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tempChannel);
     };
   }, [activeRoomId]);
 
