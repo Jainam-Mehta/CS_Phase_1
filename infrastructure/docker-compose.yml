@@ -82,7 +82,7 @@ services:
     command: python -m app.mqtt.subscriber
     environment:
       DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
-      MQTT_BROKER: mqtt-broker
+      MQTT_BROKER: 35.200.159.76
       MQTT_PORT: 1883
       MQTT_TOPIC: cdsense/#
       LOG_LEVEL: INFO
