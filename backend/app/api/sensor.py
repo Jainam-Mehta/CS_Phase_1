@@ -52,6 +52,7 @@ async def ingest_gcp_sensor_data(data: GCPSensorData):
         "room_id": "uuid-of-room"
     }
     """
+    print(f"🔍 [INGEST] Received: gateway={data.gateway_id}, sensor={data.sensor_code}, type={data.sensor_type}, value={data.reading_value}{data.reading_unit}")
     try:
         timestamp = data.timestamp or datetime.now(timezone.utc).isoformat()
         
