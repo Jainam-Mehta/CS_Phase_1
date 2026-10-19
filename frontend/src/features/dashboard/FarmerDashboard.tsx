@@ -274,6 +274,10 @@ function FarmerDashboardCore() {
     if (!activeRoomId) return;
 
     console.log('[FarmerDashboard] Loading live conditions for room:', activeRoomId);
+    
+    // Clear old data immediately when room changes
+    setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
+    setTemperatureHistory([]);
 
     const loadLiveConditions = async () => {
       try {
@@ -287,7 +291,7 @@ function FarmerDashboardCore() {
           .limit(1)
           .maybeSingle();
 
-        console.log('[FarmerDashboard] Temp query result:', { tempError, tempData });
+        console.log('[FarmerDashboard] Temp query result:', { room: activeRoomId, tempError, tempData });
 
         // Fetch latest humidity reading
         const { data: humData, error: humError } = await supabase
@@ -299,7 +303,7 @@ function FarmerDashboardCore() {
           .limit(1)
           .maybeSingle();
 
-        console.log('[FarmerDashboard] Humidity query result:', { humError, humData });
+        console.log('[FarmerDashboard] Humidity query result:', { room: activeRoomId, humError, humData });
 
         if (tempData || humData) {
           console.log('Latest readings:', { temp: tempData?.temperature, hum: humData?.humidity });
