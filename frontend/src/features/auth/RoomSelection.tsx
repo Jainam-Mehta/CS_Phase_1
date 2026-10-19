@@ -68,34 +68,43 @@ const RoomSelection: React.FC = () => {
     try {
       console.log('[RoomSelection.loadRooms] Querying with localityId:', localityId);
       
-      const { data, error } = await supabase
-        .from('cold_storage_rooms')
-        .select(`
-          *,
-          sites!inner(
-            facility_name,
-            locality_id,
-            district_id,
-            owner_profile_id,
-            profiles:owner_profile_id(
-              full_name
-            )
-          )
-        `)
-        .eq('sites.locality_id', localityId);
+      // First, try querying through sites with a regular join (not inner join)
+      const { data: siteData, error: siteError } = await supabase
+        .from('sites')
+        .select('id, facility_name, owner_profile_id, profiles:owner_profile_id(full_name)')
+        .eq('locality_id', localityId);
+      
+      console.log('[RoomSelection.loadRooms] Sites query result:', { siteError, siteCount: siteData?.length });
 
-      console.log('[RoomSelection.loadRooms] Query result:', { error, dataLength: data?.length, data });
-
-      if (error) {
-        console.error('[RoomSelection.loadRooms] Error:', error);
-        await loadAllRooms();
-      } else if (!data || data.length === 0) {
-        console.warn('[RoomSelection.loadRooms] No rooms found for this locality, falling back to all rooms');
-        await loadAllRooms();
-      } else {
-        console.log('[RoomSelection.loadRooms] Successfully loaded', data.length, 'rooms');
-        setRooms(data);
+      if (!siteError && siteData && siteData.length > 0) {
+        // Now get rooms for these sites
+        const siteIds = siteData.map(s => s.id);
+        console.log('[RoomSelection.loadRooms] Site IDs for this locality:', siteIds);
+        
+        const { data: roomData, error: roomError } = await supabase
+          .from('cold_storage_rooms')
+          .select('*')
+          .in('site_id', siteIds);
+        
+        console.log('[RoomSelection.loadRooms] Rooms query result:', { roomError, roomCount: roomData?.length });
+        
+        if (!roomError && roomData) {
+          // Merge site data into room data
+          const roomsWithSites = roomData.map(room => {
+            const site = siteData.find(s => s.id === room.site_id);
+            return {
+              ...room,
+              sites: site
+            };
+          });
+          setRooms(roomsWithSites);
+          return;
+        }
       }
+      
+      // Fallback to all rooms if locality has no sites
+      console.warn('[RoomSelection.loadRooms] No rooms found for this locality, falling back to all rooms');
+      await loadAllRooms();
     } catch (err) {
       console.error('Error loading rooms:', err);
       await loadAllRooms();
@@ -106,34 +115,43 @@ const RoomSelection: React.FC = () => {
     try {
       console.log('[RoomSelection.loadRoomsByDistrict] Querying with districtId:', districtId);
       
-      const { data, error } = await supabase
-        .from('cold_storage_rooms')
-        .select(`
-          *,
-          sites!inner(
-            facility_name,
-            locality_id,
-            district_id,
-            owner_profile_id,
-            profiles:owner_profile_id(
-              full_name
-            )
-          )
-        `)
-        .eq('sites.district_id', districtId);
+      // First, try querying through sites
+      const { data: siteData, error: siteError } = await supabase
+        .from('sites')
+        .select('id, facility_name, owner_profile_id, profiles:owner_profile_id(full_name)')
+        .eq('district_id', districtId);
+      
+      console.log('[RoomSelection.loadRoomsByDistrict] Sites query result:', { siteError, siteCount: siteData?.length });
 
-      console.log('[RoomSelection.loadRoomsByDistrict] Query result:', { error, dataLength: data?.length, data });
-
-      if (error) {
-        console.error('[RoomSelection.loadRoomsByDistrict] Error:', error);
-        await loadAllRooms();
-      } else if (!data || data.length === 0) {
-        console.warn('[RoomSelection.loadRoomsByDistrict] No rooms found for this district, falling back to all rooms');
-        await loadAllRooms();
-      } else {
-        console.log('[RoomSelection.loadRoomsByDistrict] Successfully loaded', data.length, 'rooms');
-        setRooms(data);
+      if (!siteError && siteData && siteData.length > 0) {
+        // Now get rooms for these sites
+        const siteIds = siteData.map(s => s.id);
+        console.log('[RoomSelection.loadRoomsByDistrict] Site IDs for this district:', siteIds);
+        
+        const { data: roomData, error: roomError } = await supabase
+          .from('cold_storage_rooms')
+          .select('*')
+          .in('site_id', siteIds);
+        
+        console.log('[RoomSelection.loadRoomsByDistrict] Rooms query result:', { roomError, roomCount: roomData?.length });
+        
+        if (!roomError && roomData) {
+          // Merge site data into room data
+          const roomsWithSites = roomData.map(room => {
+            const site = siteData.find(s => s.id === room.site_id);
+            return {
+              ...room,
+              sites: site
+            };
+          });
+          setRooms(roomsWithSites);
+          return;
+        }
       }
+      
+      // Fallback to all rooms if district has no sites
+      console.warn('[RoomSelection.loadRoomsByDistrict] No rooms found for this district, falling back to all rooms');
+      await loadAllRooms();
     } catch (err) {
       console.error('Error loading rooms by district:', err);
       await loadAllRooms();
