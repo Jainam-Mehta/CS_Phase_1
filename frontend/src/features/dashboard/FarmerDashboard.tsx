@@ -280,9 +280,9 @@ function FarmerDashboardCore() {
         // Fetch latest conditions
         const { data: latestCondition, error } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature, humidity, created_at')
+          .select('temperature, humidity, recorded_at')
           .eq('room_id', activeRoomId)
-          .order('created_at', { ascending: false })
+          .order('recorded_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -298,22 +298,22 @@ function FarmerDashboardCore() {
             hum: latestCondition.humidity || 0,
             ambientTemp: 0,
             ambientHum: 0,
-            date: latestCondition.created_at
+            date: latestCondition.recorded_at
           });
         }
 
-        // Fetch temperature history for chart (last 24 hours or last 100 readings)
+        // Fetch temperature history for chart (last 100 readings)
         const { data: history, error: historyError } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature, humidity, created_at')
+          .select('temperature, humidity, recorded_at')
           .eq('room_id', activeRoomId)
-          .order('created_at', { ascending: true })
+          .order('recorded_at', { ascending: true })
           .limit(100);
 
         if (!historyError && history && history.length > 0) {
           console.log('Temperature history loaded:', history.length, 'records');
           const formattedHistory = history.map((h: any) => ({
-            time: new Date(h.created_at).toLocaleTimeString(),
+            time: new Date(h.recorded_at).toLocaleTimeString(),
             value: h.temperature,
             humidity: h.humidity
           }));
@@ -345,14 +345,14 @@ function FarmerDashboardCore() {
             hum: newCondition.humidity || 0,
             ambientTemp: 0,
             ambientHum: 0,
-            date: newCondition.created_at
+            date: newCondition.recorded_at
           });
 
           // Update history with new data
           setTemperatureHistory(prev => [
             ...prev,
             {
-              time: new Date(newCondition.created_at).toLocaleTimeString(),
+              time: new Date(newCondition.recorded_at).toLocaleTimeString(),
               value: newCondition.temperature,
               humidity: newCondition.humidity
             }
