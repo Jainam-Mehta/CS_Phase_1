@@ -24,11 +24,12 @@ const RoomSelection: React.FC = () => {
   const isExtensionMode = searchParams.get('mode') === 'extension';
 
   useEffect(() => {
-    // Load rooms filtered by farmer's location in BOTH extension and normal modes
-    loadFarmerLocality();
+    // Load rooms filtered by location
+    // Priority: 1) Session selection (extension mode), 2) Farmer's profile location
+    loadRoomsForLocation();
   }, []);
 
-  const loadFarmerLocality = async () => {
+  const loadRoomsForLocation = async () => {
     try {
       if (!user?.id) {
         console.warn('[RoomSelection] No user ID, loading all rooms');
@@ -37,29 +38,49 @@ const RoomSelection: React.FC = () => {
 
       console.log('[RoomSelection] User ID:', user.id);
 
-      // Get farmer profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('locality_id, district_id')
-        .eq('id', user.id)
-        .maybeSingle();
+      // Check if we're in extension mode with a new location selection
+      const storageRequest = localStorage.getItem('storageAccessRequest');
+      const request = storageRequest ? JSON.parse(storageRequest) : {};
+      
+      console.log('[RoomSelection] Storage request from session:', request);
 
-      console.log('[RoomSelection] Farmer profile fetched:', { profile, profileError });
+      let districtIdToUse = null;
+      let localityIdToUse = null;
 
-      if (profile?.locality_id) {
-        console.log('[RoomSelection] Loading rooms by locality_id:', profile.locality_id);
-        setLocalityId(profile.locality_id);
-        await loadRooms(profile.locality_id);
-      } else if (profile?.district_id) {
-        console.log('[RoomSelection] Loading rooms by district_id:', profile.district_id);
-        await loadRoomsByDistrict(profile.district_id);
+      // Priority 1: Use selected district/locality from current session (extension mode)
+      if (isExtensionMode && request.districtId) {
+        console.log('[RoomSelection] Using district from current session:', request.districtId);
+        districtIdToUse = request.districtId;
+      } else if (isExtensionMode && request.localityId) {
+        console.log('[RoomSelection] Using locality from current session:', request.localityId);
+        localityIdToUse = request.localityId;
       } else {
-        console.warn('[RoomSelection] No locality or district found in profile, loading all rooms');
-        console.log('[RoomSelection] Profile data:', profile);
+        // Priority 2: Use farmer's profile location
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('locality_id, district_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        console.log('[RoomSelection] Farmer profile fetched:', { profile, profileError });
+        districtIdToUse = profile?.district_id || null;
+        localityIdToUse = profile?.locality_id || null;
+      }
+
+      // Load rooms based on available location data
+      if (localityIdToUse) {
+        console.log('[RoomSelection] Loading rooms by locality_id:', localityIdToUse);
+        setLocalityId(localityIdToUse);
+        await loadRooms(localityIdToUse);
+      } else if (districtIdToUse) {
+        console.log('[RoomSelection] Loading rooms by district_id:', districtIdToUse);
+        await loadRoomsByDistrict(districtIdToUse);
+      } else {
+        console.warn('[RoomSelection] No location found, loading all rooms');
         await loadAllRooms();
       }
     } catch (err) {
-      console.error('Error loading farmer locality:', err);
+      console.error('Error loading rooms for location:', err);
       await loadAllRooms();
     }
   };
