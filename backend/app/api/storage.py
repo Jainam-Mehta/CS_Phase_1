@@ -128,13 +128,17 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         if temp_data:
             temps = [float(t["temperature"]) for t in temp_data if t["temperature"] is not None]
             if temps:
-                avg_temperature = sum(temps) / len(temps)
+                # Average the raw values, then divide by 100 for proper decimal formatting
+                avg_temp_raw = sum(temps) / len(temps)
+                avg_temperature = avg_temp_raw / 100.0
                 latest_reading_time = temp_data[0]["recorded_at"]
         
         if humidity_data:
             humidities = [float(h["humidity"]) for h in humidity_data if h["humidity"] is not None]
             if humidities:
-                avg_humidity = sum(humidities) / len(humidities)
+                # Average the raw values, then divide by 100 for proper decimal formatting
+                avg_hum_raw = sum(humidities) / len(humidities)
+                avg_humidity = avg_hum_raw / 100.0
                 if not latest_reading_time or humidity_data[0]["recorded_at"] > latest_reading_time:
                     latest_reading_time = humidity_data[0]["recorded_at"]
         
@@ -142,10 +146,20 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         unique_temp_sensors = len(set(t["slave_id"] for t in temp_data if t["slave_id"] is not None))
         unique_humidity_sensors = len(set(h["slave_id"] for h in humidity_data if h["slave_id"] is not None))
         
+        # Helper function to trim trailing zeros and unnecessary decimals
+        def trim_float(value):
+            if value is None:
+                return None
+            # Round to 2 decimal places
+            rounded = round(value, 2)
+            # Convert to string and strip trailing zeros, but keep at least one decimal place
+            str_val = f"{rounded:.2f}".rstrip('0').rstrip('.')
+            return str_val
+        
         return {
             "room_id": room_id,
-            "avg_temperature": round(avg_temperature, 2) if avg_temperature else None,
-            "avg_humidity": round(avg_humidity, 2) if avg_humidity else None,
+            "avg_temperature": trim_float(avg_temperature),
+            "avg_humidity": trim_float(avg_humidity),
             "temp_sensor_count": unique_temp_sensors,
             "humidity_sensor_count": unique_humidity_sensors,
             "latest_reading_time": latest_reading_time,

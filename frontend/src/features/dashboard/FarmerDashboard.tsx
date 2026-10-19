@@ -281,39 +281,68 @@ function FarmerDashboardCore() {
 
     const loadLiveConditions = async () => {
       try {
-        // Fetch latest temperature reading
-        const { data: tempData, error: tempError } = await supabase
-          .from('cold_storage_conditions')
-          .select('temperature, recorded_at')
-          .eq('room_id', activeRoomId)
-          .not('temperature', 'is', null)
-          .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        console.log('[FarmerDashboard] Temp query result:', { room: activeRoomId, tempError, tempData });
-
-        // Fetch latest humidity reading
-        const { data: humData, error: humError } = await supabase
-          .from('cold_storage_conditions')
-          .select('humidity, recorded_at')
-          .eq('room_id', activeRoomId)
-          .not('humidity', 'is', null)
-          .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        console.log('[FarmerDashboard] Humidity query result:', { room: activeRoomId, humError, humData });
-
-        if (tempData || humData) {
-          console.log('Latest readings:', { temp: tempData?.temperature, hum: humData?.humidity });
-          setLiveConditions({
-            temp: tempData?.temperature || 0,
-            hum: humData?.humidity || 0,
-            ambientTemp: 0,
-            ambientHum: 0,
-            date: tempData?.recorded_at || humData?.recorded_at
+        // Fetch averaged sensor data from backend (like owner dashboard does)
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          
+          const response = await fetch(`${apiUrl}/api/storage/averages/room/${activeRoomId}`, {
+            signal: controller.signal
           });
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const averagesData = await response.json();
+            console.log('[FarmerDashboard] Averaged sensor data:', averagesData);
+            
+            // Values from backend are already formatted (divided by 100)
+            const avgTemp = averagesData.avg_temperature !== null ? parseFloat(averagesData.avg_temperature) : 0;
+            const avgHum = averagesData.avg_humidity !== null ? parseFloat(averagesData.avg_humidity) : 0;
+            
+            setLiveConditions({
+              temp: avgTemp,
+              hum: avgHum,
+              ambientTemp: 0,
+              ambientHum: 0,
+              date: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          console.debug('[FarmerDashboard] Averaging endpoint unavailable, falling back to raw data');
+          
+          // Fallback: Fetch latest temperature reading
+          const { data: tempData, error: tempError } = await supabase
+            .from('cold_storage_conditions')
+            .select('temperature, recorded_at')
+            .eq('room_id', activeRoomId)
+            .not('temperature', 'is', null)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          // Fallback: Fetch latest humidity reading
+          const { data: humData, error: humError } = await supabase
+            .from('cold_storage_conditions')
+            .select('humidity, recorded_at')
+            .eq('room_id', activeRoomId)
+            .not('humidity', 'is', null)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (tempData || humData) {
+            const temp = tempData?.temperature ? parseFloat((tempData.temperature / 100).toFixed(2)) : 0;
+            const hum = humData?.humidity ? parseFloat((humData.humidity / 100).toFixed(2)) : 0;
+            
+            setLiveConditions({
+              temp,
+              hum,
+              ambientTemp: 0,
+              ambientHum: 0,
+              date: tempData?.recorded_at || humData?.recorded_at
+            });
+          }
         }
 
         // Fetch temperature history for chart
@@ -348,9 +377,11 @@ function FarmerDashboardCore() {
             // Convert UTC to IST (UTC+5:30) using proper date arithmetic
             const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
             const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            // Format value: divide by 100 for display (1206 → 12.06)
+            const formattedTemp = t.temperature ? parseFloat((t.temperature / 100).toFixed(2)) : 0;
             timeMap.set(time, { 
               time, 
-              value: parseFloat(t.temperature) || 0, 
+              value: formattedTemp, 
               humidity: 0 
             });
           });
@@ -362,13 +393,15 @@ function FarmerDashboardCore() {
             // Convert UTC to IST (UTC+5:30) using proper date arithmetic
             const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
             const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            // Format value: divide by 100 for display (6000 → 60.00)
+            const formattedHum = h.humidity ? parseFloat((h.humidity / 100).toFixed(2)) : 0;
             if (timeMap.has(time)) {
-              timeMap.get(time).humidity = parseFloat(h.humidity) || 0;
+              timeMap.get(time).humidity = formattedHum;
             } else {
               timeMap.set(time, { 
                 time, 
                 value: 0, 
-                humidity: parseFloat(h.humidity) || 0 
+                humidity: formattedHum
               });
             }
           });
@@ -389,6 +422,11 @@ function FarmerDashboardCore() {
     };
 
     loadLiveConditions();
+    
+    // Poll for updates every 10 seconds to keep graphs fresh
+    const pollInterval = setInterval(() => {
+      loadLiveConditions();
+    }, 10000);
 
     // Subscribe to real-time updates
     const channel = supabase
@@ -413,11 +451,21 @@ function FarmerDashboardCore() {
               date: newCondition.recorded_at
             }));
           }
-          if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
-            console.log('Real-time humidity update:', newCondition.humidity);
+          if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
+            console.log('Real-time temperature update:', newCondition.temperature);
+            const formattedTemp = parseFloat((newCondition.temperature / 100).toFixed(2));
             setLiveConditions((prev: any) => ({
               ...prev,
-              hum: parseFloat(newCondition.humidity) || 0,
+              temp: formattedTemp,
+              date: newCondition.recorded_at
+            }));
+          }
+          if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
+            console.log('Real-time humidity update:', newCondition.humidity);
+            const formattedHum = parseFloat((newCondition.humidity / 100).toFixed(2));
+            setLiveConditions((prev: any) => ({
+              ...prev,
+              hum: formattedHum,
               date: newCondition.recorded_at
             }));
           }
@@ -431,10 +479,10 @@ function FarmerDashboardCore() {
             const existing = prev.find(h => h.time === time);
             if (existing) {
               if (newCondition.temperature !== null && newCondition.temperature !== undefined) {
-                existing.value = parseFloat(newCondition.temperature) || 0;
+                existing.value = parseFloat((newCondition.temperature / 100).toFixed(2));
               }
               if (newCondition.humidity !== null && newCondition.humidity !== undefined) {
-                existing.humidity = parseFloat(newCondition.humidity) || 0;
+                existing.humidity = parseFloat((newCondition.humidity / 100).toFixed(2));
               }
               return [...prev];
             } else {
@@ -442,8 +490,8 @@ function FarmerDashboardCore() {
                 ...prev,
                 {
                   time,
-                  value: newCondition.temperature !== null ? parseFloat(newCondition.temperature) : 0,
-                  humidity: newCondition.humidity !== null ? parseFloat(newCondition.humidity) : 0
+                  value: newCondition.temperature !== null ? parseFloat((newCondition.temperature / 100).toFixed(2)) : 0,
+                  humidity: newCondition.humidity !== null ? parseFloat((newCondition.humidity / 100).toFixed(2)) : 0
                 }
               ].slice(-100);
             }
@@ -454,6 +502,7 @@ function FarmerDashboardCore() {
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [activeRoomId]);
 
