@@ -142,6 +142,8 @@ const RoomSelection: React.FC = () => {
 
   const loadAllRooms = async () => {
     try {
+      console.log('[RoomSelection.loadAllRooms] Fetching all rooms as fallback');
+      
       const { data, error } = await supabase
         .from('cold_storage_rooms')
         .select(`
@@ -156,6 +158,12 @@ const RoomSelection: React.FC = () => {
             )
           )
         `);
+
+      console.log('[RoomSelection.loadAllRooms] Query result:', { error, dataLength: data?.length });
+      
+      if (data && data.length > 0) {
+        console.log('[RoomSelection.loadAllRooms] Sample data:', data.slice(0, 3));
+      }
 
       if (!error && data) {
         setRooms(data);
