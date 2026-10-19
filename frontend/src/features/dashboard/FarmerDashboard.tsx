@@ -344,7 +344,11 @@ function FarmerDashboardCore() {
 
         if (tempHistory) {
           tempHistory.forEach((t: any) => {
-            const time = new Date(t.recorded_at).toLocaleTimeString();
+            const utcDate = new Date(t.recorded_at);
+            // Add 5:30 hours for IST offset
+            utcDate.setHours(utcDate.getHours() + 5);
+            utcDate.setMinutes(utcDate.getMinutes() + 30);
+            const time = utcDate.toLocaleTimeString();
             timeMap.set(time, { 
               time, 
               value: parseFloat(t.temperature) || 0, 
@@ -355,7 +359,11 @@ function FarmerDashboardCore() {
 
         if (humHistory) {
           humHistory.forEach((h: any) => {
-            const time = new Date(h.recorded_at).toLocaleTimeString();
+            const utcDate = new Date(h.recorded_at);
+            // Add 5:30 hours for IST offset
+            utcDate.setHours(utcDate.getHours() + 5);
+            utcDate.setMinutes(utcDate.getMinutes() + 30);
+            const time = utcDate.toLocaleTimeString();
             if (timeMap.has(time)) {
               timeMap.get(time).humidity = parseFloat(h.humidity) || 0;
             } else {
@@ -417,7 +425,11 @@ function FarmerDashboardCore() {
           }
 
           // Update history
-          const time = new Date(newCondition.recorded_at).toLocaleTimeString();
+          const utcDate = new Date(newCondition.recorded_at);
+          // Add 5:30 hours for IST offset
+          utcDate.setHours(utcDate.getHours() + 5);
+          utcDate.setMinutes(utcDate.getMinutes() + 30);
+          const time = utcDate.toLocaleTimeString();
           setTemperatureHistory((prev: any[]) => {
             const existing = prev.find(h => h.time === time);
             if (existing) {
