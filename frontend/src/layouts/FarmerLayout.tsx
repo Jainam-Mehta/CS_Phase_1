@@ -32,9 +32,9 @@ const farmerNavigation = [
     icon: Calculator,
     featureFlag: 'FARMER_PRICE_CALCULATOR' // Will show when FEATURE_FLAGS.FARMER_PRICE_CALCULATOR = true
   },
-  // Market Intelligence now includes Finance section merged below the market prices
+  // Costs & Market now includes Finance section merged below the market prices
   { 
-    name: 'Market Intelligence', 
+    name: 'Costs & Market', 
     href: '/farmer/market-intelligence', 
     icon: TrendingUp,
     featureFlag: 'FARMER_MARKET_INTELLIGENCE' // Will show when FEATURE_FLAGS.FARMER_MARKET_INTELLIGENCE = true

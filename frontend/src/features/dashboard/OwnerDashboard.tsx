@@ -233,12 +233,20 @@ const OwnerDashboard: React.FC = () => {
         // Total monthly revenue from all sources
         const totalMonthlyRevenue = stakeholderRevenue + farmerStorageRevenue;
         
-        // Display as a single bar for "This Month" since we don't have daily breakdown
+        // Calculate which week of the current month we're in
+        const nowDate = new Date();
+        const currentDay = nowDate.getDate();
+        let currentWeek = 1;
+        if (currentDay > 7) currentWeek = 2;
+        if (currentDay > 14) currentWeek = 3;
+        if (currentDay > 21) currentWeek = 4;
+        
+        // Display as a single bar for the current week of the month
         const weeklyRevenue = [
-          { time: 'Week 1', value: 0 },
-          { time: 'Week 2', value: 0 },
-          { time: 'Week 3', value: 0 },
-          { time: 'Week 4', value: totalMonthlyRevenue } // Show total in Week 4
+          { time: 'Week 1', value: currentWeek === 1 ? totalMonthlyRevenue : 0 },
+          { time: 'Week 2', value: currentWeek === 2 ? totalMonthlyRevenue : 0 },
+          { time: 'Week 3', value: currentWeek === 3 ? totalMonthlyRevenue : 0 },
+          { time: 'Week 4', value: currentWeek === 4 ? totalMonthlyRevenue : 0 }
         ];
         
         setRevenueHistory(weeklyRevenue);
@@ -381,8 +389,12 @@ const OwnerDashboard: React.FC = () => {
   // Derived calculations from real database data
   const isSensorActive = (s: any) => {
     const st = s.status?.toLowerCase();
-    // A sensor is ONLY active if database status is active/online AND a real reading has passed through it
-    const hasPassedReading = s.last_reading_value != null || (s.last_seen != null && s.last_seen !== '');
+    // A sensor is active if status is online/active AND it has a reading (from any source)
+    const hasPassedReading = 
+      s.last_reading_value != null ||      // From sensor_devices
+      s.sensor_value != null ||            // From cold_storage_conditions fallback
+      s.reading != null ||                 // From frontend state
+      (s.last_seen != null && s.last_seen !== '');
     return (st === 'active' || st === 'online') && hasPassedReading;
   };
 

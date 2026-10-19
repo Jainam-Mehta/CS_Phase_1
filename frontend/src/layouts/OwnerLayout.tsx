@@ -38,7 +38,7 @@ const ownerNavigation = [
   { name: 'Monitoring', href: '/owner/monitoring', icon: Activity },
   { name: 'Inventory', href: '/owner/inventory', icon: TrendingUp },
   { name: 'Energy', href: '/owner/energy', icon: Zap },
-  { name: 'Profits', href: '/owner/finance', icon: IndianRupee },
+  { name: 'Cost Analysis', href: '/owner/finance', icon: IndianRupee },
   // Hidden for future use - Carbon Credits feature
   // { name: 'Carbon Credits', href: '/owner/carbon-credits', icon: Leaf },
   { name: 'Alerts & Insights', href: '/owner/alerts', icon: AlertTriangle },
