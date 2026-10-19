@@ -35,6 +35,8 @@ const RoomSelection: React.FC = () => {
         throw new Error('No authenticated user found');
       }
 
+      console.log('[RoomSelection] User ID:', user.id);
+
       // Get farmer profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -52,7 +54,8 @@ const RoomSelection: React.FC = () => {
         console.log('[RoomSelection] Loading rooms by district_id:', profile.district_id);
         await loadRoomsByDistrict(profile.district_id);
       } else {
-        console.warn('[RoomSelection] No locality or district found, loading all rooms');
+        console.warn('[RoomSelection] No locality or district found in profile, loading all rooms');
+        console.log('[RoomSelection] Profile data:', profile);
         await loadAllRooms();
       }
     } catch (err) {
@@ -63,6 +66,8 @@ const RoomSelection: React.FC = () => {
 
   const loadRooms = async (localityId: string) => {
     try {
+      console.log('[RoomSelection.loadRooms] Querying with localityId:', localityId);
+      
       const { data, error } = await supabase
         .from('cold_storage_rooms')
         .select(`
@@ -79,9 +84,16 @@ const RoomSelection: React.FC = () => {
         `)
         .eq('sites.locality_id', localityId);
 
-      if (error || !data || data.length === 0) {
+      console.log('[RoomSelection.loadRooms] Query result:', { error, dataLength: data?.length, data });
+
+      if (error) {
+        console.error('[RoomSelection.loadRooms] Error:', error);
+        await loadAllRooms();
+      } else if (!data || data.length === 0) {
+        console.warn('[RoomSelection.loadRooms] No rooms found for this locality, falling back to all rooms');
         await loadAllRooms();
       } else {
+        console.log('[RoomSelection.loadRooms] Successfully loaded', data.length, 'rooms');
         setRooms(data);
       }
     } catch (err) {
@@ -92,6 +104,8 @@ const RoomSelection: React.FC = () => {
 
   const loadRoomsByDistrict = async (districtId: string) => {
     try {
+      console.log('[RoomSelection.loadRoomsByDistrict] Querying with districtId:', districtId);
+      
       const { data, error } = await supabase
         .from('cold_storage_rooms')
         .select(`
@@ -108,9 +122,16 @@ const RoomSelection: React.FC = () => {
         `)
         .eq('sites.district_id', districtId);
 
-      if (error || !data || data.length === 0) {
+      console.log('[RoomSelection.loadRoomsByDistrict] Query result:', { error, dataLength: data?.length, data });
+
+      if (error) {
+        console.error('[RoomSelection.loadRoomsByDistrict] Error:', error);
+        await loadAllRooms();
+      } else if (!data || data.length === 0) {
+        console.warn('[RoomSelection.loadRoomsByDistrict] No rooms found for this district, falling back to all rooms');
         await loadAllRooms();
       } else {
+        console.log('[RoomSelection.loadRoomsByDistrict] Successfully loaded', data.length, 'rooms');
         setRooms(data);
       }
     } catch (err) {
