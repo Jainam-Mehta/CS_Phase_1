@@ -1,0 +1,18 @@
+[Unit]
+Description=Simple MQTT Reader - Read cdsense topic and write to Supabase
+After=network.target
+
+[Service]
+Type=simple
+User=jainammehta250
+WorkingDirectory=/home/jainammehta250/CS_Project/backend
+Environment="PATH=/home/jainammehta250/CS_Project/backend/venv/bin:/usr/bin"
+EnvironmentFile=/home/jainammehta250/CS_Project/backend/.env
+ExecStart=/home/jainammehta250/CS_Project/backend/venv/bin/python mqtt_simple_reader.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
