@@ -1,0 +1,19 @@
+[Unit]
+Description=ColdSense MQTT Subscriber Service (24/7 Supabase Sync)
+After=network.target
+
+[Service]
+Type=simple
+User=jainammehta250
+WorkingDirectory=/home/jainammehta250/CS_Project/backend
+Environment="PATH=/home/jainammehta250/CS_Project/backend/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=/home/jainammehta250/CS_Project/backend/.env
+ExecStart=/home/jainammehta250/CS_Project/backend/venv/bin/python mqtt_subscriber_service.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=coldsense-mqtt-subscriber
+
+[Install]
+WantedBy=multi-user.target
