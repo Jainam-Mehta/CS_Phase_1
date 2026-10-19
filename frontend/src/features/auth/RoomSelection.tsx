@@ -24,9 +24,8 @@ const RoomSelection: React.FC = () => {
   const isExtensionMode = searchParams.get('mode') === 'extension';
 
   useEffect(() => {
-    if (isExtensionMode) {
-      loadFarmerLocality();
-    }
+    // Load rooms filtered by farmer's location in BOTH extension and normal modes
+    loadFarmerLocality();
   }, [isExtensionMode]);
 
   const loadFarmerLocality = async () => {
