@@ -49,7 +49,7 @@ def resolve_site_and_room():
         return None, None
 
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     """MQTT connection callback"""
     if rc == 0:
         topic = f"cdsense/{GATEWAY_ID}/{LOCATION_CODE}/{SITE_CODE}/{ROOM_CODE}"
