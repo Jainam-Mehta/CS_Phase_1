@@ -31,22 +31,28 @@ const RoomSelection: React.FC = () => {
   const loadFarmerLocality = async () => {
     try {
       if (!user?.id) {
+        console.warn('[RoomSelection] No user ID, loading all rooms');
         throw new Error('No authenticated user found');
       }
 
       // Get farmer profile
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('locality_id, district_id')
         .eq('id', user.id)
         .maybeSingle();
 
+      console.log('[RoomSelection] Farmer profile fetched:', { profile, profileError });
+
       if (profile?.locality_id) {
+        console.log('[RoomSelection] Loading rooms by locality_id:', profile.locality_id);
         setLocalityId(profile.locality_id);
         await loadRooms(profile.locality_id);
       } else if (profile?.district_id) {
+        console.log('[RoomSelection] Loading rooms by district_id:', profile.district_id);
         await loadRoomsByDistrict(profile.district_id);
       } else {
+        console.warn('[RoomSelection] No locality or district found, loading all rooms');
         await loadAllRooms();
       }
     } catch (err) {
