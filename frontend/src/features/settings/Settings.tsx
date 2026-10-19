@@ -110,7 +110,7 @@ const SettingsPage: React.FC = () => {
           .from('farmer_room_access')
           .select(`
             id, status, requested_at, remarks,
-            cold_storage_rooms(room_name, room_code, site_id, sites(facility_name, owner_profile_id))
+            cold_storage_rooms(room_name, room_code, site_id, sites(facility_name, owner_profile_id, profiles!owner_profile_id(full_name)))
           `)
           .eq('farmer_id', profile.id)
           .order('requested_at', { ascending: false });
@@ -122,35 +122,33 @@ const SettingsPage: React.FC = () => {
           
         // Fetch owner names for each request
         if (data && data.length > 0) {
-          const ownerIds = [...new Set((data as any[]).map(req => (req.cold_storage_rooms as any)?.[0]?.site_id).filter(Boolean))];
+          // Build a map of owner names from the nested data
+          const ownerNameMap = new Map<string, string>();
           
-          if (ownerIds.length > 0) {
-            const { data: sites } = await supabase
-              .from('sites')
-              .select('id, owner_profile_id')
-              .in('id', ownerIds);
+          (data as any[]).forEach(req => {
+            const room = Array.isArray(req.cold_storage_rooms) ? req.cold_storage_rooms[0] : req.cold_storage_rooms;
+            const site = Array.isArray(room?.sites) ? room?.sites[0] : room?.sites;
+            const ownerProfileId = site?.owner_profile_id;
             
-            const siteOwnerMap = new Map(sites?.map(s => [s.id, s.owner_profile_id]) || []);
-            
-            const ownerProfileIds = [...new Set(Array.from(siteOwnerMap.values()).filter(Boolean))];
-            
-            if (ownerProfileIds.length > 0) {
-              const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, full_name')
-                .in('id', ownerProfileIds);
-              
-              const ownerNameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
-              
-              // Enrich data with owner names
-              (data as any[]).forEach(req => {
-                const siteId = (req.cold_storage_rooms as any)?.[0]?.site_id;
-                const ownerId = siteOwnerMap.get(siteId);
-                const ownerName = ownerNameMap.get(ownerId);
-                (req as any)._ownerName = ownerName || 'Unknown Owner';
-              });
+            // Get owner name from nested profiles data if available
+            if (ownerProfileId && site) {
+              // Try to get full_name from the profiles object if it exists
+              const profiles = site.profiles || site;
+              const fullName = profiles?.full_name || 
+                              `${profiles?.first_name || ''} ${profiles?.last_name || ''}`.trim() ||
+                              'Unknown Owner';
+              ownerNameMap.set(ownerProfileId, fullName);
             }
-          }
+          });
+          
+          // Enrich data with owner names
+          (data as any[]).forEach(req => {
+            const room = Array.isArray(req.cold_storage_rooms) ? req.cold_storage_rooms[0] : req.cold_storage_rooms;
+            const site = Array.isArray(room?.sites) ? room?.sites[0] : room?.sites;
+            const ownerProfileId = site?.owner_profile_id;
+            const ownerName = ownerProfileId ? ownerNameMap.get(ownerProfileId) : undefined;
+            (req as any)._ownerName = ownerName || 'Unknown Owner';
+          });
         }
         
         console.log('Requests loaded:', data);
