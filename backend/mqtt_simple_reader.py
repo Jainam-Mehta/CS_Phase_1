@@ -29,6 +29,9 @@ def on_connect(client, userdata, flags, rc):
     else:
         print(f"✗ Connection failed: {rc}")
 
+def on_disconnect(client, userdata, rc):
+    print(f"⚠ Disconnected: {rc}")
+
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
@@ -83,6 +86,9 @@ print("=" * 50)
 
 client = mqtt.Client()
 client.on_connect = on_connect
+client.on_disconnect = on_disconnect
 client.on_message = on_message
+print("Connecting...")
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
+print("Starting loop...")
 client.loop_forever()

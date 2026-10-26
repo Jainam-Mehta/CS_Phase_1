@@ -150,7 +150,7 @@ const Login: React.FC = () => {
             <RoleIcon className="h-32 w-32 text-white" />
           </div>
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-white mb-2">ColdSense AI</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">SystemII</h2>
             <p className="text-white/80">Smart Cold Storage Management</p>
           </div>
         </div>

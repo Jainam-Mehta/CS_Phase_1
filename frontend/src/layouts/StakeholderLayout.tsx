@@ -62,7 +62,7 @@ const StakeholderLayout: React.FC = () => {
                 <span className="text-white font-bold text-lg">C</span>
               </div>
               <span className="font-bold text-xl text-gray-900 dark:text-gray-100">
-                ColdSense
+                SystemII
               </span>
             </div>
           )}
