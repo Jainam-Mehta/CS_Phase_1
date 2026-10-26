@@ -92,6 +92,28 @@ services:
     networks:
       - coldsense-network
 
+  # Frontend (React + Vite)
+  frontend:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/frontend:latest
+    container_name: coldsense-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_SUPABASE_URL: https://vzoypfctadgyflzwodmp.supabase.co
+      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+      VITE_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - coldsense-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Simulator (generates fake sensor data) - DISABLED, using real gateway data
   # simulator:
   #   image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/simulator:latest
