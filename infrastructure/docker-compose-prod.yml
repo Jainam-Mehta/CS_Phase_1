@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (must start first)
+  postgres:
+    image: postgres:15-alpine
+    container_name: coldsense-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: coldsense_user
+      POSTGRES_PASSWORD: coldsense_secure_password_2026
+      POSTGRES_DB: coldsense
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - coldsense-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coldsense_user -d coldsense"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (Eclipse Mosquitto)
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: coldsense-mqtt-broker
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - coldsense-network
+    command: mosquitto -c /mosquitto-no-auth.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/#", "-W", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Backend API
+  backend:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/backend:latest
+    container_name: coldsense-backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
+      SUPABASE_URL: https://vzoypfctadgyflzwodmp.supabase.co
+      SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-your_service_key}
+      MQTT_BROKER: mqtt-broker
+      MQTT_PORT: 1883
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+    networks:
+      - coldsense-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt-broker:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MQTT Subscriber
+  mqtt-subscriber:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/backend:latest
+    container_name: coldsense-mqtt
+    restart: always
+    command: python -m app.mqtt.subscriber
+    environment:
+      DATABASE_URL: postgresql://coldsense_user:coldsense_secure_password_2026@postgres:5432/coldsense
+      MQTT_BROKER: mqtt-broker
+      MQTT_PORT: 1883
+      MQTT_TOPIC: cdsense/#
+      LOG_LEVEL: INFO
+    networks:
+      - coldsense-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt-broker:
+        condition: service_started
+
+  # Frontend (React + Vite)
+  frontend:
+    image: asia-south1-docker.pkg.dev/exalted-skein-505210-g0/coldsense-repo/frontend:latest
+    container_name: coldsense-frontend
+    restart: always
+    environment:
+      VITE_SUPABASE_URL: https://vzoypfctadgyflzwodmp.supabase.co
+      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6b3lwZmN0YWRneWZsendvZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc5NzcsImV4cCI6MjEwMDcyMzk3N30.oL-WZUgX2FQ2hvmahkDkqQLCuqdGoctrZiN8BtFw6y8
+      VITE_API_URL: http://backend:8000
+    networks:
+      - coldsense-network
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: coldsense-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - coldsense-network
+    depends_on:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_logs:
+    driver: local
+
+networks:
+  coldsense-network:
+    driver: bridge
