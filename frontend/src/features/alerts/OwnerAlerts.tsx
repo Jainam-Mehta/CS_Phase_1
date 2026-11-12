@@ -87,7 +87,7 @@ const OwnerAlerts: React.FC = () => {
         .from('activity_logs')
         .select('*')
         .in('facility_id', siteIds)
-        .in('action_type', ['stakeholder_requested', 'stakeholder_active', 'stakeholder_approved', 'stakeholder_interested'])
+        .in('action_type', ['stakeholder_requested', 'stakeholder_active', 'stakeholder_approved', 'stakeholder_interested', 'payment_received'])
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -131,6 +131,7 @@ const OwnerAlerts: React.FC = () => {
         if (log.action_type === 'stakeholder_requested') actionSubtype = 'requested';
         else if (log.action_type === 'stakeholder_active' || log.action_type === 'stakeholder_approved') actionSubtype = 'approved';
         else if (log.action_type === 'stakeholder_interested') actionSubtype = 'interested';
+        else if (log.action_type === 'payment_received') actionSubtype = 'payment_received';
         
         return {
           id: log.id,
@@ -397,29 +398,40 @@ const OwnerAlerts: React.FC = () => {
                     Icon = Clock;
                     badgeColor = 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400';
                     title = 'Storage Request Submitted';
-                    description = `${log.actor_name} requested access to ${log.target_name} at ${log.facility_name}`;
+                    const roomName = log.related_data?.room_name ? ` (${log.related_data.room_name})` : '';
+                    description = `${log.actor_name} requested access to ${log.target_name}${roomName} at ${log.facility_name}`;
                   } else if (log.action_subtype === 'approved' && log.target_type === 'room_request') {
                     Icon = CheckCircle;
                     badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
                     title = 'Storage Request Approved';
-                    description = `${log.actor_name}'s request for ${log.target_name} was approved at ${log.facility_name}`;
+                    const roomName = log.related_data?.room_name ? ` (${log.related_data.room_name})` : '';
+                    description = `${log.actor_name}'s request for ${log.target_name}${roomName} was approved at ${log.facility_name}`;
                   } else if (log.action_subtype === 'rejected') {
                     Icon = X;
                     badgeColor = 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400';
                     title = 'Storage Request Rejected';
-                    description = `${log.actor_name}'s request for ${log.target_name} was rejected at ${log.facility_name}`;
+                    const roomName = log.related_data?.room_name ? ` (${log.related_data.room_name})` : '';
+                    description = `${log.actor_name}'s request for ${log.target_name}${roomName} was rejected at ${log.facility_name}`;
                   } else if (log.action_subtype === 'requested' && log.target_type === 'stakeholder') {
                     Icon = TrendingUp;
                     badgeColor = 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400';
                     title = 'Investment Requested';
-                    const amount = log.related_data?.amount_inr ? `₹${log.related_data.amount_inr.toLocaleString()}` : '';
+                    const amount = log.related_data?.investment_amount_inr ? `₹${log.related_data.investment_amount_inr.toLocaleString()}` : '';
                     description = `${log.actor_name} requested investment in ${log.facility_name} ${amount}`;
                   } else if (log.action_subtype === 'approved' && log.target_type === 'stakeholder') {
                     Icon = CheckCircle;
                     badgeColor = 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
                     title = 'Investment Approved';
-                    const amount = log.related_data?.amount_inr ? `₹${log.related_data.amount_inr.toLocaleString()}` : '';
+                    const amount = log.related_data?.investment_amount_inr ? `₹${log.related_data.investment_amount_inr.toLocaleString()}` : '';
                     description = `Investment request was approved at ${log.facility_name} ${amount}`;
+                  } else if (log.action_subtype === 'payment_received') {
+                    Icon = CheckCircle;
+                    badgeColor = 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400';
+                    title = 'Payment Received';
+                    const stakeholderName = log.related_data?.from_stakeholder || log.actor_name || 'Stakeholder';
+                    const paymentAmount = log.related_data?.amount_inr ? `₹${log.related_data.amount_inr.toLocaleString()}` : '';
+                    const paymentDate = log.created_at ? new Date(log.created_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Today';
+                    description = `${stakeholderName} paid ${paymentAmount} investment on ${paymentDate} for ${log.facility_name}`;
                   }
                   
                   return (

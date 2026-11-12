@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Package, TrendingUp, Archive, AlertCircle, HardDrive, MapPin, Layers } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
+import { useCapacityStore } from '../../stores/useCapacityStore';
 import { supabase } from '../../lib/supabase';
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
 import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
@@ -10,14 +11,16 @@ import { convertKgToCrates, KG_PER_CRATE } from '../../utils/units';
 const OwnerInventory: React.FC = () => {
   const { user } = useAuthStore();
   const { selectedFacilityId, selectedRoomId } = useSiteStore();
+  const { setCapacity } = useCapacityStore();
   
   const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<any[]>([]);
   const [farmerActions, setFarmerActions] = useState<any[]>([]);
   const [siteName, setSiteName] = useState<string>('');
+  const [capacityData, setCapacityData] = useState({ total: 0, used: 0 });
 
   useEffect(() => {
-    if (user?.id && selectedFacilityId && selectedRoomId) {
+    if (user?.id && selectedFacilityId) {
       loadFacilityData();
     }
   }, [user?.id, selectedFacilityId, selectedRoomId]);
@@ -35,19 +38,44 @@ const OwnerInventory: React.FC = () => {
 
       setSiteName(siteData?.facility_name || 'Your Site');
 
-      if (!selectedRoomId) {
-        setInventory([]);
-        setFarmerActions([]);
-        setLoading(false);
-        return;
+      // If no room selected, fetch first room
+      let roomToUse = selectedRoomId;
+      let totalCapacity = 0;
+      
+      if (!roomToUse) {
+        const { data: roomsData } = await supabase
+          .from('cold_storage_rooms')
+          .select('id, capacity_kg')
+          .eq('site_id', selectedFacilityId)
+          .limit(1);
+        
+        roomToUse = roomsData?.[0]?.id;
+        totalCapacity = roomsData?.[0]?.capacity_kg || 0;
+        
+        if (!roomToUse) {
+          setInventory([]);
+          setFarmerActions([]);
+          setCapacityData({ total: 0, used: 0 });
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Load capacity for selected room
+        const { data: roomData } = await supabase
+          .from('cold_storage_rooms')
+          .select('capacity_kg')
+          .eq('id', roomToUse)
+          .single();
+        
+        totalCapacity = roomData?.capacity_kg || 0;
       }
 
-      // Simple query first - just get the allocations without nested joins
-      console.log('📍 Starting batch_room_allocations query for room:', selectedRoomId);
+      // Query allocations with all data needed
+      console.log('📍 Starting batch_room_allocations query for room:', roomToUse);
       const { data: allocationData, error: allocError } = await supabase
         .from('batch_room_allocations')
         .select('*')
-        .eq('room_id', selectedRoomId)
+        .eq('room_id', roomToUse)
         .order('assigned_at', { ascending: false });
 
       if (allocError) {
@@ -55,6 +83,7 @@ const OwnerInventory: React.FC = () => {
         console.error('Error details:', { code: allocError.code, message: allocError.message });
         setInventory([]);
         setFarmerActions([]);
+        setCapacityData({ total: totalCapacity, used: 0 });
         setLoading(false);
         return;
       }
@@ -76,7 +105,7 @@ const OwnerInventory: React.FC = () => {
 
       const { data: batchData, error: batchError } = await supabase
         .from('batches')
-        .select('*, products(name)')
+        .select('*')
         .in('id', batchIds);
 
       if (batchError) {
@@ -88,6 +117,23 @@ const OwnerInventory: React.FC = () => {
       }
 
       console.log('✅ Batches found:', batchData?.length || 0);
+
+      // Extract product IDs and fetch product names
+      const productIds = (batchData || [])
+        .map((b: any) => b.product_id)
+        .filter(Boolean);
+      
+      let productMap = new Map();
+      if (productIds.length > 0) {
+        const { data: productData } = await supabase
+          .from('products')
+          .select('id, name')
+          .in('id', productIds);
+        
+        productMap = new Map((productData || []).map((p: any) => [p.id, p.name]));
+      }
+
+      console.log('✅ Products found:', productMap.size);
 
       // Fetch sales data for these batches - to show what was removed
       console.log('💰 Fetching sales for these batches...');
@@ -122,6 +168,31 @@ const OwnerInventory: React.FC = () => {
         salesByBatch.get(sale.batch_id).push(sale);
       });
 
+      console.log('🔍 Detailed Capacity Debug:');
+      console.log('  - Total active allocations (removed_at IS NULL):', (allocationData || []).filter((a: any) => !a.removed_at).length);
+      
+      // NOW calculate used capacity accounting for sales
+      let updatedUsedCapacity = 0;
+      (allocationData || []).forEach((alloc: any) => {
+        if (alloc.removed_at) {
+          console.log('  - Skipping allocation (removed_at is set):', { batch_id: alloc.batch_id, quantity_kg: alloc.quantity_kg, removed_at: alloc.removed_at });
+          return;
+        }
+        const batchSales = salesByBatch.get(alloc.batch_id) || [];
+        const totalSoldKg = batchSales.reduce((s: number, sale: any) => s + (Number(sale.quantity_kg) || 0), 0);
+        const remainingKg = Math.max(0, Number(alloc.quantity_kg) || 0 - totalSoldKg);
+        console.log('  - Active allocation:', { batch_id: alloc.batch_id, allocated_kg: alloc.quantity_kg, sold_kg: totalSoldKg, remaining_kg: remainingKg });
+        updatedUsedCapacity += remainingKg;
+      });
+      
+      console.log('💾 Final Capacity:', { totalCapacity, updatedUsedCapacity, percentOccupied: ((updatedUsedCapacity / totalCapacity) * 100).toFixed(1) + '%' });
+      
+      // Update capacity with accurate remaining amount
+      setCapacityData({ total: totalCapacity, used: updatedUsedCapacity });
+      // Also publish to shared store for OwnerDashboard to use
+      const percentage = totalCapacity > 0 ? Number(((updatedUsedCapacity / totalCapacity) * 100).toFixed(1)) : 0;
+      setCapacity({ total: totalCapacity, used: updatedUsedCapacity, percentage });
+
       // Transform the data
       const storedInventory: any[] = [];
       const removedActions: any[] = [];
@@ -130,8 +201,7 @@ const OwnerInventory: React.FC = () => {
         const batch = batchMap.get(allocation.batch_id);
         if (!batch) return; // Skip if batch not found
 
-        const products = batch.products;
-        const productName = Array.isArray(products) ? products[0]?.name : products?.name;
+        const productName = productMap.get(batch.product_id) || 'Unknown Product';
         const farmerName = farmerMap.get(batch.farmer_id) || 'Unknown Farmer';
         
         // Get sales for this batch
@@ -151,29 +221,24 @@ const OwnerInventory: React.FC = () => {
           total_sold_kg: totalSoldKg
         };
 
-        // If batch has sales, add removal log entry (one entry per total sales, not per individual sale)
-        if (batchSales.length > 0) {
-          removedActions.push({
-            id: `removed-${batch.id}`,
-            batch_code: batch.batch_code,
-            farmer_name: farmerName,
-            product_name: productName || 'Unknown Product',
-            quantity_kg: totalSoldKg,
-            quantity_crates: totalSoldKg / KG_PER_CRATE,
-            action_type: 'removed',
-            action_date: batchSales[0].sold_at, // Use earliest sale date
-            total_sales: batchSales.length
+        // ONLY add to storedInventory if this batch has REMAINING quantity
+        // Show the batch if: removed_at is null AND there's remaining quantity after sales
+        const remainingInStorage = (allocation.quantity_kg || 0) - totalSoldKg;
+        
+        if (allocation.removed_at === null && remainingInStorage > 0) {
+          storedInventory.push({
+            ...transformedItem,
+            quantity_kg: remainingInStorage  // Show only remaining, not original allocation
           });
         }
-
-        // Add the batch itself (whether stored or removed from room)
-        if (allocation.removed_at === null) {
-          storedInventory.push(transformedItem);
-        } else {
+        
+        // Add to removals if: batch has been explicitly removed OR has any sales
+        if (allocation.removed_at !== null || totalSoldKg > 0) {
           removedActions.push({
             ...transformedItem,
+            quantity_kg: allocation.removed_at !== null ? allocation.quantity_kg : totalSoldKg,  // Show removed_at qty OR sold qty
             action_type: 'removed',
-            action_date: allocation.removed_at
+            action_date: allocation.removed_at || (totalSoldKg > 0 ? batchSales[0].sold_at : new Date().toISOString())
           });
         }
       });
@@ -228,42 +293,42 @@ const OwnerInventory: React.FC = () => {
 
   const maxCrates = productAggregates.length > 0 ? Math.max(...productAggregates.map(p => p.crates)) : 0;
 
-  const [capacityData, setCapacityData] = useState({ total: 0, used: 0 });
+  // Calculate capacity from inventoryWithRemaining (which has correct remaining quantities after sales)
+  const totalRemainingKg = useMemo(() => {
+    return inventoryWithRemaining.reduce((sum, item) => sum + (item.remaining_kg || 0), 0);
+  }, [inventoryWithRemaining]);
 
-  useEffect(() => {
-    const loadCapacityData = async () => {
-      try {
-        if (!selectedFacilityId || !selectedRoomId) {
-          setCapacityData({ total: 0, used: 0 });
-          return;
-        }
-
-        // Get capacity for the selected room
-        const { data: roomData } = await supabase
-          .from('cold_storage_rooms')
-          .select('capacity_kg')
-          .eq('id', selectedRoomId)
-          .single();
-
-        const totalCapacity = roomData?.capacity_kg || 0;
-
-        // Calculate used capacity based on remaining inventory (after sales)
-        const usedCapacity = inventoryWithRemaining.reduce((sum, item) => sum + (item.remaining_kg || 0), 0);
-        
-        console.log('Capacity Debug:', { totalCapacity, usedCapacity, items: inventoryWithRemaining.length });
-        setCapacityData({ total: totalCapacity, used: usedCapacity });
-      } catch (error) {
-        console.error('Error loading capacity data:', error);
-      }
-    };
-    
-    if (selectedFacilityId && selectedRoomId) {
-      loadCapacityData();
-    }
-  }, [selectedFacilityId, selectedRoomId, inventoryWithRemaining]);
-
-  const occupiedPct = capacityData.total > 0 ? (capacityData.used / capacityData.total) * 100 : 0;
+  const occupiedPct = capacityData.total > 0 ? (totalRemainingKg / capacityData.total) * 100 : 0;
   const availablePct = Math.max(0, 100 - occupiedPct);
+
+  // Handle removal of batch from storage
+  const handleRemoveBatch = async (batchId: string) => {
+    if (!selectedRoomId) return;
+    
+    try {
+      const response = await fetch('http://localhost:8000/api/inventory/allocation/', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_id: batchId,
+          room_id: selectedRoomId,
+          reason: 'Manually removed from storage'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Error: ${error.detail || 'Failed to remove batch'}`);
+        return;
+      }
+
+      // Reload inventory after successful removal
+      await loadFacilityData();
+    } catch (error) {
+      console.error('Error removing batch:', error);
+      alert('Failed to remove batch from storage');
+    }
+  };
 
   return (
     <div className="p-8 max-w-[1400px] mx-auto min-h-[calc(100vh-64px)] overflow-hidden">
@@ -363,11 +428,11 @@ const OwnerInventory: React.FC = () => {
                 <div className="mt-8 w-full flex justify-between px-8">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-red-500 dark:text-red-400">{occupiedPct.toFixed(1)}%</div>
-                    <div className="text-sm font-medium text-slate-500 uppercase tracking-wider mt-1">Occupied / {capacityData.used}kg</div>
+                    <div className="text-sm font-medium text-slate-500 uppercase tracking-wider mt-1">Occupied / {totalRemainingKg.toFixed(0)}kg</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">{availablePct.toFixed(1)}%</div>
-                    <div className="text-sm font-medium text-slate-500 uppercase tracking-wider mt-1">Available / {capacityData.total - capacityData.used}kg</div>
+                    <div className="text-sm font-medium text-slate-500 uppercase tracking-wider mt-1">Available / {(capacityData.total - totalRemainingKg).toFixed(0)}kg</div>
                   </div>
                 </div>
               </div>
@@ -398,7 +463,7 @@ const OwnerInventory: React.FC = () => {
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farmer Name</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product Name</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quantity</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Action</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
                     </tr>
                   </thead>

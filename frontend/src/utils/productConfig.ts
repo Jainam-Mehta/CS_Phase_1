@@ -1,7 +1,7 @@
 /**
  * Product Configuration
  * Defines optimal temperature thresholds for different products
- * Updated for ColdSense AI Farmer Module Refactor
+ * Updated for SystmII Farmer Module Refactor
  */
 
 export interface ProductConfig {

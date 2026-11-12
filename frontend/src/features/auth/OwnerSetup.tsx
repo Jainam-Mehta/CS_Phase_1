@@ -6,9 +6,13 @@ import { useSiteStore } from '../../stores/useSiteStore';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import SearchableSelect from '../../components/ui/SearchableSelect';
-import { Warehouse, ChevronRight, ChevronLeft, Plus, Check, AlertCircle, Thermometer, Droplets, Gauge, DoorOpen, Activity, Leaf, Flame, Zap, Battery, Fan, Shield, Droplet, AlertTriangle, Waves, Activity as Vibration, Sun, Wind, Cloud, Sprout, FlaskConical, Lightbulb, Move, ThermometerSun, CloudSun } from 'lucide-react';
+import { Warehouse, ChevronRight, ChevronLeft, Plus, Check, AlertCircle, Thermometer, Droplets, Gauge, DoorOpen, Activity, Leaf, Flame, Zap, Battery, Fan, Shield, Droplet, AlertTriangle, Waves, Activity as Vibration, Sun, Wind, Cloud, Sprout, FlaskConical, Lightbulb, Move, ThermometerSun, CloudSun, MapPin } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getOwnerRoleId } from '../../services/roleService';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 import type { State, District, Locality, OwnerCompany, Site, Facility, ColdStorageRoom, SensorDevice } from '../../lib/supabase';
 import { 
   SENSOR_REGISTRY, 
@@ -57,6 +61,7 @@ interface OwnerSetupData {
   district: string;
   siteName: string;
   locality: string;
+  code: string; // NEW: Site-specific facility code
   
   // Owner company data
   contactEmail: string;
@@ -129,6 +134,7 @@ const OwnerSetup: React.FC = () => {
     storageCapacityTons: 1, // Default 1 ton
     numRooms: 1, // Default 1 room
     sensorQuantities: {}, // No defaults - owner must select
+    code: '', // NEW: Site code field
   });
   
   // Validation error state
@@ -310,13 +316,25 @@ const OwnerSetup: React.FC = () => {
     if (locality) {
       console.log('Locality selected:', localityName, 'ID:', locality.id, typeof locality.id);
       setSelectedLocalityId(locality.id);
-      setSetupData(prev => ({ ...prev, locality: localityName }));
+      // Auto-fill code with locality's pincode
+      const pincode = locality.pincode || '';
+      setSetupData(prev => ({ ...prev, locality: localityName, code: pincode }));
     }
   };
 
   const handleCreateSite = async () => {
     if (!setupData.state || !setupData.district || !setupData.siteName) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!setupData.code || !setupData.code.trim()) {
+      setError('Facility CODE is required');
+      return;
+    }
+
+    if (setupData.code.trim().length !== 6 || !/^\d{6}$/.test(setupData.code.trim())) {
+      setError('CODE must be exactly 6 digits');
       return;
     }
 
@@ -345,7 +363,7 @@ const OwnerSetup: React.FC = () => {
       // 2. Fetch profile, or create on-the-fly if missing
       let { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, owner_company_id')
+        .select('id')
         .eq('id', authUserId)
         .maybeSingle();
 
@@ -359,12 +377,13 @@ const OwnerSetup: React.FC = () => {
           .from('profiles')
           .upsert({
             id: authUserId,
+            role_id: await getOwnerRoleId(),
+            user_type: 'owner',
             email: session?.user?.email || user?.email || '',
             full_name: user?.name || 'Owner',
-            role: 'owner',
             is_active: true
           }, { onConflict: 'id' })
-          .select('id, owner_company_id')
+          .select('id')
           .single();
 
         if (createError) {
@@ -396,43 +415,47 @@ const OwnerSetup: React.FC = () => {
       const stateName = states.find(s => s.id === selectedStateId)?.name || setupData.state || '';
       const districtName = districts.find(d => d.id === selectedDistrictId)?.name || setupData.district || '';
 
-      // 5. Ensure Owner Company exists
-      if (!profile.owner_company_id) {
-        const { data: ownerCompany, error: companyError } = await supabase
-          .from('owner_companies')
-          .insert({
-            company_name: `${siteName} Company`,
-            contact_email: setupData.contactEmail || session?.user?.email || user?.email || '',
-            phone: setupData.phone || '',
-            address: '',
-            city: districtName,
-            district: districtName,
-            state: stateName,
-            country: 'India',
-          })
-          .select()
-          .single();
+      // 5. Generate unique site code
+      // If pincode already exists for this owner, append suffix: s001, s002, etc.
+      let siteCode = setupData.code.trim().toUpperCase();
+      let baseCode = siteCode;
+      let counter = 1; // Start from s001
+      
+      // Check if this site_code already exists for this owner
+      while (true) {
+        const { data: existingCode, error: codeError } = await supabase
+          .from('sites')
+          .select('id')
+          .eq('owner_profile_id', profile.id)
+          .eq('site_code', siteCode)
+          .maybeSingle();
 
-        if (companyError) {
-          console.error('Owner company creation error:', companyError);
-          throw new Error(`Company creation error: ${companyError.message || companyError.details || JSON.stringify(companyError)}`);
+        if (codeError) {
+          console.warn('Error checking site code:', codeError);
+          break; // Continue even if error, let the insert fail if there's a real conflict
         }
 
-        // Link company to profile
-        const { error: profileUpdateError } = await supabase
-          .from('profiles')
-          .update({ owner_company_id: ownerCompany.id })
-          .eq('id', profile.id);
-          
-        if (profileUpdateError) {
-          console.error('Profile update error:', profileUpdateError);
+        if (!existingCode) {
+          // Site code is unique, use it
+          break;
+        }
+
+        // Site code exists, try next number: s001, s002, etc.
+        siteCode = `${baseCode}s${String(counter).padStart(3, '0')}`;
+        counter++;
+        
+        if (counter > 999) {
+          throw new Error('Unable to generate unique site code (too many variants)');
         }
       }
+
+      console.log(`Generated site code: ${baseCode} → ${siteCode}`);
 
       // 6. Create site record
       const sitePayload = {
         owner_profile_id: profile.id,
         facility_name: siteName,
+        site_code: siteCode,
         address: '',
         state_id: selectedStateId,
         district_id: selectedDistrictId,
@@ -455,16 +478,16 @@ const OwnerSetup: React.FC = () => {
 
       setCreatedFacilityId(site.id);
 
-      // 7. Create multiple rooms with distributed capacity
+      // 8. Create multiple rooms with distributed capacity
       const totalCapacityKg = setupData.storageCapacityTons * 1000;
       const capacityPerRoomKg = Math.floor(totalCapacityKg / setupData.numRooms);
       
       const roomsToCreate = [];
       for (let i = 1; i <= setupData.numRooms; i++) {
-        const roomCode = `RM-${Math.floor(1000 + Math.random() * 9000)}`;
+        const roomCode = `${i}`; // Simple numeric code: 1, 2, 3, etc.
         roomsToCreate.push({
           room_code: roomCode,
-          room_name: `Storage Room ${String.fromCharCode(64 + i)}`, // Room A, Room B, etc.
+          room_name: `Room ${i}`, // Display name: Room 1, Room 2, etc.
           site_id: site.id,
           capacity_kg: capacityPerRoomKg,
           current_utilization_kg: 0,
@@ -539,15 +562,18 @@ const OwnerSetup: React.FC = () => {
             for (let i = 0; i < quantity; i++) {
               for (const dbSensorType of dbTypes) {
                 const serialNumber = generateSerialNumber();  // Generate ONCE per type
+                const sensorNumber = i + 1;  // 1, 2, 3...
                 console.log(`🔵 Inserting sensor: room=${roomId}, type=${dbSensorType}, code=${serialNumber}`);
                 const { error: sensorError } = await supabase
                   .from('sensor_devices')
                   .insert({
                     room_id: roomId,
                     site_id: createdFacilityId,
-                    sensor_name: `${sensorDef.displayName} Sensor`,
+                    sensor_name: `${sensorDef.displayName} ${sensorNumber}`,
                     sensor_type: dbSensorType,
                     sensor_code: serialNumber,
+                    slave_id: sensorNumber,
+                    sensor_number: sensorNumber,
                     status: 'Online',
                     is_active: true
                   });
@@ -576,15 +602,18 @@ const OwnerSetup: React.FC = () => {
           for (let i = 0; i < quantity; i++) {
             for (const dbSensorType of dbTypes) {
               const serialNumber = generateSerialNumber();  // Generate ONCE per type
+              const sensorNumber = i + 1;  // 1, 2, 3...
               console.log(`🔵 Inserting sensor: room=${roomId}, type=${dbSensorType}, code=${serialNumber}`);
               const { error: sensorError } = await supabase
                 .from('sensor_devices')
                 .insert({
                   room_id: roomId,
                   site_id: createdFacilityId,
-                  sensor_name: `${sensorDef.displayName} Sensor`,
+                  sensor_name: `${sensorDef.displayName} ${sensorNumber}`,
                   sensor_type: dbSensorType,
                   sensor_code: serialNumber,
+                  slave_id: sensorNumber,
+                  sensor_number: sensorNumber,
                   status: 'Online',
                   is_active: true
                 });
@@ -625,149 +654,182 @@ const OwnerSetup: React.FC = () => {
   const renderSiteStep = () => (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h2 className="text-2xl font-bold text-white mb-2">
           Create Your Cold Storage Site
         </h2>
-        <p className="text-gray-500 dark:text-gray-400">
+        <p className="text-slate-300">
           Enter the details for your cold storage facility
         </p>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
+        <div className="flex items-center gap-2 p-3 bg-rose-950/50 border border-rose-500/40 text-rose-300 rounded-lg text-sm">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
+        {/* Row 1: Site Name (Full Width) */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Site Name *
+          <label className="block text-xs font-semibold text-slate-200 mb-2">
+            Site Name <span className="text-rose-400">*</span>
           </label>
           <input
             type="text"
             value={setupData.siteName}
             onChange={(e) => setSetupData(prev => ({ ...prev, siteName: e.target.value }))}
-            placeholder="Enter site name (e.g., 'Central Cold Storage')"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="Central Cold Storage"
+            className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
             required
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Contact Email
-          </label>
-          <input
-            type="email"
-            value={setupData.contactEmail}
-            onChange={(e) => setSetupData(prev => ({ ...prev, contactEmail: e.target.value }))}
-            placeholder="Contact email (optional)"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
+        {/* Row 2: Contact Email & Phone (2 per line) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-200 mb-2">
+              Contact Email
+            </label>
+            <input
+              type="email"
+              value={setupData.contactEmail}
+              onChange={(e) => setSetupData(prev => ({ ...prev, contactEmail: e.target.value }))}
+              placeholder="contact@facility.com"
+              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-200 mb-2">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              value={setupData.phone}
+              onChange={(e) => setSetupData(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+              placeholder="9876543210"
+              maxLength={10}
+              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Phone
-          </label>
-          <input
-            type="tel"
-            value={setupData.phone}
-            onChange={(e) => setSetupData(prev => ({ ...prev, phone: e.target.value }))}
-            placeholder="Phone number (optional)"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
+        {/* Row 3: Storage Capacity & Number of Rooms (2 per line) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-200 mb-2">
+              Storage Capacity (tons) <span className="text-rose-400">*</span>
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              value={setupData.storageCapacityTons}
+              onChange={(e) => setSetupData(prev => ({ ...prev, storageCapacityTons: parseInt(e.target.value) || 1 }))}
+              placeholder="1"
+              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              required
+            />
+            <p className="text-[11px] text-slate-400 mt-1">1 ton = 1000 kg</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-200 mb-2">
+              Number of Rooms <span className="text-rose-400">*</span>
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              value={setupData.numRooms}
+              onChange={(e) => setSetupData(prev => ({ ...prev, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
+              placeholder="1"
+              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              required
+            />
+            <p className="text-[11px] text-slate-400 mt-1">1-20 rooms</p>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Storage Capacity (tons) *
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="1000"
-            step="1"
-            value={setupData.storageCapacityTons}
-            onChange={(e) => setSetupData(prev => ({ ...prev, storageCapacityTons: parseInt(e.target.value) || 1 }))}
-            placeholder="1"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            required
-          />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Maximum storage capacity in tons (1 ton = 1000 kg)
-          </p>
-        </div>
+        {/* Location Information Section */}
+        <div className="border-t border-slate-700 pt-5">
+          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-sky-400" />
+            Location Information
+          </h3>
 
-        {/* Number of Rooms */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Number of Rooms *
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="20"
-            step="1"
-            value={setupData.numRooms}
-            onChange={(e) => setSetupData(prev => ({ ...prev, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
-            placeholder="1"
-            className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            required
-          />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Number of cold storage rooms (1-20 rooms)
-          </p>
-        </div>
+          {/* Row 4: State & District (2 per line) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-200 mb-2">
+                State <span className="text-rose-400">*</span>
+              </label>
+              <SearchableSelect
+                placeholder="Select state"
+                options={states.map(s => s.name)}
+                value={setupData.state}
+                onChange={handleStateSelect}
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            State *
-          </label>
-          <SearchableSelect
-            placeholder="Select state"
-            options={states.map(s => s.name)}
-            value={setupData.state}
-            onChange={handleStateSelect}
-          />
-        </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-200 mb-2">
+                District <span className="text-rose-400">*</span>
+              </label>
+              <SearchableSelect
+                placeholder="Select district"
+                options={districts.map(d => d.name)}
+                value={setupData.district}
+                onChange={handleDistrictSelect}
+                disabled={!selectedStateId}
+              />
+            </div>
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            District *
-          </label>
-          <SearchableSelect
-            placeholder="Select district"
-            options={districts.map(d => d.name)}
-            value={setupData.district}
-            onChange={handleDistrictSelect}
-            disabled={!selectedStateId}
-          />
-        </div>
+          {/* Row 5: Locality & CODE (2 per line) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-200 mb-2">
+                Locality
+              </label>
+              <SearchableSelect
+                placeholder="Select locality"
+                options={localities.map(l => l.name)}
+                value={setupData.locality}
+                onChange={handleLocalitySelect}
+                disabled={!selectedDistrictId}
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Locality (Optional)
-          </label>
-          <SearchableSelect
-            placeholder="Select locality"
-            options={localities.map(l => l.name)}
-            value={setupData.locality}
-            onChange={handleLocalitySelect}
-            disabled={!selectedDistrictId}
-          />
+            <div>
+              <label className="block text-xs font-semibold text-slate-200 mb-2">
+                CODE <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={setupData.code}
+                onChange={(e) => setSetupData(prev => ({ ...prev, code: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                placeholder="000000"
+                maxLength={6}
+                className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                required
+              />
+              <p className="text-[11px] text-slate-400 mt-1">6-digit numeric code (immutable)</p>
+            </div>
+          </div>
         </div>
       </div>
 
       <Button
         type="button"
         variant="primary"
-        className="w-full"
+        className="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold rounded-lg shadow-lg shadow-sky-500/25 transition-all text-sm"
         loading={loading}
         onClick={handleCreateSite}
-        disabled={!setupData.state || !setupData.district || !setupData.siteName || setupData.storageCapacityTons < 1 || setupData.numRooms < 1 || setupData.numRooms > 20}
+        disabled={!setupData.state || !setupData.district || !setupData.siteName || !setupData.code || setupData.storageCapacityTons < 1 || setupData.numRooms < 1 || setupData.numRooms > 20}
       >
         Continue to Sensor Setup
         <ChevronRight className="h-4 w-4 ml-2" />
@@ -783,10 +845,10 @@ const OwnerSetup: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          <h2 className="text-2xl font-bold text-white mb-2">
             Configure Sensors
           </h2>
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-slate-300">
             {isMultiRoom 
               ? `Select sensor types for each room (${setupData.numRooms} rooms total)`
               : 'Select sensor types and quantities'}
@@ -795,15 +857,15 @@ const OwnerSetup: React.FC = () => {
 
         {/* Room Tabs - Only show if multiple rooms */}
         {isMultiRoom && (
-          <div className="flex gap-2 border-b border-gray-200 dark:border-slate-700 mb-4">
+          <div className="flex gap-2 border-b border-gray-400 mb-4">
             {Array.from({ length: setupData.numRooms }).map((_, index) => (
               <button
                 key={index}
                 onClick={() => setCurrentRoomIndex(index)}
                 className={`px-4 py-2 font-medium text-sm transition-colors ${
                   currentRoomIndex === index
-                    ? 'border-b-2 border-primary-600 text-primary-600 dark:text-primary-400'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                    ? 'border-b-2 border-blue-500 text-white font-bold'
+                    : 'text-gray-300 hover:text-white'
                 }`}
               >
                 Room {index + 1}
@@ -837,14 +899,14 @@ const OwnerSetup: React.FC = () => {
                 key={sensor.internalKey}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   isSelected
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-slate-700'
+                    ? 'border-blue-500 bg-blue-100 dark:bg-blue-50'
+                    : 'border-gray-300 dark:border-gray-400 bg-gray-50 dark:bg-gray-100'
                 }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                    <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                    <Icon className="h-5 w-5 text-gray-700" />
+                    <span className="font-semibold text-gray-900 text-sm">
                       {sensor.displayName}
                     </span>
                   </div>
@@ -875,15 +937,15 @@ const OwnerSetup: React.FC = () => {
                         }));
                       }
                     }}
-                    className="h-5 w-5 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
+                    className="h-5 w-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <p className="text-xs text-gray-700 mb-3">
                   Unit: {sensor.unit} • Category: {sensor.category}
                 </p>
                 {isSelected && (
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-600 dark:text-gray-400">Quantity:</label>
+                    <label className="text-xs text-gray-700">Quantity:</label>
                     <input
                       type="number"
                       min="1"
@@ -913,7 +975,7 @@ const OwnerSetup: React.FC = () => {
                           }));
                         }
                       }}
-                      className="w-20 px-2 py-1 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-20 px-2 py-1 text-sm bg-white text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 )}
@@ -926,7 +988,7 @@ const OwnerSetup: React.FC = () => {
           <Button
             type="button"
             variant="ghost"
-            className="flex-1"
+            className="flex-1 text-white hover:text-gray-200"
             onClick={handleBack}
             disabled={loading}
           >
@@ -949,47 +1011,69 @@ const OwnerSetup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">
-      {/* Show loading while verifying profile */}
-      {!profileVerified ? (
-        <Card variant="default" className="w-full max-w-md">
-          <CardContent className="p-8">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                Verifying Owner Profile...
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Please wait while we set up your account
-              </p>
-              {error && (
-                <div className="mt-4 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="w-full max-w-4xl">
-          <Card variant="default" className="w-full">
-            <CardHeader className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Warehouse className="h-8 w-8 text-white" />
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-sky-500 selection:text-white overflow-hidden">
+      {/* Role-Specific Background Animation (Cold Storage Facility: +30% brightness) */}
+      <RoleBackground role="owner" />
+
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full max-w-4xl mx-auto overflow-y-auto">
+        {!profileVerified ? (
+          <Card variant="default" className="w-full max-w-md bg-[#1A2A3A]/90 backdrop-blur-md border border-[#304458] shadow-2xl">
+            <CardContent className="p-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Verifying Owner Profile...
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Please wait while we set up your account
+                </p>
+                {error && (
+                  <div className="mt-4 p-3 bg-rose-950/50 border border-rose-500/40 text-rose-300 rounded-xl text-sm">
+                    {error}
+                  </div>
+                )}
               </div>
-              <CardTitle className="text-3xl">Owner Setup Wizard</CardTitle>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">
-                {currentStep === 'site' && 'Step 1 of 2: Create Site'}
-                {currentStep === 'sensors' && 'Step 2 of 2: Configure Sensors'}
-              </p>
-            </CardHeader>
-            <CardContent>
-              {currentStep === 'site' && renderSiteStep()}
-              {currentStep === 'sensors' && renderSensorsStep()}
             </CardContent>
           </Card>
-        </div>
-      )}
+        ) : (
+          <div className="w-full">
+            <Card variant="default" className="w-full bg-[#1A2A3A]/90 backdrop-blur-md border border-[#304458] shadow-2xl">
+              <CardHeader className="text-center">
+                <div className="w-14 h-14 bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-sky-500/25">
+                  <Warehouse className="h-7 w-7 text-white" />
+                </div>
+                <CardTitle className="text-2xl text-white">Owner Setup Wizard</CardTitle>
+                <p className="text-slate-300 text-sm mt-1">
+                  {currentStep === 'site' && 'Step 1 of 2: Create Site'}
+                  {currentStep === 'sensors' && 'Step 2 of 2: Configure Sensors'}
+                </p>
+              </CardHeader>
+              <CardContent>
+                {currentStep === 'site' && renderSiteStep()}
+                {currentStep === 'sensors' && renderSensorsStep()}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

@@ -191,3 +191,66 @@ async def create_batch(data: BatchCreate):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create batch: {e}")
+
+
+class AllocationRemovalRequest(BaseModel):
+    batch_id: str
+    room_id: str
+    reason: Optional[str] = None
+
+
+@router.delete("/allocation/", response_model=dict)
+async def remove_allocation(request: AllocationRemovalRequest):
+    """
+    Remove a batch from a room (soft delete) by setting removed_at timestamp.
+    This marks the allocation as removed without deleting data.
+    Triggers the net worth update for the farmer.
+    """
+    try:
+        # Verify allocation exists
+        check_resp = (
+            supabase.table("batch_room_allocations")
+            .select("id, batch_id, room_id, removed_at")
+            .eq("batch_id", request.batch_id)
+            .eq("room_id", request.room_id)
+            .maybeSingle()
+            .execute()
+        )
+        
+        if not check_resp.data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Allocation not found for batch {request.batch_id} in room {request.room_id}"
+            )
+        
+        allocation = check_resp.data
+        if allocation.get("removed_at"):
+            raise HTTPException(
+                status_code=400,
+                detail="This batch has already been removed from storage"
+            )
+        
+        # Soft delete: set removed_at timestamp
+        now = datetime.now(timezone.utc).isoformat()
+        update_resp = (
+            supabase.table("batch_room_allocations")
+            .update({"removed_at": now})
+            .eq("batch_id", request.batch_id)
+            .eq("room_id", request.room_id)
+            .execute()
+        )
+        
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to remove allocation")
+        
+        return {
+            "success": True,
+            "message": f"Batch {request.batch_id} removed from room {request.room_id}",
+            "removed_at": now,
+            "reason": request.reason or "Manual removal"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to remove allocation: {e}")

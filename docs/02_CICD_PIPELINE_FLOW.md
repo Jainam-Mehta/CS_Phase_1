@@ -1,4 +1,4 @@
-# SystemII - CI/CD Pipeline Flow Documentation
+# SystmII - CI/CD Pipeline Flow Documentation
 
 **Document Version:** 1.0  
 **Last Updated:** October 26, 2026  
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-This document describes the complete Continuous Integration/Continuous Deployment (CI/CD) pipeline for SystemII. The pipeline automates:
+This document describes the complete Continuous Integration/Continuous Deployment (CI/CD) pipeline for SystmII. The pipeline automates:
 - Code testing and validation
 - Docker image building
 - Automated deployment to GCP

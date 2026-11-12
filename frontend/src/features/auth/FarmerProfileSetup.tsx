@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useOnboarding } from '../../hooks/useOnboarding';
-import { getFarmerRoleId } from '../../services/roleService';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import SearchableSelect from '../../components/ui/SearchableSelect';
 import { User, MapPin, Calendar, Check, AlertCircle, Sprout, Phone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getFarmerRoleId } from '../../services/roleService';
 import type { State, District, Locality } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 
 const FarmerProfileSetup: React.FC = () => {
   const navigate = useNavigate();
@@ -164,16 +168,27 @@ const FarmerProfileSetup: React.FC = () => {
       // Get signup data from localStorage
       const signupData = JSON.parse(localStorage.getItem('signupData') || '{}');
 
-      // Verify session exists first
+      // Validate date of birth if provided
+      if (formData.dateOfBirth) {
+        const [day, month, year] = formData.dateOfBirth.split('/').map(Number);
+        const isValidDate = day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2040;
+        if (!isValidDate) {
+          setError('Please enter a valid date of birth (dd/mm/yyyy)');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Verify session exists first (reads from localStorage, no network call)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         throw new Error('No authenticated session found. Please complete signup first.');
       }
 
-      // Get auth user from Supabase
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('No authenticated user found');
+      // Use session.user instead of making another network call to getUser()
+      const user = session.user;
+      if (!user) {
+        throw new Error('No authenticated user found in session');
       }
 
       // Check if profile already exists to prevent duplicates
@@ -215,23 +230,29 @@ const FarmerProfileSetup: React.FC = () => {
       }
 
       // Get Farmer role UUID from database
-      const farmerRoleId = await getFarmerRoleId();
-      if (!farmerRoleId) {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'farmer')
+        .single();
+
+      if (roleError || !roles) {
         throw new Error('Farmer role not found in database. Please contact administrator.');
       }
 
-      const fullName = `${formData.firstName} ${formData.lastName || ''}`.trim();
+      const farmerRoleId = roles.id;
       const userEmail = signupData.email || user.email || '';
 
-      // Save profile to Supabase using canonical profiles schema (id = user.id)
+      // Save profile to Supabase using profiles table schema
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
+          role_id: farmerRoleId,  // Required: UUID reference to roles table
           email: userEmail,
-          full_name: fullName,
-          role: 'farmer',
-          phone: formData.phoneNumber || null,
+          user_type: 'farmer',
+          full_name: `${formData.firstName} ${formData.lastName || ''}`.trim(),
+          phone_number: formData.phoneNumber || null,
           is_active: true,
           state_id: selectedStateId || null,
           district_id: selectedDistrictId || null,
@@ -315,228 +336,153 @@ const FarmerProfileSetup: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Illustration Section */}
-        <div className="hidden lg:flex flex-col items-center justify-center">
-          <svg viewBox="0 0 400 400" className="w-full h-full max-w-md">
-            <defs>
-              <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#87CEEB" />
-                <stop offset="100%" stopColor="#E0F7FA" />
-              </linearGradient>
-              <linearGradient id="grassGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#90EE90" />
-                <stop offset="100%" stopColor="#228B22" />
-              </linearGradient>
-              <linearGradient id="sunGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#FFD700" />
-                <stop offset="100%" stopColor="#FFA500" />
-              </linearGradient>
-            </defs>
-            
-            {/* Sky */}
-            <rect x="0" y="0" width="400" height="400" fill="url(#skyGradient)" />
-            
-            {/* Sun */}
-            <circle cx="320" cy="80" r="50" fill="url(#sunGradient)" />
-            <g stroke="#FFD700" strokeWidth="3">
-              <line x1="320" y1="20" x2="320" y2="0" />
-              <line x1="320" y1="140" x2="320" y2="160" />
-              <line x1="260" y1="80" x2="240" y2="80" />
-              <line x1="380" y1="80" x2="400" y2="80" />
-              <line x1="280" y1="40" x2="265" y2="25" />
-              <line x1="360" y1="120" x2="375" y2="135" />
-              <line x1="280" y1="120" x2="265" y2="135" />
-              <line x1="360" y1="40" x2="375" y2="25" />
-            </g>
-            
-            {/* Clouds */}
-            <g fill="white" opacity="0.9">
-              <ellipse cx="100" cy="60" rx="40" ry="25" />
-              <ellipse cx="130" cy="50" rx="30" ry="20" />
-              <ellipse cx="70" cy="55" rx="25" ry="18" />
-              
-              <ellipse cx="250" cy="100" rx="35" ry="22" />
-              <ellipse cx="275" cy="92" rx="28" ry="18" />
-              <ellipse cx="225" cy="95" rx="22" ry="15" />
-            </g>
-            
-            {/* Mountains */}
-            <g fill="#6B8E23">
-              <polygon points="0,280 100,180 200,280" />
-              <polygon points="150,280 280,160 410,280" />
-              <polygon points="300,280 380,220 460,280" />
-            </g>
-            
-            {/* Grass/Fields */}
-            <rect x="0" y="280" width="400" height="120" fill="url(#grassGradient)" />
-            
-            {/* Trees */}
-            <g>
-              <rect x="45" y="260" width="10" height="40" fill="#8B4513" />
-              <ellipse cx="50" cy="250" rx="25" ry="30" fill="#228B22" />
-              
-              <rect x="320" y="250" width="12" height="50" fill="#8B4513" />
-              <ellipse cx="326" cy="235" rx="30" ry="35" fill="#006400" />
-              
-              <rect x="180" y="270" width="8" height="30" fill="#8B4513" />
-              <ellipse cx="184" cy="260" rx="20" ry="25" fill="#32CD32" />
-            </g>
-            
-            {/* Crops */}
-            <g fill="#FFD700">
-              <ellipse cx="80" cy="300" rx="5" ry="8" />
-              <ellipse cx="120" cy="310" rx="5" ry="8" />
-              <ellipse cx="160" cy="295" rx="5" ry="8" />
-              <ellipse cx="200" cy="305" rx="5" ry="8" />
-              <ellipse cx="240" cy="300" rx="5" ry="8" />
-              <ellipse cx="280" cy="310" rx="5" ry="8" />
-              <ellipse cx="320" cy="295" rx="5" ry="8" />
-              <ellipse cx="360" cy="305" rx="5" ry="8" />
-            </g>
-            
-            {/* Irrigation */}
-            <g stroke="#4169E1" strokeWidth="2" opacity="0.6">
-              <path d="M40 340 Q80 330 120 340 Q160 350 200 340 Q240 330 280 340 Q320 350 360 340" fill="none" />
-              <path d="M60 350 Q100 340 140 350 Q180 360 220 350 Q260 340 300 350 Q340 360 380 350" fill="none" />
-            </g>
-            
-            {/* Farmer silhouette */}
-            <g fill="#8B4513">
-              <ellipse cx="100" cy="320" rx="15" ry="12" />
-              <rect x="90" y="330" width="20" height="30" rx="3" />
-              <rect x="85" y="332" width="8" height="20" rx="2" />
-              <rect x="107" y="332" width="8" height="20" rx="2" />
-            </g>
-          </svg>
-          
-          <div className="text-center mt-6">
-            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Farmer!</h2>
-            <p className="text-white/80">Your journey to smart farming begins here</p>
-          </div>
-        </div>
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-emerald-500 selection:text-white overflow-hidden">
+      {/* Role-Specific Background Animation (Farmer: Agricultural Landscape, +70% brightness, sunny sky, dual windmills, vibrant crops) */}
+      <RoleBackground role="farmer" />
 
-        {/* Form Card */}
-        <Card variant="default" className="w-full max-w-lg">
-          <CardHeader className="text-center relative">
-            {/* Step Indicator */}
-            <div className="absolute top-4 right-4">
-              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full max-w-2xl mx-auto">
+        <div className="w-full rounded-2xl bg-[#1A2A3A]/90 backdrop-blur-md border border-[#304458] p-6 sm:p-8 shadow-2xl">
+          {/* Header inside card */}
+          <div className="text-center mb-6 relative">
+            <div className="absolute top-0 right-0">
+              <span className="px-3 py-1 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold rounded-full">
                 Step 2/2
               </span>
             </div>
             
-            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Sprout className="h-8 w-8 text-white" />
+            <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/25">
+              <Sprout className="h-7 w-7 text-white" />
             </div>
-            <CardTitle className="text-3xl">Farmer Profile Setup</CardTitle>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Let's set up your profile to get started
+            <h2 className="text-2xl font-bold text-white">Farmer Profile Setup</h2>
+            <p className="text-slate-300 text-sm mt-1">
+              Connect your harvest to intelligent cold chain storage
             </p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    First Name *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange('firstName', e.target.value)}
-                      placeholder="Enter your first name"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      required
-                    />
-                  </div>
-                </div>
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Last Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange('lastName', e.target.value)}
-                      placeholder="Enter your last name"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-rose-950/50 border border-rose-500/40 text-rose-300 rounded-xl text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {error}
               </div>
-
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Phone Number
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  First Name <span className="text-emerald-400">*</span>
                 </label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
-                    type="tel"
-                    value={formData.phoneNumber}
-                    onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                    placeholder="Enter your phone number"
-                    pattern="[0-9]{10}"
-                    maxLength={10}
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    placeholder="Enter your first name"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional - 10 digits if provided</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Last Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    placeholder="Enter your last name"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
+              </div>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Gender
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => handleInputChange('gender', e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Phone Number (10 digits)
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleInputChange('phoneNumber', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  maxLength={10}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Date of Birth
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                      if (val.length >= 2) val = val.slice(0, 2) + '/' + val.slice(2);
+                      if (val.length >= 5) val = val.slice(0, 5) + '/' + val.slice(5, 9);
+                      handleInputChange('dateOfBirth', val);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  State *
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Gender
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <select
+                  value={formData.gender}
+                  onChange={(e) => handleInputChange('gender', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="" className="bg-slate-900 text-slate-300">Select gender</option>
+                  <option value="male" className="bg-slate-900 text-white">Male</option>
+                  <option value="female" className="bg-slate-900 text-white">Female</option>
+                  <option value="other" className="bg-slate-900 text-white">Other</option>
+                  <option value="prefer_not_to_say" className="bg-slate-900 text-white">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Location Section */}
+            <div className="border-t border-slate-700 pt-4">
+              <h3 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Location Information
+              </h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    State <span className="text-emerald-400">*</span>
+                  </label>
                   <SearchableSelect
                     value={formData.state}
                     onChange={handleStateSelect}
@@ -544,14 +490,11 @@ const FarmerProfileSetup: React.FC = () => {
                     placeholder="Search for your state..."
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  District *
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    District <span className="text-emerald-400">*</span>
+                  </label>
                   <SearchableSelect
                     value={formData.district}
                     onChange={handleDistrictSelect}
@@ -560,14 +503,11 @@ const FarmerProfileSetup: React.FC = () => {
                     disabled={!selectedStateId}
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Locality
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Locality
+                  </label>
                   <SearchableSelect
                     value={formData.locality}
                     onChange={handleLocalitySelect}
@@ -577,33 +517,40 @@ const FarmerProfileSetup: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="terms"
-                  checked={acceptTerms}
-                  onChange={(e) => setAcceptTerms(e.target.checked)}
-                  className="mt-1 rounded"
-                  required
-                />
-                <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-400">
-                  I accept the Terms & Conditions *
-                </label>
-              </div>
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-1 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
+                required
+              />
+              <label htmlFor="terms" className="text-xs text-slate-300">
+                I accept the Terms &amp; Conditions <span className="text-emerald-400">*</span>
+              </label>
+            </div>
 
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-                loading={loading}
-              >
-                Create Account
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/25 transition-all text-sm"
+              loading={loading}
+            >
+              Complete Registration &rarr;
+            </Button>
+          </form>
+        </div>
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

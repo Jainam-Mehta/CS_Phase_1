@@ -86,7 +86,7 @@ export async function roleExists(roleName: string): Promise<boolean> {
  * @returns The Farmer role UUID or null
  */
 export async function getFarmerRoleId(): Promise<string | null> {
-  return getRoleIdByName('Farmer');
+  return getRoleIdByName('farmer');
 }
 
 /**
@@ -94,7 +94,7 @@ export async function getFarmerRoleId(): Promise<string | null> {
  * @returns The Owner role UUID or null
  */
 export async function getOwnerRoleId(): Promise<string | null> {
-  return getRoleIdByName('Owner');
+  return getRoleIdByName('owner');
 }
 
 /**
@@ -102,15 +102,7 @@ export async function getOwnerRoleId(): Promise<string | null> {
  * @returns The Stakeholder role UUID or null
  */
 export async function getStakeholderRoleId(): Promise<string | null> {
-  return getRoleIdByName('Stakeholder');
-}
-
-/**
- * Get the Admin role UUID
- * @returns The Admin role UUID or null
- */
-export async function getAdminRoleId(): Promise<string | null> {
-  return getRoleIdByName('Admin');
+  return getRoleIdByName('stakeholder');
 }
 
 /**

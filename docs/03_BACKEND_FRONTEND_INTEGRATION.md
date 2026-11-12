@@ -1,4 +1,4 @@
-# SystemII - Backend & Frontend Integration Guide
+# SystmII - Backend & Frontend Integration Guide
 
 **Document Version:** 1.0  
 **Last Updated:** October 26, 2026  

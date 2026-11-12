@@ -19,8 +19,9 @@ pydantic==2.8.2
 pydantic-settings==2.4.0
 email-validator==2.2.0
 
-# Scheduling (used by simulators)
+# Scheduling (used by simulators and daily jobs)
 apscheduler==3.10.4
+pytz==2024.1
 
 # Utilities
 python-dateutil==2.9.0

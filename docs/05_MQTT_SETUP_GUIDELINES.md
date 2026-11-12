@@ -1,4 +1,4 @@
-# SystemII - MQTT Setup Guidelines (GCP Implementation)
+# SystmII - MQTT Setup Guidelines (GCP Implementation)
 
 **Document Version:** 1.0  
 **Last Updated:** October 26, 2026  

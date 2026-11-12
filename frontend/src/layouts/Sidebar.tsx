@@ -1,3 +1,4 @@
+import { SystmIcon } from '../components/common/SystmLogo';
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -111,25 +112,23 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       )}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-slate-800">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">C</span>
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-slate-800">
+          {!collapsed && (
+            <div className="flex items-center gap-2.5">
+              <SystmIcon size={36} />
+              <span className="font-extrabold text-xl tracking-tight text-gray-900 dark:text-white leading-tight">
+                Systm<span className="text-sky-500 dark:text-sky-400">II</span>
+              </span>
             </div>
-            <span className="font-bold text-xl text-gray-900 dark:text-gray-100">
-              SystemII
-            </span>
-          </div>
-        )}
-        {collapsed && (
-          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center mx-auto">
-            <span className="text-white font-bold text-lg">C</span>
-          </div>
-        )}
-        <button
+          )}
+          {collapsed && (
+            <div className="mx-auto">
+              <SystmIcon size={36} />
+            </div>
+          )}
+          <button
           onClick={onToggle}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto"
         >
           {collapsed ? (
             <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />

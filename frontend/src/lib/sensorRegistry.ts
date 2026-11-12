@@ -1,5 +1,5 @@
 /**
- * Sensor Registry - Single Source of Truth for ColdSense AI Platform
+ * Sensor Registry - Single Source of Truth for SystmII Platform
  * 
  * This registry defines all sensor types used across the entire platform:
  * - Owner Setup

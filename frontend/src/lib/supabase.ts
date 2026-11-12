@@ -47,6 +47,7 @@ export interface Locality {
   id: string;
   name: string;
   district_id: string;
+  pincode?: string;
   created_at: string;
 }
 

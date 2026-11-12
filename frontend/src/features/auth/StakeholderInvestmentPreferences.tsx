@@ -7,6 +7,10 @@ import { MapPin, Building2, Plus, Check, AlertCircle, Briefcase } from 'lucide-r
 import { supabase } from '../../lib/supabase';
 import { logStakeholderRequest } from '../../lib/activityLogger';
 import type { State, Site, ColdStorageRoom } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 
 interface Facility {
   id: string;
@@ -50,19 +54,21 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       }
 
       // Check if profile exists and is a stakeholder
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, role')
+        .select('id, user_type')
         .eq('id', session.user.id)
         .single();
 
-      if (!profile) {
+      if (profileError || !profile) {
+        console.error('Profile fetch error:', profileError);
         setError('Invalid profile. Please complete stakeholder profile setup first.');
         setTimeout(() => navigate('/stakeholder-profile-setup'), 3000);
         return;
       }
 
-      if (profile.role !== 'stakeholder') {
+      if (profile.user_type !== 'stakeholder') {
+        console.error('Invalid user type:', profile.user_type);
         setError('Access denied. Stakeholder role required.');
         setTimeout(() => navigate('/stakeholder/map'), 3000);
         return;
@@ -98,7 +104,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       // Fetch sites in this state directly mapped
       const { data: sitesData, error: sitesError } = await supabase
         .from('sites')
-        .select('id, facility_name, owner_profile_id, state_id, district_id, profiles(full_name, owner_company_id)')
+        .select('id, facility_name, owner_profile_id, state_id, district_id, profiles(full_name)')
         .eq('state_id', stateId)
         .eq('is_active', true);
 
@@ -158,8 +164,8 @@ const StakeholderInvestmentPreferences: React.FC = () => {
 
       setFacilities(facilityList);
     } catch (err) {
-      console.error('Error loading facilities:', err);
-      setError('Failed to load facilities. Please try again.');
+      console.error('Error loading sites:', err);
+      setError('Failed to load sites. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -230,14 +236,11 @@ const StakeholderInvestmentPreferences: React.FC = () => {
       const investments = selectedFacilities.map((facility) => ({
         stakeholder_id: profile.id,
         site_id: facility.id,
-        investment_amount: facility.investmentAmount,
-        investment_amount_inr: facility.investmentAmount, // Store in INR as well
-        investment_date: new Date().toISOString(),
+        investment_amount_inr: facility.investmentAmount,
+        investment_date: new Date().toISOString().split('T')[0], // Send only date part (YYYY-MM-DD)
         status: 'Pending', // Awaiting owner approval
-        roi_percentage: 0,
         roi_percentage_estimate: 0,
-        carbon_credits: 0,
-        owner_company_id: null
+        carbon_credits: 0
       }));
 
       // Insert into stakeholder_investments (one at a time to catch errors better)
@@ -309,14 +312,34 @@ const StakeholderInvestmentPreferences: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white" />
+      <div className="relative min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <RoleBackground role="stakeholder" />
+        <div className="relative z-20 flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-400" />
+          <p className="text-sm text-slate-300">Loading investment opportunities...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 p-4">
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-amber-500 selection:text-white overflow-hidden">
+      {/* Role-Specific Background Animation (Stakeholder: Financial Growth) */}
+      <RoleBackground role="stakeholder" />
+
+      {/* Sleek Dark Header Bar (#1A2A3A - 68px, Perfectly Contained) */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-[#1A2A3A] border-b border-[#2C3E50] shadow-xl shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="dark" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col px-4 py-8 z-20 w-full max-w-6xl mx-auto overflow-y-auto">
+
       <div className="max-w-6xl mx-auto">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-2">
@@ -346,7 +369,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
             {/* Section 1: State Selection */}
             <Card variant="default">
               <CardHeader>
-                <CardTitle>Select State</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-white">Select State</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="relative">
@@ -356,9 +379,9 @@ const StakeholderInvestmentPreferences: React.FC = () => {
                     onChange={(e) => handleStateChange(e.target.value)}
                     className="w-full pl-10 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="">Select a state</option>
+                    <option value="" className="text-gray-900">Select a state</option>
                     {states.map((state) => (
-                      <option key={state.id} value={state.id}>
+                      <option key={state.id} value={state.id} className="text-gray-900">
                         {state.name}
                       </option>
                     ))}
@@ -371,7 +394,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
             {selectedStateId && facilities.length > 0 && (
               <Card variant="default">
                 <CardHeader>
-                  <CardTitle>Available Facilities</CardTitle>
+                  <CardTitle className="text-gray-900 dark:text-white">Available Facilities</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -416,7 +439,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
             {selectedStateId && facilities.length === 0 && (
               <Card variant="default">
                 <CardContent className="p-6 text-center text-gray-500 dark:text-gray-400">
-                  No facilities available in this state.
+                  No sites available in this state.
                 </CardContent>
               </Card>
             )}
@@ -425,7 +448,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
             {selectedFacilities.length > 0 && (
               <Card variant="default">
                 <CardHeader>
-                  <CardTitle>Selected Facilities ({selectedFacilities.length})</CardTitle>
+                  <CardTitle className="text-gray-900 dark:text-white">Selected Facilities ({selectedFacilities.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -458,6 +481,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleRemoveFacility(facility.id)}
+                          className="text-gray-900 dark:text-gray-100"
                         >
                           Remove
                         </Button>
@@ -469,7 +493,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
                     <Button
                       variant="outline"
                       onClick={handleAddAnother}
-                      className="flex-1"
+                      className="flex-1 text-gray-900 dark:text-gray-100"
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Another Facility
@@ -478,7 +502,7 @@ const StakeholderInvestmentPreferences: React.FC = () => {
                       variant="primary"
                       onClick={handleSubmit}
                       disabled={saving}
-                      className="flex-1"
+                      className="flex-1 text-white"
                     >
                       {saving ? 'Saving...' : 'Save Preferences'}
                     </Button>
@@ -497,6 +521,15 @@ const StakeholderInvestmentPreferences: React.FC = () => {
           </div>
         )}
       </div>
+    
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-[#CBD5E1] border-t border-[#2C3E50] bg-[#1A2A3A]/95 backdrop-blur-md z-30 shadow-lg shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

@@ -228,7 +228,7 @@ export const useMarketStore = create<MarketState>()(
       },
     }),
     {
-      name: 'coldsense-market-store',
+      name: 'systmii-market-store',
       // Only persist prices and predictions, not loading/error states
       partialize: (state) => ({
         currentPrices: state.currentPrices,

@@ -24,13 +24,14 @@ const OwnerCarbonCredits: React.FC = () => {
         .eq('site_id', selectedFacilityId);
 
       const roomIds = (rmData || []).map(r => r.id);
-      if (roomIds.length > 0) {
+      if (roomIds.length > 0 && selectedFacilityId) {
+        // Query site-level energy consumption for solar data
         const { data: eData } = await supabase
-          .from('energy_usage')
-          .select('solar_kwh')
-          .in('room_id', roomIds);
+          .from('energy_consumption')
+          .select('kwh_solar')
+          .eq('site_id', selectedFacilityId);
 
-        const totalSolarKwh = (eData || []).reduce((acc, row) => acc + (Number(row.solar_kwh) || 0), 0);
+        const totalSolarKwh = (eData || []).reduce((acc, row) => acc + (Number(row.kwh_solar) || 0), 0);
         if (totalSolarKwh > 0) {
           // 1 MWh Solar = 0.85 tCO2
           const calculatedTons = Math.round((totalSolarKwh / 1000) * 0.85 * 100) / 100;

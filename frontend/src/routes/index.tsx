@@ -102,6 +102,7 @@ const OwnerAlerts = React.lazy(() => import('../features/alerts/OwnerAlerts'));
 const OwnerBatchTraceability = React.lazy(() => import('../features/batch-traceability/OwnerBatchTraceability'));
 const OwnerMaintenance = React.lazy(() => import('../features/maintenance/OwnerMaintenance'));
 const OwnerApprovals = React.lazy(() => import('../features/approvals/OwnerApprovals'));
+const SitesDetails = React.lazy(() => import('../features/sites/SitesDetails'));
 
 // Farmer pages
 const FarmerDashboard = React.lazy(() => import('../features/dashboard/FarmerDashboard'));
@@ -115,6 +116,7 @@ const FarmerFinance = React.lazy(() => import('../features/finance/FarmerFinance
 // Stakeholder pages
 const StakeholderMap = React.lazy(() => import('../features/stakeholder/StakeholderMap'));
 const StakeholderState = React.lazy(() => import('../features/stakeholder/StakeholderState'));
+const SiteDashboard = React.lazy(() => import('../features/stakeholder/SiteDashboard'));
 const StakeholderDistrict = React.lazy(() => import('../features/stakeholder/StakeholderDistrict'));
 const StakeholderDashboard = React.lazy(() => import('../features/stakeholder/StakeholderDashboard'));
 const StakeholderAlerts = React.lazy(() => import('../features/stakeholder/StakeholderAlerts'));
@@ -370,6 +372,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'sites-details',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <SitesDetails />
+          </React.Suspense>
+        ),
+      },
+      {
         path: 'settings',
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
@@ -534,6 +544,14 @@ export const router = createBrowserRouter([
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
             <StakeholderState />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: 'site/:stateName/:siteId',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <SiteDashboard />
           </React.Suspense>
         ),
       },

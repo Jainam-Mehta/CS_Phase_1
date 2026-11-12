@@ -21,6 +21,7 @@ const OwnerDashboard: React.FC = () => {
   const [stakeholders, setStakeholders] = useState<any[]>([]);
   const [liveTimestamp, setLiveTimestamp] = useState(new Date().toLocaleTimeString());
   const [latestCondition, setLatestCondition] = useState<any>(null);
+  const [latestSiteEnergy, setLatestSiteEnergy] = useState<any>(null);
   
   // Real database data for charts - NO DEMO DATA
   const [revenueHistory, setRevenueHistory] = useState<any[]>([]);
@@ -44,361 +45,257 @@ const OwnerDashboard: React.FC = () => {
   const loadFacilityData = async () => {
     try {
       setLoading(true);
-      console.log('=== OWNER DASHBOARD LOAD STARTED ===');
+      console.log('=== OWNER DASHBOARD LOAD STARTED (OPTIMIZED) ===');
       console.log('User ID:', user?.id);
       console.log('Selected Facility ID:', selectedFacilityId);
 
-      // Fetch Site Name
-      const { data: siteData } = await supabase
-        .from('sites')
-        .select('facility_name')
-        .eq('id', selectedFacilityId)
-        .single();
+      // PHASE 1: CRITICAL DATA (must load first) - Run in parallel
+      const [siteDataResp, roomsResp] = await Promise.all([
+        supabase.from('sites').select('facility_name').eq('id', selectedFacilityId).single(),
+        supabase.from('cold_storage_rooms').select('*').eq('site_id', selectedFacilityId)
+      ]);
+
+      const siteData = siteDataResp.data;
+      const rmData = roomsResp.data;
 
       setSiteName(siteData?.facility_name || 'Your Site');
-
-      // Fetch Rooms for selected facility
-      const { data: rmData, error: rmError } = await supabase
-        .from('cold_storage_rooms')
-        .select('*')
-        .eq('site_id', selectedFacilityId);
-
-      console.log('Rooms query error:', rmError);
-      console.log('Rooms fetched:', rmData?.length || 0);
-      console.log('First room sample:', rmData?.[0]);
 
       const resolvedRooms = rmData || [];
       setRooms(resolvedRooms);
 
-      if (resolvedRooms.length > 0) {
-        // Always use the selected room, or default to the first room
-        const roomToUse = selectedRoomId || resolvedRooms[0].id;
-        const roomIds = [roomToUse];
+      if (resolvedRooms.length === 0) {
+        setDbSensors([]);
+        setLatestCondition(null);
+        setLatestSiteEnergy(null);
+        setInventory([]);
+        setStakeholders([]);
+        setRevenueHistory([]);
+        setFarmerActivity([]);
+        setEnergyHistory([]);
+        setLoading(false);
+        return;
+      }
 
-        // Fetch Sensors ONLY for the selected/default room
-        const { data: sensorData } = await supabase
-          .from('sensor_devices')
-          .select('*')
-          .in('room_id', roomIds);
+      const roomToUse = selectedRoomId || resolvedRooms[0].id;
+      const roomIds = [roomToUse];
 
-        setDbSensors(sensorData || []);
+      // PHASE 2: CORE DASHBOARD DATA - Run all 3 in parallel
+      const [sensorsResp, condResp, invResp, energyResp] = await Promise.all([
+        supabase.from('sensor_devices').select('*').in('room_id', roomIds),
+        supabase.from('cold_storage_conditions').select('*').in('room_id', roomIds).order('recorded_at', { ascending: false }).limit(100),
+        supabase.from('batch_room_allocations').select('batch_id, room_id, quantity_kg').in('room_id', roomIds).is('removed_at', null),
+        supabase.from('energy_consumption').select('kwh_solar, kwh_grid, kwh_total, battery_charge_kwh, battery_discharge_kwh, recorded_at').eq('site_id', selectedFacilityId).order('recorded_at', { ascending: false }).limit(1)
+      ]);
 
-        // ✅ NEW: Fetch averaged sensor data (System Live values)
-        let avgSensorData = null;
-        if (roomToUse) {
-          try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            
-            const response = await fetch(`${apiUrl}/api/storage/averages/room/${roomToUse}`, {
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (response.ok) {
-              avgSensorData = await response.json();
-              console.log('Averaged sensor data fetched:', avgSensorData);
-            }
-          } catch (error) {
-            console.debug('Averaging endpoint unavailable');
-          }
-        }
+      setDbSensors(sensorsResp.data || []);
+      setInventory(invResp.data || []);
+      setLatestSiteEnergy(energyResp.data?.[0] || null);
 
-        // Fetch latest conditions - get most recent record with both temp and humidity
-        // Query all conditions for these rooms and merge the latest data
-        const { data: condData } = await supabase
-          .from('cold_storage_conditions')
-          .select('*')
-          .in('room_id', roomIds)
-          .order('recorded_at', { ascending: false })
-          .limit(100);
-
-        // Merge latest temperature and humidity from potentially different records
-        // (Gateway may send them separately)
-        let latestComplete = null;
-        let tempReadings: number[] = [];
-        let humidityReadings: number[] = [];
+      // Process condition data for temperature/humidity display
+      const condData = condResp.data;
+      let latestComplete = null;
+      let tempReadings: number[] = [];
+      let humidityReadings: number[] = [];
+      
+      if (condData && condData.length > 0) {
+        const mostRecentTimestamp = condData[0].recorded_at;
+        const recentWindow = condData.filter(
+          r => r.recorded_at === mostRecentTimestamp || 
+               (new Date(r.recorded_at).getTime() - new Date(mostRecentTimestamp).getTime()) < 5000
+        );
         
-        if (condData && condData.length > 0) {
-          // Collect all temperature and humidity readings from the most recent batch
-          // (typically all records from the same timestamp or within a short window)
-          const mostRecentTimestamp = condData[0].recorded_at;
-          const recentWindow = condData.filter(
-            r => r.recorded_at === mostRecentTimestamp || 
-                 (new Date(r.recorded_at).getTime() - new Date(mostRecentTimestamp).getTime()) < 5000
-          );
-          
-          // Collect all valid readings from this window
-          for (const record of recentWindow) {
-            if (record.temperature !== null) {
-              tempReadings.push(parseFloat(record.temperature));
-            }
-            if (record.humidity !== null) {
-              humidityReadings.push(parseFloat(record.humidity));
-            }
-          }
-          
-          // Start with the most recent record as base
-          latestComplete = condData[0];
-          
-          // Use averaged values from API if available (System Live), otherwise calculate from raw data
-          if (avgSensorData?.avg_temperature) {
-            // Parse the trimmed float value (could be "12.06" or "12")
-            latestComplete.temperature = parseFloat(avgSensorData.avg_temperature);
-          } else if (tempReadings.length > 0) {
-            const avgTemp = tempReadings.reduce((a, b) => a + b, 0) / tempReadings.length;
-            latestComplete.temperature = parseFloat(avgTemp.toFixed(2));
-          }
-          
-          if (avgSensorData?.avg_humidity) {
-            // Parse the trimmed float value
-            latestComplete.humidity = parseFloat(avgSensorData.avg_humidity);
-          } else if (humidityReadings.length > 0) {
-            const avgHumidity = humidityReadings.reduce((a, b) => a + b, 0) / humidityReadings.length;
-            latestComplete.humidity = parseFloat(avgHumidity.toFixed(2));
-          }
-        }
-
-        setLatestCondition(latestComplete || null);
-
-        // Fetch Inventory/Allocations (to calculate Total Farmers)
-        const { data: invData } = await supabase
-          .from('batch_room_allocations')
-          .select('*, batches(farmer_id)')
-          .in('room_id', roomIds)
-          .is('removed_at', null);
-          
-        setInventory(invData || []);
-        
-        // Fetch Stakeholders invested in this facility (via owner's company)
-        const { data: ownerProfile } = await supabase
-          .from('profiles')
-          .select('owner_company_id')
-          .eq('id', user?.id)
-          .single();
-        
-        let stakeholdersList: any[] = [];
-        if (ownerProfile?.owner_company_id) {
-          try {
-            const { data: stakeholderInvestments, error } = await supabase
-              .from('stakeholder_investments')
-              .select('stakeholder_id')
-              .eq('owner_company_id', ownerProfile.owner_company_id)
-              .eq('status', 'active');
-            
-            if (!error) {
-              stakeholdersList = stakeholderInvestments?.map(s => s.stakeholder_id) || [];
-            } else {
-              console.warn('Error fetching stakeholder investments:', error);
-            }
-          } catch (err) {
-            console.warn('Could not fetch stakeholder investments:', err);
-          }
+        for (const record of recentWindow) {
+          if (record.temperature !== null) tempReadings.push(parseFloat(record.temperature));
+          if (record.humidity !== null) humidityReadings.push(parseFloat(record.humidity));
         }
         
-        setStakeholders(stakeholdersList);
-        
-        // Fetch real chart data from database
-        // 1. Revenue history - Calculate TOTAL monthly revenue from stakeholder investments + farmer storage
-        // Display as a single total value (since we don't have daily breakdown data)
-        const fourWeeksAgo = new Date();
-        fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
-        
-        // Get owner's sites
-        const { data: ownerSitesData } = await supabase
-          .from('sites')
-          .select('id')
-          .eq('owner_profile_id', user?.id);
-        
-        const ownerSiteIds = ownerSitesData?.map((s: any) => s.id) || [];
-        
-        // Get stakeholder investments for these sites (already approved)
-        let stakeholderRevenue = 0;
-        if (ownerSiteIds.length > 0) {
-          const { data: stakeholderInvs } = await supabase
-            .from('stakeholder_investments')
-            .select('investment_amount_inr')
-            .in('site_id', ownerSiteIds)
-            .eq('status', 'active');
-          
-          (stakeholderInvs || []).forEach((inv: any) => {
-            stakeholderRevenue += Number(inv.investment_amount_inr) || 0;
-          });
+        latestComplete = condData[0];
+        if (tempReadings.length > 0) {
+          const avgTemp = tempReadings.reduce((a, b) => a + b, 0) / tempReadings.length;
+          latestComplete.temperature = parseFloat(avgTemp.toFixed(2));
         }
-        
-        // Get farmer storage revenue from allocations in this room
-        let farmerStorageRevenue = 0;
-        if (roomIds.length > 0) {
-          const { data: allocationsForRevenue } = await supabase
-            .from('batch_room_allocations')
-            .select('quantity_kg, batches(farmer_id)')
-            .in('room_id', roomIds)
-            .is('removed_at', null);
-          
-          const { data: pricingData } = await supabase
-            .from('farmer_room_access')
-            .select('farmer_id, room_id, price_per_crate, status')
-            .in('room_id', roomIds)
-            .eq('status', 'Approved');
-          
-          const pricingMap = new Map<string, number>();
-          (pricingData || []).forEach((p: any) => {
-            const key = `${p.farmer_id}_${p.room_id}`;
-            pricingMap.set(key, p.price_per_crate || 1.20);
-          });
-          
-          (allocationsForRevenue || []).forEach((alloc: any) => {
-            const qtyKg = Number(alloc.quantity_kg) || 0;
-            const crates = convertKgToCrates(qtyKg);
-            const farmerId = alloc.batches?.farmer_id;
-            const pricingKey = `${farmerId}_${alloc.room_id}`;
-            const pricePerCrate = pricingMap.get(pricingKey) || 1.20;
-            farmerStorageRevenue += crates * pricePerCrate;
-          });
+        if (humidityReadings.length > 0) {
+          const avgHumidity = humidityReadings.reduce((a, b) => a + b, 0) / humidityReadings.length;
+          latestComplete.humidity = parseFloat(avgHumidity.toFixed(2));
         }
-        
-        // Total monthly revenue from all sources
-        const totalMonthlyRevenue = stakeholderRevenue + farmerStorageRevenue;
-        
-        // Calculate which week of the current month we're in
-        const nowDate = new Date();
-        const currentDay = nowDate.getDate();
-        let currentWeek = 1;
-        if (currentDay > 7) currentWeek = 2;
-        if (currentDay > 14) currentWeek = 3;
-        if (currentDay > 21) currentWeek = 4;
-        
-        // Display as a single bar for the current week of the month
-        const weeklyRevenue = [
-          { time: 'Week 1', value: currentWeek === 1 ? totalMonthlyRevenue : 0 },
-          { time: 'Week 2', value: currentWeek === 2 ? totalMonthlyRevenue : 0 },
-          { time: 'Week 3', value: currentWeek === 3 ? totalMonthlyRevenue : 0 },
-          { time: 'Week 4', value: currentWeek === 4 ? totalMonthlyRevenue : 0 }
-        ];
-        
-        setRevenueHistory(weeklyRevenue);
-        
-        // 2. Farmer activity - last 7 days (batch additions and removals via this facility's rooms)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        // Get batches added to this facility's rooms - use harvest_date from batches table (farmer's intended date)
-        const { data: batchesAddedData } = await supabase
-          .from('batch_room_allocations')
-          .select('batches(harvest_date)')
-          .in('room_id', roomIds)
-          .gte('assigned_at', sevenDaysAgo.toISOString());
-        
-        // Get batches removed from this facility's rooms
-        const { data: batchesRemovedData } = await supabase
-          .from('batch_room_allocations')
-          .select('removed_at')
-          .in('room_id', roomIds)
-          .not('removed_at', 'is', null)
-          .gte('removed_at', sevenDaysAgo.toISOString());
-          
-        // Group by day
-        const activityByDay: any[] = [];
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          const day = date.toLocaleDateString('en-US', { weekday: 'short' });
-          const dayStart = new Date(date.setHours(0, 0, 0, 0));
-          const dayEnd = new Date(date.setHours(23, 59, 59, 999));
-          
-          const batchesAddedCount = (batchesAddedData || []).filter((b: any) => {
-            const batchDate = b.batches?.harvest_date ? new Date(b.batches.harvest_date) : new Date();
-            return batchDate >= dayStart && batchDate <= dayEnd;
-          }).length;
-          
-          const batchesRemovedCount = (batchesRemovedData || []).filter((b: any) => {
-            const batchDate = new Date(b.removed_at);
-            return batchDate >= dayStart && batchDate <= dayEnd;
-          }).length;
-          
-          activityByDay.push({
-            day,
-            checkIns: batchesRemovedCount, // Green bars: batches removed/harvested
-            batchesAdded: batchesAddedCount // Blue bars: batches added/stored
-          });
-        }
-        
-        setFarmerActivity(activityByDay);
-        
-        // 3. Energy consumption - last 8 days (including today)
-        const today = new Date(); // Get current system date
-        const eightDaysAgo = new Date(today);
-        eightDaysAgo.setDate(today.getDate() - 7); // Go back 7 days to get 8 days total including today
-        
-        console.log('Energy Chart - Today\'s date:', today.toDateString());
-        console.log('Energy Chart - 7 days ago:', eightDaysAgo.toDateString());
-        
-        let energyData: any[] = [];
+      }
+
+      setLatestCondition(latestComplete || null);
+
+      // PHASE 3: SECONDARY DATA (stakeholders, charts) - Load in background WITHOUT blocking
+      // This phase loads asynchronously so main dashboard shows in 2-5 seconds
+      (async () => {
         try {
-          // Try energy_consumption table first (with correct column name)
-          const { data, error } = await supabase
+          const [stakeholderResp, ownerSitesResp] = await Promise.all([
+            supabase.from('stakeholder_investments').select('stakeholder_id').eq('site_id', selectedFacilityId).eq('status', 'active'),
+            supabase.from('sites').select('id').eq('owner_profile_id', user?.id)
+          ]);
+
+          const stakeholdersList = stakeholderResp.data?.map(s => s.stakeholder_id) || [];
+          setStakeholders(stakeholdersList);
+
+          // Get batch IDs from allocations for all charts
+          const batchIds = (invResp.data || []).map((a: any) => a.batch_id).filter(Boolean);
+
+          // ========== REVENUE CHART: Daily storage revenue for current month ==========
+          // Query farmer_daily_storage_costs instead of sales to get storage income
+          const now = new Date();
+          const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+          
+          const dailyRevenue = [];
+          
+          // Fetch all daily storage costs for this month across ALL SITES for this owner
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          monthEnd.setHours(23, 59, 59, 999);
+
+          const { data: storageCostsForMonth } = await supabase
+            .from('farmer_daily_storage_costs')
+            .select('daily_cost, cost_date')
+            .eq('owner_id', user?.id)  // Filter by current owner - aggregate all their sites
+            .gte('cost_date', monthStart.toISOString().split('T')[0])
+            .lte('cost_date', monthEnd.toISOString().split('T')[0])
+            .order('cost_date', { ascending: true });
+
+          // Group storage revenue by day
+          const revenueByDay = new Map<number, number>();
+          for (let d = 1; d <= daysInMonth; d++) {
+            revenueByDay.set(d, 0);
+          }
+
+          (storageCostsForMonth || []).forEach((cost: any) => {
+            const costDate = new Date(cost.cost_date);
+            const day = costDate.getDate();
+            const current = revenueByDay.get(day) || 0;
+            revenueByDay.set(day, current + (Number(cost.daily_cost) || 0));
+          });
+
+          // Build chart data
+          for (let day = 1; day <= daysInMonth; day++) {
+            dailyRevenue.push({
+              time: String(day),
+              value: revenueByDay.get(day) || 0
+            });
+          }
+
+          setRevenueHistory(dailyRevenue);
+          console.log('📊 Daily Storage Revenue Chart:', daysInMonth, 'days in month, total storage revenue: ₹', dailyRevenue.reduce((s, d) => s + d.value, 0).toFixed(2));
+
+          // ========== FIX 2: Farmer activity - include BOTH removals AND sales ==========
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+          // Fetch removals (explicit removal by farmer)
+          const { data: batchesRemovedResp } = await supabase
+            .from('batch_room_allocations')
+            .select('batch_id, removed_at')
+            .in('room_id', roomIds)
+            .not('removed_at', 'is', 'null')
+            .gte('removed_at', sevenDaysAgo.toISOString())
+            .order('removed_at', { ascending: false });
+
+          // Fetch sales (removal via sale)
+          const { data: salesForActivity } = await supabase
+            .from('sales')
+            .select('batch_id, sold_at, quantity_kg')
+            .in('batch_id', batchIds)
+            .gte('sold_at', sevenDaysAgo.toISOString())
+            .order('sold_at', { ascending: false });
+
+          // Fetch allocations (additions)
+          const { data: batchesAddedResp } = await supabase
+            .from('batch_room_allocations')
+            .select('batch_id, assigned_at, quantity_kg')
+            .in('room_id', roomIds)
+            .gte('assigned_at', sevenDaysAgo.toISOString())
+            .order('assigned_at', { ascending: false });
+
+          console.log('🔍 Dashboard Farmer Activity Debug:');
+          console.log('  Batches Added (last 7 days):', batchesAddedResp?.length || 0);
+          console.log('  Batches Removed via removal_at (last 7 days):', batchesRemovedResp?.length || 0);
+          console.log('  Batches Removed via sales (last 7 days):', salesForActivity?.length || 0);
+
+          const activityByDay: any[] = [];
+          for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const day = date.toLocaleDateString('en-US', { weekday: 'short' });
+            const dayStart = new Date(date);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(date);
+            dayEnd.setHours(23, 59, 59, 999);
+
+            // Count removals from explicit removal
+            const removalsCount = (batchesRemovedResp || []).filter((b: any) => {
+              const removalDate = new Date(b.removed_at);
+              return removalDate >= dayStart && removalDate <= dayEnd;
+            }).length;
+
+            // Count removals from sales
+            const salesCount = (salesForActivity || []).filter((s: any) => {
+              const saleDate = new Date(s.sold_at);
+              return saleDate >= dayStart && saleDate <= dayEnd;
+            }).length;
+
+            // Total removed = explicit removals + sales
+            const totalRemoved = removalsCount + salesCount;
+
+            // Count additions
+            const batchesAddedCount = (batchesAddedResp || []).filter((b: any) => {
+              const addDate = new Date(b.assigned_at);
+              return addDate >= dayStart && addDate <= dayEnd;
+            }).length;
+
+            activityByDay.push({
+              day,
+              checkIns: totalRemoved,  // Removed/sold
+              batchesAdded: batchesAddedCount  // Added/stored
+            });
+          }
+          setFarmerActivity(activityByDay);
+
+          // Energy consumption
+          const eightDaysAgo = new Date();
+          eightDaysAgo.setDate(eightDaysAgo.getDate() - 7);
+
+          const { data: energyData } = await supabase
             .from('energy_consumption')
-            .select('total_kwh, recorded_at')  // Use recorded_at instead of reading_date
+            .select('kwh_total, recorded_at')
             .eq('site_id', selectedFacilityId)
             .gte('recorded_at', eightDaysAgo.toISOString())
             .order('recorded_at', { ascending: true });
-          
-          if (!error && data && data.length > 0) {
-            // Transform recorded_at to reading_date for consistency in processing
-            energyData = (data || []).map(d => ({
-              ...d,
-              reading_date: d.recorded_at
-            }));
-          } else {
-            console.warn('No energy consumption data found or error:', error);
-            // Fallback: generate empty data so chart still renders
-            energyData = [];
+
+          const energyByDay: any[] = [];
+          for (let i = 7; i >= 0; i--) {
+            const currentDate = new Date();
+            currentDate.setDate(currentDate.getDate() - i);
+            const day = currentDate.getDate();
+            const month = currentDate.getMonth() + 1;
+            const dateStr = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
+
+            const dayStart = new Date(currentDate);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(currentDate);
+            dayEnd.setHours(23, 59, 59, 999);
+
+            const dayEnergy = (energyData || [])
+              .filter((e: any) => {
+                const energyDate = new Date(e.recorded_at);
+                return energyDate >= dayStart && energyDate <= dayEnd;
+              })
+              .reduce((sum: number, e: any) => sum + (e.kwh_total || 0), 0);
+
+            energyByDay.push({
+              time: dateStr,
+              value: Number(dayEnergy.toFixed(1))
+            });
           }
+          setEnergyHistory(energyByDay);
         } catch (err) {
-          console.warn('Could not fetch energy consumption data:', err);
-          energyData = [];
+          console.warn('Error loading secondary data:', err);
         }
-          
-        // Group by day - last 8 days including today
-        const energyByDay: any[] = [];
-        for (let i = 7; i >= 0; i--) {
-          const currentDate = new Date(); // Fresh date object for each iteration
-          currentDate.setDate(currentDate.getDate() - i);
-          
-          // Format as DD/MM (day/month)
-          const day = currentDate.getDate();
-          const month = currentDate.getMonth() + 1;
-          const dateStr = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
-          
-          // Log the date being processed
-          console.log(`Energy Chart Day ${8-i}: ${currentDate.toDateString()} → ${dateStr}`);
-          
-          const dayStart = new Date(currentDate);
-          dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = new Date(currentDate);
-          dayEnd.setHours(23, 59, 59, 999);
-          
-          const dayEnergy = (energyData || [])
-            .filter((e: any) => {
-              const energyDate = new Date(e.reading_date);
-              return energyDate >= dayStart && energyDate <= dayEnd;
-            })
-            .reduce((sum: number, e: any) => sum + (e.total_kwh || 0), 0);
-          
-          energyByDay.push({
-            time: dateStr,
-            value: Number(dayEnergy.toFixed(1))
-          });
-        }
-        
-        console.log('Energy Chart - Final dates:', energyByDay.map(d => d.time).join(', '));
-        setEnergyHistory(energyByDay);
-      } else {
-        setDbSensors([]);
-        setLatestCondition(null);
-        setInventory([]);
-      }
+      })();
+
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -430,35 +327,7 @@ const OwnerDashboard: React.FC = () => {
   const activeSensors = dbSensors.filter(s => isSensorActive(s)).length;
   const inactiveSensors = totalSensors - activeSensors;
 
-  // Farmers count from real data
-  const uniqueFarmers = inventory.length > 0 
-    ? new Set(inventory.filter((i) => {
-        const batch = Array.isArray(i.batches) ? i.batches[0] : i.batches;
-        return batch?.farmer_id;
-      }).map((i) => {
-        const batch = Array.isArray(i.batches) ? i.batches[0] : i.batches;
-        return batch?.farmer_id;
-      })).size
-    : 0;
   
-  // Stakeholders count from actual database query
-  const totalStakeholders = stakeholders.length;
-
-  // Storage from real data - calculated from actual inventory
-  const totalCapacity = rooms.length > 0 
-    ? rooms.reduce((acc, rm) => acc + (Number(rm.capacity_kg) || 0), 0)
-    : 0;
-  
-  // Calculate used capacity from inventory (batches in this room)
-  const usedCapacity = inventory.length > 0
-    ? inventory.reduce((sum, alloc) => {
-        const qty = Number(alloc.quantity_kg) || 0;
-        return sum + qty;
-      }, 0)
-    : 0;
-  
-  const storagePercentage = totalCapacity > 0 ? ((usedCapacity / totalCapacity) * 100).toFixed(1) : '0';
-
   // System Status based on actual alerts and sensor health
   const getSystemStatus = () => {
     // Critical conditions
@@ -488,10 +357,24 @@ const OwnerDashboard: React.FC = () => {
     ? new Date(dbSensors[0].last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : new Date().toLocaleTimeString();
 
-  // Inverter & Energy Values (Solar, Grid, Total kWh)
-  const solarPercentage = latestCondition?.solar_percentage ?? 0;
-  const gridPercentage = solarPercentage > 0 ? Number((100 - solarPercentage).toFixed(1)) : 100;
-  const totalEnergyKwh = latestCondition?.energy_consumption_kwh ?? 0;
+  // Real Database Energy & Power Metrics (Site & Room telemetry)
+  const siteSolarKwh = latestSiteEnergy ? Number(latestSiteEnergy.kwh_solar) || 0 : 0;
+  const siteGridKwh = latestSiteEnergy ? Number(latestSiteEnergy.kwh_grid) || 0 : 0;
+  const siteTotalKwh = latestSiteEnergy ? Number(latestSiteEnergy.kwh_total) || 0 : 0;
+
+  // Inverter & Energy Values (Solar, Grid, Total kWh) from real database records
+  const totalEnergyKwh = latestCondition?.energy_consumption_kwh ?? siteTotalKwh;
+  const solarPercentage = latestCondition?.solar_percentage ?? 
+    (siteTotalKwh > 0 ? Number(((siteSolarKwh / siteTotalKwh) * 100).toFixed(1)) : 0);
+  const gridPercentage = latestCondition?.grid_percentage ?? 
+    (solarPercentage > 0 ? Number((100 - solarPercentage).toFixed(1)) : (totalEnergyKwh > 0 ? 100 : 0));
+  const solarKw = siteSolarKwh > 0 
+    ? Number(siteSolarKwh.toFixed(1)) 
+    : (solarPercentage > 0 && totalEnergyKwh > 0 
+        ? Number(((solarPercentage / 100) * totalEnergyKwh).toFixed(1)) 
+        : 0);
+
+
 
   // Calculate monthly energy from energyHistory
   const monthlyEnergy = energyHistory.reduce((sum, day) => sum + day.value, 0);
@@ -531,11 +414,36 @@ const OwnerDashboard: React.FC = () => {
   // Sensor existence checks - EXACT MATCH ONLY, NO FALSE POSITIVES
   const hasTempSensor = dbSensors.some(s => s.sensor_type === 'Temperature');
   const hasHumSensor = dbSensors.some(s => s.sensor_type === 'Humidity');
-  const hasDoorSensor = dbSensors.some(s => s.sensor_type === 'Door');
+  const hasDoorSensor = dbSensors.some(s => s.sensor_type === 'Door') || latestCondition?.door_status_1 != null;
   const hasSuctionPressureSensor = dbSensors.some(s => s.sensor_type === 'SuctionPressure');
   const hasDischargePressureSensor = dbSensors.some(s => s.sensor_type === 'DischargePressure');
   const hasAmbientTempSensor = dbSensors.some(s => s.sensor_type === 'AmbientTemperature');
   const hasAmbientHumSensor = dbSensors.some(s => s.sensor_type === 'AmbientHumidity');
+  const hasOxygenSensor = dbSensors.some(s => s.sensor_type === 'Oxygen');
+  const hasCO2Sensor = dbSensors.some(s => s.sensor_type === 'CO2');
+  const hasEthyleneSensor = dbSensors.some(s => s.sensor_type === 'Ethylene');
+  const hasAmmoniaSensor = dbSensors.some(s => s.sensor_type === 'Ammonia');
+  const hasCompressorSensor = dbSensors.some(s => s.sensor_type === 'Compressor' || s.sensor_type === 'CompressorHealth' || s.sensor_type === 'Motor');
+  const hasBatterySensor = dbSensors.some(s => s.sensor_type === 'Battery' || s.sensor_name?.toLowerCase().includes('battery'));
+  const batterySensor = dbSensors.find(s => s.sensor_type === 'Battery' || s.sensor_name?.toLowerCase().includes('battery') || s.battery_percentage != null);
+  const dbBatteryPercentage = 
+    latestSiteEnergy && latestSiteEnergy.battery_charge_kwh != null && latestSiteEnergy.battery_discharge_kwh != null
+      ? Number(((latestSiteEnergy.battery_charge_kwh / (latestSiteEnergy.battery_charge_kwh + latestSiteEnergy.battery_discharge_kwh)) * 100).toFixed(1))
+      : null;
+  const isBatteryInstalled = hasBatterySensor || dbBatteryPercentage != null;
+  // systemLive = true whenever any sensors are registered in the DB (the physical system exists and is ON)
+  // We don't require active telemetry readings — the HVAC unit is running even if sensor data hasn't streamed yet
+  const isSystemLive = dbSensors.length > 0 || Boolean(latestCondition);
+
+  // Door Status: From cold_storage_conditions table - if ANY door shows "closed", display "Closed"
+  const getDoorStatus = () => {
+    if (!latestCondition) return null;
+    const doorValues = [latestCondition.door_status_1, latestCondition.door_status_2, latestCondition.door_status_3, latestCondition.door_status_4];
+    const anyClosed = doorValues.some(v => v === 'closed' || v === 'Closed');
+    return anyClosed ? 'Closed' : 'Open';
+  };
+
+  const doorStatus = getDoorStatus();
 
   // Sensor installed status - check database first, then fallback to conditions table if data exists
   const isTempInstalled = hasTempSensor;
@@ -545,17 +453,28 @@ const OwnerDashboard: React.FC = () => {
   const isDischargePressureInstalled = hasDischargePressureSensor;
   const isAmbientTempInstalled = hasAmbientTempSensor;
   const isAmbientHumInstalled = hasAmbientHumSensor;
+  const isOxygenInstalled = hasOxygenSensor;
+  const isCO2Installed = hasCO2Sensor;
+  const isEthyleneInstalled = hasEthyleneSensor;
+  const isAmmoniaInstalled = hasAmmoniaSensor;
+  const isCompressorInstalled = hasCompressorSensor || latestCondition?.compressor_status != null || Boolean(latestCondition);
 
   // Dynamic Universal HVAC Sensors Mapping - STRICTLY DATABASE DRIVEN - NO DEMO VALUES
   const hvacSensors = [
     {
       id: 'internal-storage-temp',
       label: 'Storage Temp',
-      value: latestCondition?.temperature ?? null,
+      value: latestCondition ? (() => {
+        const temps = [latestCondition.temperature_1, latestCondition.temperature_2, latestCondition.temperature_3, latestCondition.temperature_4].filter(v => v != null);
+        return temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : null;
+      })() : null,
       unit: '°C',
-      status: latestCondition?.temperature === undefined || latestCondition?.temperature === null
-        ? 'unknown'
-        : latestCondition.temperature > 8 ? 'warning' : 'optimal',
+      status: latestCondition ? (() => {
+        const temps = [latestCondition.temperature_1, latestCondition.temperature_2, latestCondition.temperature_3, latestCondition.temperature_4].filter(v => v != null);
+        if (temps.length === 0) return 'unknown';
+        const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+        return avg > 8 ? 'warning' : 'optimal';
+      })() : 'unknown',
       x: 23,
       y: 28,
       iconType: 'temp' as const,
@@ -566,29 +485,23 @@ const OwnerDashboard: React.FC = () => {
     {
       id: 'internal-storage-hum',
       label: 'Storage Humidity',
-      value: latestCondition?.humidity ?? null,
+      value: latestCondition ? (() => {
+        const hums = [latestCondition.humidity_1, latestCondition.humidity_2, latestCondition.humidity_3, latestCondition.humidity_4].filter(v => v != null);
+        return hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length).toFixed(1) : null;
+      })() : null,
       unit: '%',
-      status: latestCondition?.humidity === undefined || latestCondition?.humidity === null
-        ? 'unknown'
-        : latestCondition.humidity < 80 ? 'warning' : 'optimal',
+      status: latestCondition ? (() => {
+        const hums = [latestCondition.humidity_1, latestCondition.humidity_2, latestCondition.humidity_3, latestCondition.humidity_4].filter(v => v != null);
+        if (hums.length === 0) return 'unknown';
+        const avg = hums.reduce((a, b) => a + b, 0) / hums.length;
+        return avg < 80 ? 'warning' : 'optimal';
+      })() : 'unknown',
       x: 23,
       y: 43,
       iconType: 'humidity' as const,
       isInstalled: isHumInstalled,
       category: 'storage' as const,
       thresholds: { min: 80, max: 95 },
-    },
-    {
-      id: 'door-access-state',
-      label: 'Door Access',
-      value: latestCondition?.door_status ?? (isDoorInstalled ? 'Closed' : null),
-      unit: '',
-      status: latestCondition?.door_status === 'Open' ? 'warning' : 'optimal',
-      x: 14,
-      y: 53,
-      iconType: 'door' as const,
-      isInstalled: isDoorInstalled,
-      category: 'storage' as const,
     },
     {
       id: 'suction-pressure-line',
@@ -608,13 +521,13 @@ const OwnerDashboard: React.FC = () => {
     {
       id: 'compressor-health-node',
       label: 'Compressor Motor',
-      value: `${compressorHealthInfo.score}%`,
+      value: latestCondition ? `${compressorHealthInfo.score}%` : null,
       unit: '',
-      status: compressorHealthInfo.status === 'Optimal' ? 'optimal' : compressorHealthInfo.status === 'Warning' ? 'warning' : 'critical',
+      status: !latestCondition ? 'unknown' : compressorHealthInfo.status === 'Optimal' ? 'optimal' : compressorHealthInfo.status === 'Warning' ? 'warning' : 'critical',
       x: 75,
       y: 22,
       iconType: 'compressor' as const,
-      isInstalled: true,
+      isInstalled: isCompressorInstalled,
       category: 'mechanical' as const,
     },
     {
@@ -633,11 +546,23 @@ const OwnerDashboard: React.FC = () => {
       thresholds: { min: 180, max: 240 },
     },
     {
+      id: 'door-access-state',
+      label: 'Door Access',
+      value: doorStatus,
+      unit: '',
+      status: !isDoorInstalled ? 'uninstalled' : doorStatus === 'Closed' ? 'optimal' : doorStatus === 'Open' ? 'warning' : 'unknown',
+      x: 10.5,
+      y: 72,
+      iconType: 'door' as const,
+      isInstalled: isDoorInstalled,
+      category: 'storage' as const,
+    },
+    {
       id: 'outdoor-ambient-temp',
       label: 'Outdoor Temp',
-      value: latestCondition?.ambient_temperature ?? null,
+      value: latestCondition?.ambient_temperature_1 ?? null,
       unit: '°C',
-      status: latestCondition?.ambient_temperature === undefined || latestCondition?.ambient_temperature === null
+      status: latestCondition?.ambient_temperature_1 === undefined || latestCondition?.ambient_temperature_1 === null
         ? 'unknown'
         : 'optimal',
       x: 18,
@@ -649,9 +574,9 @@ const OwnerDashboard: React.FC = () => {
     {
       id: 'outdoor-ambient-hum',
       label: 'Outdoor Humidity',
-      value: latestCondition?.ambient_humidity ?? null,
+      value: latestCondition?.ambient_humidity_1 ?? null,
       unit: '%',
-      status: latestCondition?.ambient_humidity === undefined || latestCondition?.ambient_humidity === null
+      status: latestCondition?.ambient_humidity_1 === undefined || latestCondition?.ambient_humidity_1 === null
         ? 'unknown'
         : 'optimal',
       x: 31,
@@ -659,6 +584,67 @@ const OwnerDashboard: React.FC = () => {
       iconType: 'ambientHum' as const,
       isInstalled: isAmbientHumInstalled,
       category: 'ambient' as const,
+    },
+    // Gas Sensors - Controlled Atmosphere Management
+    {
+      id: 'gas-oxygen',
+      label: 'Oxygen',
+      value: latestCondition?.oxygen ?? null,
+      unit: '%',
+      status: latestCondition?.oxygen === undefined || latestCondition?.oxygen === null
+        ? 'unknown'
+        : 'optimal',
+      x: 45,
+      y: 60,
+      iconType: 'gas' as const,
+      isInstalled: isOxygenInstalled,
+      category: 'gas' as const,
+      thresholds: { min: 1, max: 5 },
+    },
+    {
+      id: 'gas-co2',
+      label: 'CO₂',
+      value: latestCondition?.co2 ?? null,
+      unit: 'ppm',
+      status: latestCondition?.co2 === undefined || latestCondition?.co2 === null
+        ? 'unknown'
+        : 'optimal',
+      x: 55,
+      y: 60,
+      iconType: 'gas' as const,
+      isInstalled: isCO2Installed,
+      category: 'gas' as const,
+      thresholds: { min: 2000, max: 8000 },
+    },
+    {
+      id: 'gas-ethylene',
+      label: 'Ethylene',
+      value: latestCondition?.ethylene ?? null,
+      unit: 'ppm',
+      status: latestCondition?.ethylene === undefined || latestCondition?.ethylene === null
+        ? 'unknown'
+        : 'optimal',
+      x: 65,
+      y: 60,
+      iconType: 'gas' as const,
+      isInstalled: isEthyleneInstalled,
+      category: 'gas' as const,
+      thresholds: { min: 0.1, max: 1 },
+    },
+    {
+      id: 'gas-ammonia',
+      label: 'Ammonia',
+      value: latestCondition?.ammonia ?? null,
+      unit: 'ppm',
+      status: latestCondition?.ammonia === undefined || latestCondition?.ammonia === null
+        ? 'unknown'
+        : 'optimal',
+      x: 75,
+      y: 60,
+      iconType: 'gas' as const,
+      isInstalled: isAmmoniaInstalled,
+      category: 'gas' as const,
+      thresholds: { min: 0, max: 10 },
     },
   ];
 
@@ -686,12 +672,7 @@ const OwnerDashboard: React.FC = () => {
         <OwnerReport />
       </div>
 
-      {/* Room Selector - Show if multiple rooms */}
-      {rooms.length > 1 && (
-        <div className="mb-6 flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Viewing: {selectedRoomId ? `Room ID: ${selectedRoomId}` : 'All Rooms'}</p>
-        </div>
-      )}
+      {/* Room Selector hidden from UI - kept in code for debugging */}
       
       {/* 2. HVAC System Map on Top */}
       <div className="w-full mb-10">
@@ -701,15 +682,21 @@ const OwnerDashboard: React.FC = () => {
             solarPercentage,
             gridPercentage,
             totalKwh: totalEnergyKwh,
-            status: 'optimal',
+            solarKw,
+            status: siteSolarKwh > 0 ? 'optimal' : 'offline',
           }}
           compressorHealth={compressorHealthInfo}
-          systemLive={true}
+          batteryData={{
+            percentage: dbBatteryPercentage,
+            status: isBatteryInstalled ? (solarPercentage > 0 ? 'charging' : 'charged') : 'standby',
+            powerKw: isBatteryInstalled && solarKw > 0 ? Number((solarKw * 0.4).toFixed(1)) : null,
+          }}
+          systemLive={isSystemLive}
         />
       </div>
 
-      {/* 3. 4 Dashboard KPI Cards below HVAC */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      {/* 2. 3 Dashboard KPI Cards below HVAC */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
         {/* Card 1: Sensors */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
           <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Sensors</h3>
@@ -722,29 +709,24 @@ const OwnerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Farmers & Stakeholders */}
+        {/* Card 2: Last Sensor Readings */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
-          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Farmers & Stakeholders</h3>
-          <div className="mt-auto space-y-1">
-            <div className="text-3xl font-bold text-slate-900 dark:text-white">{uniqueFarmers} <span className="text-sm font-medium text-slate-500">Farmers</span></div>
-            <div className="text-sm text-slate-600 dark:text-slate-400">{totalStakeholders} Stakeholders</div>
-          </div>
-        </div>
-
-        {/* Card 3: Storage */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
-          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Storage Utilization</h3>
+          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Last Sensor Readings</h3>
           <div className="mt-auto">
-            <div className="flex justify-between items-end mb-2">
-              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{storagePercentage}%</span>
+            <div className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+              {latestCondition?.recorded_at 
+                ? new Date(latestCondition.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : 'No Data'}
             </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${storagePercentage}%` }}></div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {latestCondition?.recorded_at 
+                ? `${new Date(latestCondition.recorded_at).toLocaleDateString()}`
+                : 'Awaiting first reading'}
             </div>
           </div>
         </div>
 
-        {/* Card 4: System Status with Last Updated */}
+        {/* Card 3: System Status with Last Updated */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
           <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">System Status</h3>
           <p className="text-3xl font-bold text-slate-900 dark:text-white mt-auto">{systemStatusInfo.status}</p>
@@ -753,7 +735,7 @@ const OwnerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Charts Section */}
+      {/* 3. Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Revenue Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
@@ -772,7 +754,7 @@ const OwnerDashboard: React.FC = () => {
                 <XAxis dataKey="time" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} width={30} />
                 <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} formatter={(value: any) => `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`} />
-                <Area type="monotone" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="linear" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -854,7 +836,7 @@ const OwnerDashboard: React.FC = () => {
                   labelStyle={{ color: '#ffffff' }}
                   formatter={(value: any) => [`${value} kWh`, 'Consumption']}
                 />
-                <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorEnergy)" />
+                <Area type="linear" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorEnergy)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

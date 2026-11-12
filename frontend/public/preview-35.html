@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SystmII — 35% Advanced Concept Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-[#070b14] text-slate-100 min-h-screen flex flex-col justify-between selection:bg-blue-600 selection:text-white relative overflow-x-hidden">
+
+  <!-- Ambient Prismatic Glows Behind Cards -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
+    <div class="absolute -top-40 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[140px]"></div>
+    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[750px] h-[600px] bg-sky-500/15 rounded-full blur-[160px]"></div>
+    <div class="absolute -top-40 right-1/4 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px]"></div>
+    
+    <!-- Architectural Isometric Logistics Vectors -->
+    <svg class="w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="iso" width="48" height="48" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="2" r="1" fill="#475569" opacity="0.6" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#iso)" />
+      <g stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="6 6" fill="none" opacity="0.5">
+        <path d="M 0 280 L 450 420 L 1600 180" />
+        <path d="M 0 700 L 600 850 L 1600 550" />
+        <path d="M 450 420 L 450 850" />
+        <path d="M 1050 300 L 1050 720" />
+      </g>
+    </svg>
+  </div>
+
+  <!-- Header -->
+  <header class="relative w-full h-[70px] px-8 lg:px-14 flex items-center justify-between z-30 bg-[#090e1a]/80 backdrop-blur-md border-b border-slate-800/80">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+        <div class="w-4 h-4 border-2 border-white rotate-45"></div>
+      </div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-xl font-extrabold tracking-tight text-white">Systm<span class="text-sky-400">II</span></span>
+        <span class="text-xs font-semibold tracking-wider text-slate-500 uppercase">| Cold Chain Command</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-semibold text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        IoT Telemetry Active
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-semibold text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+        Multi-Facility Sync
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="relative flex-1 flex flex-col items-center justify-center px-4 sm:px-8 py-10 z-20 max-w-7xl mx-auto w-full">
+    
+    <!-- Title & Subtitle -->
+    <div class="text-center mb-10">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.2 rounded-full bg-slate-900/90 border border-sky-500/30 text-sky-400 text-xs font-bold tracking-wide uppercase mb-3.5 shadow-sm">
+        <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+        Operational Access Portal
+      </div>
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-white mb-3">
+        Select Your Operational Role
+      </h1>
+      <p class="text-slate-400 text-base sm:text-lg max-w-2xl mx-auto font-normal">
+        Unified cold-chain intelligence connecting rural farms, industrial refrigeration facilities, and institutional capital.
+      </p>
+    </div>
+
+    <!-- The 3 Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-7 w-full items-stretch">
+      
+      <!-- Card 1: Farmer -->
+      <div class="group relative rounded-2xl p-7 bg-slate-900/70 backdrop-blur-xl border border-slate-800 hover:border-emerald-500/60 transition-all duration-300 flex flex-col justify-between shadow-2xl hover:-translate-y-1">
+        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent opacity-80"></div>
+        <div>
+          <!-- Icon & Header -->
+          <div class="w-14 h-14 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-5">
+            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-1.5">Farmer</h3>
+          <span class="inline-block text-[10.5px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 mb-4">
+            Inventory & Batch Intake
+          </span>
+          <p class="text-sm text-slate-400 leading-relaxed mb-6">
+            Log incoming produce crates, request cold room bay allocations, and monitor shelf-life using live IoT spoilage sensors.
+          </p>
+
+          <!-- 35% Advance: Embedded Telemetry Preview Chip -->
+          <div class="rounded-xl p-3.5 bg-slate-950/80 border border-slate-800/80 space-y-2.5 mb-7">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Freshness Index
+              </span>
+              <span class="font-mono font-bold text-emerald-400">98.6%</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Room Allocation
+              </span>
+              <span class="font-medium text-slate-300">Automated</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Spoilage Alert
+              </span>
+              <span class="font-bold text-emerald-400">Protected</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="w-full py-3 px-4 font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30">
+          <span>Enter as Farmer</span>
+          <span>&rarr;</span>
+        </button>
+      </div>
+
+      <!-- Card 2: Facility Owner (Featured / Command Center) -->
+      <div class="group relative rounded-2xl p-7 bg-slate-900/80 backdrop-blur-xl border-2 border-sky-500/70 transition-all duration-300 flex flex-col justify-between shadow-2xl shadow-sky-950/50 hover:-translate-y-1.5 md:-translate-y-1">
+        <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-sky-400 via-blue-500 to-sky-400"></div>
+        <div class="absolute -top-3.5 right-6 px-3 py-0.5 rounded-full bg-sky-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-md">
+          Command Hub
+        </div>
+        <div>
+          <!-- Icon & Header -->
+          <div class="w-14 h-14 rounded-2xl bg-sky-950/60 border border-sky-500/40 text-sky-400 flex items-center justify-center mb-5">
+            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-1.5">Facility Owner</h3>
+          <span class="inline-block text-[10.5px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-sky-950/80 text-sky-300 border border-sky-800/60 mb-4">
+            Command &amp; Control
+          </span>
+          <p class="text-sm text-slate-400 leading-relaxed mb-6">
+            Complete industrial command over HVAC schematics, multi-chamber climate, solar-grid power sync, and farmer intake approvals.
+          </p>
+
+          <!-- 35% Advance: Embedded Telemetry Preview Chip -->
+          <div class="rounded-xl p-3.5 bg-slate-950/90 border border-sky-900/40 space-y-2.5 mb-7">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"></span>
+                HVAC Loop
+              </span>
+              <span class="font-mono font-bold text-sky-400">Live Nominal</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                Dual Inverter
+              </span>
+              <span class="font-bold text-sky-300">Solar + Grid Sync</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                Total Capacity
+              </span>
+              <span class="font-mono font-bold text-slate-200">84% Utilized</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="w-full py-3.5 px-4 font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-all text-sm flex items-center justify-center gap-2 shadow-xl shadow-blue-600/40">
+          <span>Launch Command Center</span>
+          <span>&rarr;</span>
+        </button>
+      </div>
+
+      <!-- Card 3: Stakeholder -->
+      <div class="group relative rounded-2xl p-7 bg-slate-900/70 backdrop-blur-xl border border-slate-800 hover:border-indigo-500/60 transition-all duration-300 flex flex-col justify-between shadow-2xl hover:-translate-y-1">
+        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-80"></div>
+        <div>
+          <!-- Icon & Header -->
+          <div class="w-14 h-14 rounded-2xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-5">
+            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-1.5">Stakeholder</h3>
+          <span class="inline-block text-[10.5px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 mb-4">
+            Capital &amp; ROI Analytics
+          </span>
+          <p class="text-sm text-slate-400 leading-relaxed mb-6">
+            Macro capital portfolio oversight, facility yield benchmarking, solar energy cost reduction, and carbon offset verification.
+          </p>
+
+          <!-- 35% Advance: Embedded Telemetry Preview Chip -->
+          <div class="rounded-xl p-3.5 bg-slate-950/80 border border-slate-800/80 space-y-2.5 mb-7">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                Asset Yield
+              </span>
+              <span class="font-mono font-bold text-indigo-400">+18.4% YoY</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                Energy Saved
+              </span>
+              <span class="font-mono font-bold text-slate-200">₹ 42,800/mo</span>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                Carbon Offset
+              </span>
+              <span class="font-bold text-emerald-400">Verified</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="w-full py-3 px-4 font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/30">
+          <span>View Portfolio Analytics</span>
+          <span>&rarr;</span>
+        </button>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="relative w-full py-4 text-center text-xs text-slate-500 border-t border-slate-800/80 bg-[#090e1a]/80 backdrop-blur-md z-30">
+    <p class="font-medium tracking-wide">
+      SystmII Cold Chain Supply Management Platform &bull; Secured with Enterprise IoT Sensor Telemetry &bull; Version 2.4 Enterprise
+    </p>
+  </footer>
+
+</body>
+</html>

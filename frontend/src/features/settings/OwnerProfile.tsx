@@ -12,7 +12,7 @@ interface OwnerProfileData {
   email?: string;
   full_name?: string;
   role?: string;
-  phone?: string;
+  phone_number?: string;
   owner_company_id?: string;
   is_active?: boolean;
   created_at?: string;
@@ -34,7 +34,7 @@ const OwnerProfile: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     full_name: '',
-    phone: '',
+    phone_number: '',
     date_of_birth: '',
     gender: '',
     state_id: '',
@@ -94,7 +94,7 @@ const OwnerProfile: React.FC = () => {
       // Initialize form with profile data
       setFormData({
         full_name: data.full_name || '',
-        phone: data.phone || '',
+        phone_number: data.phone_number || '',
         date_of_birth: data.date_of_birth || '',
         gender: data.gender || '',
         state_id: data.state_id || '',
@@ -148,7 +148,7 @@ const OwnerProfile: React.FC = () => {
     if (profileData) {
       setFormData({
         full_name: profileData.full_name || '',
-        phone: profileData.phone || '',
+        phone_number: profileData.phone_number || '',
         date_of_birth: profileData.date_of_birth || '',
         gender: profileData.gender || '',
         state_id: profileData.state_id || '',
@@ -167,7 +167,7 @@ const OwnerProfile: React.FC = () => {
         .from('profiles')
         .update({
           full_name: formData.full_name || null,
-          phone: formData.phone || null,
+          phone_number: formData.phone_number || null,
           date_of_birth: formData.date_of_birth || null,
           gender: formData.gender || null,
           state_id: formData.state_id || null,
@@ -181,7 +181,7 @@ const OwnerProfile: React.FC = () => {
       setProfileData({
         ...profileData,
         full_name: formData.full_name,
-        phone: formData.phone,
+        phone_number: formData.phone_number,
         date_of_birth: formData.date_of_birth,
         gender: formData.gender,
         state_id: formData.state_id,
@@ -204,11 +204,11 @@ const OwnerProfile: React.FC = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Not Provided';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const formatDateTime = (dateString?: string) => {
@@ -360,8 +360,8 @@ const OwnerProfile: React.FC = () => {
                     </label>
                     <input
                       type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      value={formData.phone_number}
+                      onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100"
                     />
                   </div>
@@ -371,6 +371,8 @@ const OwnerProfile: React.FC = () => {
                     </label>
                     <input
                       type="date"
+                      min="1950-01-01"
+                      max="2010-12-31"
                       value={formData.date_of_birth}
                       onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100"
@@ -415,7 +417,7 @@ const OwnerProfile: React.FC = () => {
                       Phone
                     </label>
                     <p className="text-sm text-gray-900 dark:text-gray-100">
-                      {getFieldValue(profileData.phone)}
+                      {getFieldValue(profileData.phone_number)}
                     </p>
                   </div>
                   <div>

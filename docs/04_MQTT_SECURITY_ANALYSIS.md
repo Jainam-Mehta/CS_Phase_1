@@ -1,4 +1,4 @@
-# SystemII - MQTT Security Analysis & Roadmap
+# SystmII - MQTT Security Analysis & Roadmap
 
 **Document Version:** 1.0  
 **Last Updated:** October 26, 2026  
@@ -450,7 +450,7 @@ mosquitto_sub -h 35.200.159.76 -p 1883 -t "cdsense/#"
 openssl req -new -x509 -days 365 \
   -keyout server.key \
   -out server.crt \
-  -subj "/C=IN/ST=MH/L=Mumbai/O=SystemII/CN=35.200.159.76"
+  -subj "/C=IN/ST=MH/L=Mumbai/O=SystmII/CN=35.200.159.76"
 
 # Copy to Mosquitto container
 docker cp server.crt coldsense-mqtt-broker:/etc/mosquitto/certs/

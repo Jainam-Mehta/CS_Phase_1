@@ -1,9 +1,8 @@
 import { useAuthStore } from '../../stores/useAuthStore';
 import { supabase } from '../../lib/supabase';
-import { Card, CardContent } from '../../components/ui/Card';
-import { ShoppingCart, Truck, Plus, X, Loader2, Calendar, Package, IndianRupee, Hash, Trash2 } from 'lucide-react';
+import { Card } from '../../components/ui/Card';
+import { ShoppingCart, Truck, Plus, X, Loader2, Calendar, Package, IndianRupee, ChevronRight } from 'lucide-react';
 import { useFarmerStore } from '../../stores/useFarmerStore';
-import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { convertCratesToKg, convertKgToCrates } from '../../utils/units';
 import { useState, useEffect } from 'react';
 
@@ -13,38 +12,85 @@ const FarmerOrders: React.FC = () => {
   const [profileId, setProfileId] = useState<string | null>(null);
   
   const [orders, setOrders] = useState<any[]>([]);
+  const [sites, setSites] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Modal State
+  // Site & Room filters
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  
+  // Sorting
+  const [sortBy, setSortBy] = useState<'expiry' | 'price'>('expiry');
+  
+  // Two-step modal flow
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [step, setStep] = useState<'inventory' | 'summary'>('inventory');
+  
+  // Step 1: Inventory table with cart quantities
+  const [cartItems, setCartItems] = useState<Array<{batchId: string; quantity: number}>>([]);
+  const [tempQtyValues, setTempQtyValues] = useState<Record<string, number>>({});
+  
+  // Step 2: Order details
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  // Multi-batch selection
-  const [selectedBatches, setSelectedBatches] = useState<Array<{batchId: string; quantity: string}>>([]);
-  const [batchToAdd, setBatchToAdd] = useState('');
-  const [quantityToAdd, setQuantityToAdd] = useState('');
-  
   const [priceMode, setPriceMode] = useState<'market' | 'manual'>('market');
   const [manualPrice, setManualPrice] = useState('');
   const [buyerName, setBuyerName] = useState('');
   const [orderRemarks, setOrderRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  
+  const { marketPrices } = useFarmerStore();
 
-  // Get market prices - use first batch's product for pricing
-  const firstSelectedBatch = selectedBatches.length > 0 ? batches.find(b => b.id === selectedBatches[0].batchId) : null;
-  const productName = firstSelectedBatch?.product_name || '';
-  const productsForPricing = productName ? [productName] : [];
-  const { getTrend } = useMarketPrices(productsForPricing);
-  const marketPrice = productsForPricing.length > 0 ? getTrend(productName).current : 0;
+  // Get unique products in cart
+  const cartProducts = Array.from(new Set(
+    cartItems.map(item => {
+      const batch = batches.find(b => b.id === item.batchId);
+      return batch?.product_name;
+    }).filter(Boolean)
+  ));
 
-  // Calculate total quantity and amount
-  const totalCrates = selectedBatches.reduce((sum, item) => {
-    return sum + (parseFloat(item.quantity) || 0);
-  }, 0);
-  const totalQuantityKg = convertCratesToKg(totalCrates);
-  const totalAmount = totalQuantityKg * (priceMode === 'market' ? marketPrice : parseFloat(manualPrice || '0'));
+  // Calculate totals per product
+  const totals = cartProducts.map(productName => {
+    const productBatches = cartItems
+      .map(item => {
+        const batch = batches.find(b => b.id === item.batchId);
+        return batch?.product_name === productName ? { batch, quantity: item.quantity } : null;
+      })
+      .filter(Boolean);
+    
+    const totalCrates = productBatches.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+    const totalKg = convertCratesToKg(totalCrates);
+    const priceData = marketPrices[productName];
+    const pricePerKg = priceMode === 'market' ? (priceData?.price || 0) : parseFloat(manualPrice || '0');
+    const totalPrice = totalKg * pricePerKg;
+    
+    return {
+      product: productName,
+      totalCrates,
+      totalKg,
+      totalPrice,
+      pricePerKg
+    };
+  });
+
+  const grandTotal = totals.reduce((sum, t) => sum + t.totalPrice, 0);
+
+  // Filtered and sorted batches
+  const filteredBatches = selectedRoomId 
+    ? batches.filter(b => b.room_id === selectedRoomId)
+    : [];
+  
+  const sortedBatches = [...filteredBatches].sort((a, b) => {
+    if (sortBy === 'expiry') {
+      return a.expiry_days - b.expiry_days; // Earlier expiry first
+    } else {
+      const priceA = marketPrices[a.product_name]?.price || 0;
+      const priceB = marketPrices[b.product_name]?.price || 0;
+      return priceB - priceA; // Higher price first
+    }
+  });
 
   useEffect(() => {
      if (!user?.id) return;
@@ -55,41 +101,154 @@ const FarmerOrders: React.FC = () => {
              if (!profile) return;
              setProfileId(profile.id);
              
-             // Load farmer's batches from batch_room_allocations
-             const { data: allocations } = await supabase
+             // Fetch farmer's accessible rooms and their sites
+             const { data: farmerAccessData, error: accessError } = await supabase
+               .from('farmer_room_access')
+               .select(`
+                 room_id,
+                 cold_storage_rooms(site_id, sites(id, facility_name))
+               `)
+               .eq('farmer_id', profile.id)
+               .eq('status', 'Approved');
+             
+             if (accessError) {
+               console.error('Error fetching farm access:', accessError);
+             }
+             
+             // Extract unique sites from room access
+             const uniqueSites = new Map<string, any>();
+             if (farmerAccessData) {
+               farmerAccessData.forEach((access: any) => {
+                 const room = access.cold_storage_rooms;
+                 const site = Array.isArray(room?.sites) ? room.sites[0] : room?.sites;
+                 if (site && !uniqueSites.has(site.id)) {
+                   uniqueSites.set(site.id, { id: site.id, name: site.facility_name });
+                 }
+               });
+             }
+             
+             const sitesList = Array.from(uniqueSites.values());
+             if (sitesList.length > 0) {
+               setSites(sitesList);
+               setSelectedSiteId(sitesList[0].id);
+             }
+             
+             // Fetch all rooms for this farmer's accessible sites
+             if (sitesList.length > 0) {
+               const { data: roomsList, error: roomsError } = await supabase
+                 .from('cold_storage_rooms')
+                 .select('id, room_name, site_id')
+                 .in('site_id', sitesList.map(s => s.id))
+                 .order('room_name');
+               
+               if (roomsError) {
+                 console.error('Error fetching rooms:', roomsError);
+               }
+               
+               if (roomsList) {
+                 setRooms(roomsList);
+                 // Auto-select first room from first site
+                 const firstRoom = roomsList.find(r => r.site_id === sitesList[0].id);
+                 if (firstRoom) {
+                   setSelectedRoomId(firstRoom.id);
+                 }
+               }
+             }
+             
+             const { data: farmerBatches, error: batchError } = await supabase
+               .from('batches')
+               .select('id')
+               .eq('farmer_id', profile.id);
+             
+             if (batchError) {
+               console.error('Error fetching batches:', batchError);
+               setLoading(false);
+               return;
+             }
+             
+             if (!farmerBatches || farmerBatches.length === 0) {
+               setBatches([]);
+               setLoading(false);
+               return;
+             }
+             
+             const batchIds = farmerBatches.map(b => b.id);
+             
+             const { data: allocations, error: allocError } = await supabase
                .from('batch_room_allocations')
                .select(`
+                 id,
+                 batch_id,
+                 room_id,
+                 quantity_kg,
                  batches(
                    id,
                    batch_code,
+                   alphanumeric_code,
                    product_id,
                    remaining_quantity_kg,
                    initial_quantity_kg,
-                   products(name)
+                   expiry_date,
+                   created_at,
+                   snapshot_price_per_kg
                  )
                `)
-               .eq('batches.farmer_id', profile.id)
+               .in('batch_id', batchIds)
                .is('removed_at', null);
 
+             if (allocError) {
+               console.error('Error fetching allocations:', allocError);
+               setLoading(false);
+               return;
+             }
+
+             const productIds = Array.from(new Set(
+               allocations?.map((a: any) => {
+                 const batch = Array.isArray(a.batches) ? a.batches[0] : a.batches;
+                 return batch?.product_id;
+               }).filter(Boolean)
+             )) as string[];
+             
+             let productMap = new Map<string, any>();
+             if (productIds.length > 0) {
+               const { data: productsData } = await supabase
+                 .from('products')
+                 .select('id, name')
+                 .in('id', productIds);
+               
+               if (productsData) {
+                 productMap = new Map(productsData.map(p => [p.id, p.name]));
+               }
+             }
+
              const batchList: any[] = [];
-             if (allocations) {
+             if (allocations && allocations.length > 0) {
                allocations.forEach((alloc: any) => {
                  const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
-                 const product = Array.isArray(batch?.products) ? batch.products[0] : batch?.products;
-                 if (batch && !batchList.find(b => b.id === batch.id)) {
+                 const productName = productMap.get(batch?.product_id) || 'Unknown';
+                 if (batch && batch.remaining_quantity_kg > 0 && !batchList.find(b => b.id === batch.id)) {
+                   const expiryDate = new Date(batch.expiry_date);
+                   const now = new Date();
+                   const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                   const expiryDays = Math.max(0, daysUntilExpiry);
+                   
                    batchList.push({
                      id: batch.id,
                      batch_code: batch.batch_code,
-                     product_name: product?.name || 'Unknown',
-                     remaining_quantity_kg: batch.remaining_quantity_kg || 0
+                     alphanumeric_code: batch.alphanumeric_code,
+                     product_name: productName,
+                     room_id: alloc.room_id,
+                     remaining_quantity_kg: batch.remaining_quantity_kg,
+                     remaining_crates: convertKgToCrates(batch.remaining_quantity_kg),
+                     expiry_date: expiryDate,
+                     expiry_days: expiryDays
                    });
                  }
                });
              }
              setBatches(batchList);
              
-             // Load existing orders (sales)
-             const { data: sales } = await supabase
+             const { data: sales, error: salesError } = await supabase
                .from('sales')
                .select(`
                  id,
@@ -99,28 +258,35 @@ const FarmerOrders: React.FC = () => {
                  buyer,
                  sold_at
                `)
+               .in('batch_id', batchIds)
                .order('sold_at', { ascending: false });
 
-             const ordersList: any[] = [];
-             if (sales && batchList.length > 0) {
-               const batchMap = new Map(batchList.map(b => [b.id, b]));
-               
-               sales.forEach((sale: any) => {
-                 const batch = batchMap.get(sale.batch_id);
-                 if (batch) {
-                   ordersList.push({
-                     id: sale.id,
-                     batch_code: batch.batch_code,
-                     product_name: batch.product_name,
-                     quantity_crates: convertKgToCrates(sale.quantity_kg),
-                     buyer_name: sale.buyer,
-                     dispatch_date: sale.sold_at,
-                     total_amount: sale.quantity_kg * sale.selling_price
-                   });
-                 }
-               });
+             if (salesError) {
+               console.error('Error fetching sales:', salesError);
+               setOrders([]);
+             } else {
+               const ordersList: any[] = [];
+               if (sales && batchList.length > 0) {
+                 const batchMap = new Map(batchList.map(b => [b.id, b]));
+                 
+                 sales.forEach((sale: any) => {
+                   const batch = batchMap.get(sale.batch_id);
+                   if (batch) {
+                     ordersList.push({
+                       id: sale.id,
+                       batch_code: batch.batch_code,
+                       alphanumeric_code: batch.alphanumeric_code,
+                       product_name: batch.product_name,
+                       quantity_crates: convertKgToCrates(sale.quantity_kg),
+                       buyer_name: sale.buyer,
+                       dispatch_date: sale.sold_at,
+                       total_amount: sale.quantity_kg * sale.selling_price
+                     });
+                   }
+                 });
+               }
+               setOrders(ordersList);
              }
-             setOrders(ordersList);
          } catch (err) {
            console.error('Error loading orders:', err);
          } finally {
@@ -130,44 +296,52 @@ const FarmerOrders: React.FC = () => {
      load();
   }, [user?.id]);
 
-  const handleAddBatchToOrder = () => {
-    if (!batchToAdd || !quantityToAdd || parseFloat(quantityToAdd) <= 0) {
-      setSubmitError('Please select a batch and enter a valid quantity');
+  const handleAddToCart = (batchId: string, quantity: number) => {
+    if (quantity <= 0) return;
+    
+    const batch = batches.find(b => b.id === batchId);
+    if (!batch || quantity > batch.remaining_crates) {
+      alert('Invalid quantity');
       return;
     }
 
-    const selectedBatch = batches.find(b => b.id === batchToAdd);
-    if (!selectedBatch) return;
+    const existingItem = cartItems.find(item => item.batchId === batchId);
+    if (existingItem) {
+      setCartItems(cartItems.map(item =>
+        item.batchId === batchId 
+          ? { ...item, quantity: Math.min(quantity, batch.remaining_crates) }
+          : item
+      ));
+    } else {
+      setCartItems([...cartItems, { batchId, quantity }]);
+    }
+  };
 
-    const quantityNum = parseFloat(quantityToAdd);
-    const maxAvailable = convertKgToCrates(selectedBatch.remaining_quantity_kg);
-    if (quantityNum > maxAvailable) {
-      setSubmitError(`Requested quantity exceeds available (${maxAvailable} crates)`);
+  const handleRemoveFromCart = (batchId: string) => {
+    setCartItems(cartItems.filter(item => item.batchId !== batchId));
+  };
+
+  const handleProceedToSummary = () => {
+    console.log('🟢 handleProceedToSummary called, cartItems:', cartItems.length);
+    if (cartItems.length === 0) {
+      console.log('❌ Cart is empty, showing error');
+      setSubmitError('Please add at least one item to cart');
       return;
     }
-
-    // Check if batch already added
-    if (selectedBatches.find(s => s.batchId === batchToAdd)) {
-      setSubmitError('This batch is already in the order');
-      return;
-    }
-
-    setSelectedBatches([...selectedBatches, { batchId: batchToAdd, quantity: quantityToAdd }]);
-    setBatchToAdd('');
-    setQuantityToAdd('');
+    console.log('✅ Proceeding to summary');
+    setStep('summary');
     setSubmitError('');
   };
 
-  const handleRemoveBatchFromOrder = (batchId: string) => {
-    setSelectedBatches(selectedBatches.filter(s => s.batchId !== batchId));
-  };
-
   const handleCreateOrder = async (e: React.FormEvent) => {
+      console.log('🟡 handleCreateOrder called, e.type:', e.type);
       e.preventDefault();
       setSubmitError('');
+      console.log('🟡 cartItems:', cartItems.length, 'dispatchDate:', dispatchDate, 'buyerName:', buyerName);
       
-      if (selectedBatches.length === 0 || !dispatchDate || !buyerName) {
-          setSubmitError('Please add at least one batch and fill required fields.');
+      if (cartItems.length === 0 || !dispatchDate || !buyerName) {
+          console.log('❌ Missing required fields');
+          setSubmitError('Please fill all required fields.');
           return;
       }
       
@@ -178,16 +352,23 @@ const FarmerOrders: React.FC = () => {
       
       setSubmitting(true);
       try {
-          const pricePerKg = priceMode === 'market' ? marketPrice : parseFloat(manualPrice);
+          // Calculate price per kg
+          let pricePerKg = 0;
+          if (priceMode === 'market') {
+              const firstProduct = cartProducts[0];
+              const priceData = marketPrices[firstProduct];
+              pricePerKg = priceData?.price || 0;
+          } else {
+              pricePerKg = parseFloat(manualPrice);
+          }
 
           // Create sales records for each batch
-          for (const item of selectedBatches) {
+          for (const item of cartItems) {
               const batch = batches.find(b => b.id === item.batchId);
               if (!batch) continue;
 
-              const quantityKg = convertCratesToKg(parseFloat(item.quantity));
+              const quantityKg = convertCratesToKg(item.quantity);
 
-              // Create sale record
               const { error: saleError } = await supabase
                   .from('sales')
                   .insert([{
@@ -200,7 +381,6 @@ const FarmerOrders: React.FC = () => {
 
               if (saleError) throw saleError;
 
-              // Update batch remaining quantity
               const newRemaining = Math.max(0, batch.remaining_quantity_kg - quantityKg);
               await supabase
                   .from('batches')
@@ -208,24 +388,19 @@ const FarmerOrders: React.FC = () => {
                   .eq('id', item.batchId);
           }
 
-          console.log('Order created successfully with', selectedBatches.length, 'batches');
+          console.log('Order created successfully with', cartItems.length, 'batches');
           
-          // Reset form and reload
+          // Reset form
           setIsModalOpen(false);
-          setSelectedBatches([]);
-          setBatchToAdd('');
-          setQuantityToAdd('');
+          setStep('inventory');
+          setCartItems([]);
           setManualPrice('');
           setBuyerName('');
           setOrderRemarks('');
           setDispatchDate(new Date().toISOString().split('T')[0]);
           setPriceMode('market');
 
-          // Reload data
-          if (profileId) {
-            setLoading(true);
-            // Could reload here
-          }
+          window.location.reload();
       } catch (err: any) {
           console.error("Failed to create order", err);
           setSubmitError(err.message || 'Failed to create order. Please try again.');
@@ -249,7 +424,7 @@ const FarmerOrders: React.FC = () => {
              </div>
            </div>
            
-           <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 transform hover:-translate-y-0.5 transition-all">
+           <button onClick={() => { console.log('🔵 CREATE ORDER BUTTON CLICKED'); setIsModalOpen(true); setStep('inventory'); setCartItems([]); }} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 transform hover:-translate-y-0.5 transition-all">
                <Plus className="w-5 h-5"/> Create Order
            </button>
       </div>
@@ -271,7 +446,7 @@ const FarmerOrders: React.FC = () => {
                 <table className="w-full text-left">
                    <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-800">
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Batch Code</th>
+                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Crate Code</th>
                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Product</th>
                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Quantity</th>
                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Buyer</th>
@@ -282,7 +457,7 @@ const FarmerOrders: React.FC = () => {
                    <tbody>
                        {orders.map((order, idx) => (
                            <tr key={idx} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                               <td className="px-6 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white">{order.batch_code}</td>
+                               <td className="px-6 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white">{order.alphanumeric_code || order.batch_code}</td>
                                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{order.product_name}</td>
                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.quantity_crates} Crates</td>
                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.buyer_name}</td>
@@ -296,220 +471,324 @@ const FarmerOrders: React.FC = () => {
           </Card>
       )}
 
-      {/* CREATE ORDER MODAL */}
+      {/* TWO-STEP CREATE ORDER MODAL */}
       {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !submitting && setIsModalOpen(false)}></div>
               
-              <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
-                  <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-600 rounded-lg">
+              <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+                  <div className="sticky top-0 flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 z-10 shrink-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 bg-indigo-600 rounded-lg flex-shrink-0">
                           <ShoppingCart className="w-5 h-5 text-white" />
                         </div>
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Create New Order (Multi-Batch)</h2>
+                        <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
+                          {step === 'inventory' ? 'Select Products' : 'Order Summary'}
+                        </h2>
                       </div>
-                      <button onClick={() => setIsModalOpen(false)} disabled={submitting} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500">
+                      <button onClick={() => setIsModalOpen(false)} disabled={submitting} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 flex-shrink-0">
                           <X className="w-5 h-5" />
                       </button>
                   </div>
                   
-                  <form onSubmit={handleCreateOrder} className="p-6">
+                  <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col space-y-4">
                       {submitError && (
-                          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 border border-red-200 dark:border-red-900/40 rounded-xl text-sm font-medium">
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 border border-red-200 dark:border-red-900/40 rounded-xl text-sm font-medium">
                              {submitError}
                           </div>
                       )}
 
-                      <div className="space-y-5">
-                          {/* BATCH SELECTION SECTION */}
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                              <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                                <Package className="w-5 h-5" /> Add Batches to Order
-                              </h3>
-                              
-                              <div className="space-y-4">
-                                  {/* Add batch row */}
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {step === 'inventory' ? (
+                          // STEP 1: INVENTORY TABLE
+                          <div className="space-y-4">
+                              {/* SITE & ROOM SELECTORS */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Site</label>
                                       <select 
-                                          value={batchToAdd}
-                                          onChange={(e) => setBatchToAdd(e.target.value)}
-                                          className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white text-sm"
+                                          value={selectedSiteId}
+                                          onChange={(e) => {
+                                              const siteId = e.target.value;
+                                              setSelectedSiteId(siteId);
+                                              // Auto-select first room of this site
+                                              const firstRoom = rooms.find(r => r.site_id === siteId);
+                                              if (firstRoom) setSelectedRoomId(firstRoom.id);
+                                          }}
+                                          className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                                       >
-                                          <option value="">Select batch...</option>
-                                          {batches.filter(b => !selectedBatches.find(s => s.batchId === b.id)).map(b => (
-                                              <option key={b.id} value={b.id}>
-                                                {b.batch_code} ({b.product_name}) - {convertKgToCrates(b.remaining_quantity_kg)} crates left
-                                              </option>
+                                          <option value="">Select site...</option>
+                                          {sites.map(site => (
+                                              <option key={site.id} value={site.id}>{site.name}</option>
                                           ))}
                                       </select>
-                                      <input 
-                                          type="number"
-                                          min="0.1"
-                                          step="0.1"
-                                          value={quantityToAdd}
-                                          onChange={(e) => setQuantityToAdd(e.target.value)}
-                                          placeholder="Quantity (crates)"
-                                          className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white text-sm"
-                                      />
-                                      <button
-                                          type="button"
-                                          onClick={handleAddBatchToOrder}
-                                          className="bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 px-4 py-3 text-sm"
-                                      >
-                                          <Plus className="w-4 h-4 inline mr-1" /> Add
-                                      </button>
                                   </div>
+                                  
+                                  <div>
+                                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Room</label>
+                                      <select 
+                                          value={selectedRoomId}
+                                          onChange={(e) => setSelectedRoomId(e.target.value)}
+                                          className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                                      >
+                                          <option value="">Select room...</option>
+                                          {rooms.filter(r => r.site_id === selectedSiteId).map(room => (
+                                              <option key={room.id} value={room.id}>{room.room_name}</option>
+                                          ))}
+                                      </select>
+                                  </div>
+                              </div>
 
-                                  {/* Selected batches table */}
-                                  {selectedBatches.length > 0 && (
-                                      <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                                          <table className="w-full text-sm">
-                                              <thead>
-                                                  <tr className="bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                                                      <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Batch</th>
-                                                      <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Product</th>
-                                                      <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Available</th>
-                                                      <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">To Sell</th>
-                                                      <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Remaining</th>
-                                                      <th className="px-4 py-2"></th>
-                                                  </tr>
-                                              </thead>
-                                              <tbody>
-                                                  {selectedBatches.map((item) => {
-                                                      const batch = batches.find(b => b.id === item.batchId);
-                                                      if (!batch) return null;
-                                                      const available = convertKgToCrates(batch.remaining_quantity_kg);
-                                                      const toSell = parseFloat(item.quantity);
-                                                      const remaining = available - toSell;
-                                                      return (
-                                                          <tr key={item.batchId} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                              <td className="px-4 py-2 font-mono text-xs">{batch.batch_code}</td>
-                                                              <td className="px-4 py-2">{batch.product_name}</td>
-                                                              <td className="px-4 py-2 font-bold text-indigo-600 dark:text-indigo-400">{available}</td>
-                                                              <td className="px-4 py-2 font-bold text-emerald-600 dark:text-emerald-400">{toSell}</td>
-                                                              <td className={`px-4 py-2 font-bold ${remaining < 0 ? 'text-red-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                                                                {remaining.toFixed(1)}
-                                                              </td>
-                                                              <td className="px-4 py-2">
-                                                                  <button
-                                                                      type="button"
-                                                                      onClick={() => handleRemoveBatchFromOrder(item.batchId)}
-                                                                      className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                                                                  >
-                                                                      <Trash2 className="w-4 h-4" />
-                                                                  </button>
-                                                              </td>
-                                                          </tr>
-                                                      );
-                                                  })}
-                                              </tbody>
-                                          </table>
+                              {/* SORT OPTIONS */}
+                              <div className="flex gap-2">
+                                  <button
+                                      type="button"
+                                      onClick={() => setSortBy('expiry')}
+                                      className={`flex-1 px-3 py-2 rounded-lg font-bold text-sm transition-colors ${
+                                          sortBy === 'expiry'
+                                              ? 'bg-indigo-600 text-white'
+                                              : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                      }`}
+                                  >
+                                      Sort by Expiry (Earliest First)
+                                  </button>
+                                  <button
+                                      type="button"
+                                      onClick={() => setSortBy('price')}
+                                      className={`flex-1 px-3 py-2 rounded-lg font-bold text-sm transition-colors ${
+                                          sortBy === 'price'
+                                              ? 'bg-indigo-600 text-white'
+                                              : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                      }`}
+                                  >
+                                      Sort by Price (Highest First)
+                                  </button>
+                              </div>
+
+                              <p className="text-sm text-slate-600 dark:text-slate-400">Select products and enter quantity to add to cart</p>
+                              
+                              {sortedBatches.length === 0 ? (
+                                  <div className="text-center py-8 text-slate-500">
+                                    <Package className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                                    <p>{selectedRoomId ? 'No batches in this room' : 'Please select a room'}</p>
+                                  </div>
+                              ) : (
+                                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                                      <table className="w-full text-sm">
+                                          <thead>
+                                              <tr className="bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                                                  <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-300">Product</th>
+                                                  <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-300">Crate Code</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Stored Price</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Market Price</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Expiry</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Available</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Qty to Add</th>
+                                                  <th className="px-4 py-3"></th>
+                                              </tr>
+                                          </thead>
+                                          <tbody>
+                                              {sortedBatches.map((batch) => {
+                                                  const cartItem = cartItems.find(item => item.batchId === batch.id);
+                                                  const priceData = marketPrices[batch.product_name];
+                                                  const marketPrice = priceData?.price || 0;
+                                                  // Use snapshot_price_per_kg if available, otherwise use current market price
+                                                  const storedPrice = batch.snapshot_price_per_kg && batch.snapshot_price_per_kg > 0 ? batch.snapshot_price_per_kg : marketPrice;
+                                                  const tempQty = tempQtyValues[batch.id] ?? (cartItem?.quantity || 1);
+                                                  
+                                                  return (
+                                                      <tr key={batch.id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                          <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{batch.product_name}</td>
+                                                          <td className="px-4 py-3 font-mono text-xs text-purple-600 dark:text-purple-400">{batch.alphanumeric_code || batch.batch_code}</td>
+                                                          <td className="px-4 py-3 text-center text-amber-600 dark:text-amber-400 font-semibold">₹{storedPrice.toFixed(2)}</td>
+                                                          <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold">₹{marketPrice.toFixed(2)}</td>
+                                                          <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300">{batch.expiry_days} days</td>
+                                                          <td className="px-4 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400">{batch.remaining_crates.toFixed(1)}</td>
+                                                          <td className="px-4 py-3">
+                                                              <input
+                                                                  type="number"
+                                                                  min="0"
+                                                                  step="1"
+                                                                  max={batch.remaining_crates}
+                                                                  value={tempQty}
+                                                                  onChange={(e) => setTempQtyValues({...tempQtyValues, [batch.id]: parseFloat(e.target.value) || 0})}
+                                                                  className="w-20 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-center text-slate-900 dark:text-white"
+                                                              />
+                                                          </td>
+                                                          <td className="px-4 py-3">
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={() => handleAddToCart(batch.id, tempQty)}
+                                                                  className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded hover:bg-indigo-700 whitespace-nowrap"
+                                                              >
+                                                                  {cartItem ? 'Update' : 'Add to Cart'}
+                                                              </button>
+                                                          </td>
+                                                      </tr>
+                                                  );
+                                              })}
+                                          </tbody>
+                                      </table>
+                                  </div>
+                              )}
+
+                              {/* CART PREVIEW */}
+                              {cartItems.length > 0 && (
+                                  <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-900/40">
+                                      <h3 className="font-bold text-slate-900 dark:text-white mb-3">Cart ({cartItems.length} items)</h3>
+                                      <div className="space-y-2">
+                                          {cartItems.map(item => {
+                                              const batch = batches.find(b => b.id === item.batchId);
+                                              if (!batch) return null;
+                                              return (
+                                                  <div key={item.batchId} className="flex justify-between items-center text-sm">
+                                                      <span className="text-slate-700 dark:text-slate-300">
+                                                        {batch.product_name} ({batch.alphanumeric_code}) - {item.quantity} crates
+                                                      </span>
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => handleRemoveFromCart(item.batchId)}
+                                                          className="text-red-600 hover:text-red-700 text-xs"
+                                                      >
+                                                          Remove
+                                                      </button>
+                                                  </div>
+                                              );
+                                          })}
                                       </div>
-                                  )}
-                              </div>
-                          </div>
-
-                          {/* ORDER DETAILS */}
-                          <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
-                                <Calendar className="w-4 h-4" /> Dispatch Date
-                              </label>
-                              <input 
-                                  type="date" 
-                                  required 
-                                  value={dispatchDate} 
-                                  onChange={(e) => setDispatchDate(e.target.value)}
-                                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                              />
-                          </div>
-
-                          <div>
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Buyer Name</label>
-                              <input 
-                                  type="text" 
-                                  required 
-                                  value={buyerName}
-                                  onChange={(e) => setBuyerName(e.target.value)}
-                                  placeholder="Enter buyer or company name"
-                                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                              />
-                          </div>
-
-                          {/* PRICING */}
-                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                                <IndianRupee className="w-4 h-4" /> Selling Price
-                              </label>
-                              <div className="flex gap-4 mb-4">
-                                  <label className="flex items-center gap-2 cursor-pointer">
-                                      <input 
-                                          type="radio" 
-                                          value="market" 
-                                          checked={priceMode === 'market'}
-                                          onChange={() => setPriceMode('market')}
-                                      />
-                                      <span className="text-sm text-slate-700 dark:text-slate-300">Market Price (₹{marketPrice}/kg)</span>
-                                  </label>
-                                  <label className="flex items-center gap-2 cursor-pointer">
-                                      <input 
-                                          type="radio" 
-                                          value="manual" 
-                                          checked={priceMode === 'manual'}
-                                          onChange={() => setPriceMode('manual')}
-                                      />
-                                      <span className="text-sm text-slate-700 dark:text-slate-300">Manual Price</span>
-                                  </label>
-                              </div>
-                              {priceMode === 'manual' && (
-                                  <input 
-                                      type="number" 
-                                      min="0" 
-                                      step="0.01"
-                                      value={manualPrice}
-                                      onChange={(e) => setManualPrice(e.target.value)}
-                                      placeholder="Enter price per kg"
-                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                                  />
+                                  </div>
                               )}
                           </div>
-
-                          {/* TOTAL */}
-                          {selectedBatches.length > 0 && (
-                              <div className="bg-indigo-50 dark:bg-indigo-950/20 p-4 rounded-lg border border-indigo-200 dark:border-indigo-900/40">
-                                  <div className="flex justify-between items-center">
-                                      <div>
-                                          <p className="text-sm text-slate-600 dark:text-slate-400">Total Quantity:</p>
-                                          <p className="text-lg font-bold text-slate-900 dark:text-white">{totalCrates} Crates ({totalQuantityKg} kg)</p>
-                                      </div>
-                                      <div className="text-right">
-                                          <p className="text-sm text-slate-600 dark:text-slate-400">Total Amount:</p>
-                                          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">₹{totalAmount.toLocaleString('en-IN')}</p>
-                                      </div>
+                      ) : (
+                          // STEP 2: ORDER SUMMARY
+                          <form id="order-form" onSubmit={handleCreateOrder} className="space-y-5">
+                              <div>
+                                  <h3 className="font-bold text-slate-900 dark:text-white mb-4">Order Summary</h3>
+                                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg mb-4">
+                                      <table className="w-full text-sm">
+                                          <thead>
+                                              <tr className="bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                                                  <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-300">Product</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Total Crates</th>
+                                                  <th className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">Price/kg</th>
+                                                  <th className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300">Total Amount</th>
+                                              </tr>
+                                          </thead>
+                                          <tbody>
+                                              {totals.map((total, idx) => (
+                                                  <tr key={idx} className="border-b border-slate-100 dark:border-slate-700">
+                                                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{total.product}</td>
+                                                      <td className="px-4 py-3 text-center font-semibold text-indigo-600 dark:text-indigo-400">{total.totalCrates.toFixed(1)}</td>
+                                                      <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300">₹{total.pricePerKg.toFixed(2)}</td>
+                                                      <td className="px-4 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400">₹{total.totalPrice.toLocaleString('en-IN', {maximumFractionDigits: 2})}</td>
+                                                  </tr>
+                                              ))}
+                                              <tr className="bg-slate-50 dark:bg-slate-800/50">
+                                                  <td colSpan={3} className="px-4 py-3 font-bold text-slate-900 dark:text-white text-right">Grand Total:</td>
+                                                  <td className="px-4 py-3 text-right font-bold text-lg text-emerald-600 dark:text-emerald-400">₹{grandTotal.toLocaleString('en-IN', {maximumFractionDigits: 2})}</td>
+                                              </tr>
+                                          </tbody>
+                                      </table>
                                   </div>
                               </div>
-                          )}
 
-                          <div className="flex gap-3 pt-4">
-                              <button 
-                                  type="button"
-                                  onClick={() => setIsModalOpen(false)} 
-                                  disabled={submitting}
-                                  className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
-                              >
-                                  Cancel
-                              </button>
-                              <button 
-                                  type="submit"
-                                  disabled={submitting || selectedBatches.length === 0}
-                                  className="flex-1 px-4 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                              >
-                                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                  {submitting ? 'Creating...' : 'Create Order'}
-                              </button>
-                          </div>
-                      </div>
-                  </form>
+                              {/* ORDER DETAILS */}
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                                    <Calendar className="w-4 h-4 inline mr-2" /> Dispatch Date
+                                  </label>
+                                  <input 
+                                      type="date" 
+                                      required 
+                                      value={dispatchDate} 
+                                      onChange={(e) => setDispatchDate(e.target.value)}
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Buyer Name *</label>
+                                  <input 
+                                      type="text" 
+                                      required 
+                                      value={buyerName}
+                                      onChange={(e) => setBuyerName(e.target.value)}
+                                      placeholder="Enter buyer or company name"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
+                                    <IndianRupee className="w-4 h-4 inline mr-2" /> Selling Price
+                                  </label>
+                                  <div className="flex flex-col gap-3 mb-3">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input 
+                                              type="radio" 
+                                              value="market" 
+                                              checked={priceMode === 'market'}
+                                              onChange={() => setPriceMode('market')}
+                                          />
+                                          <span className="text-sm text-slate-700 dark:text-slate-300">Use Market Price</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input 
+                                              type="radio" 
+                                              value="manual" 
+                                              checked={priceMode === 'manual'}
+                                              onChange={() => setPriceMode('manual')}
+                                          />
+                                          <span className="text-sm text-slate-700 dark:text-slate-300">Manual Price</span>
+                                      </label>
+                                  </div>
+                                  {priceMode === 'manual' && (
+                                      <input 
+                                          type="number" 
+                                          min="0" 
+                                          step="0.01"
+                                          value={manualPrice}
+                                          onChange={(e) => setManualPrice(e.target.value)}
+                                          placeholder="Enter price per kg"
+                                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                      />
+                                  )}
+                              </div>
+                          </form>
+                      )}
+                  </div>
+
+                  {/* MODAL FOOTER */}
+                  <div className="flex gap-3 p-4 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                      <button
+                          onClick={() => {
+                              if (step === 'summary') {
+                                  setStep('inventory');
+                              } else {
+                                  setIsModalOpen(false);
+                              }
+                          }}
+                          disabled={submitting}
+                          className="flex-1 px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-bold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+                      >
+                          {step === 'summary' ? 'Back' : 'Cancel'}
+                      </button>
+                      <button
+                          onClick={step === 'inventory' ? handleProceedToSummary : undefined}
+                          type={step === 'summary' ? 'submit' : 'button'}
+                          form={step === 'summary' ? 'order-form' : undefined}
+                          disabled={submitting || (step === 'inventory' && cartItems.length === 0)}
+                          className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                          {submitting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                              <>
+                                  {step === 'inventory' ? 'Next' : 'Create Order'}
+                                  <ChevronRight className="w-4 h-4" />
+                              </>
+                          )}
+                      </button>
+                  </div>
               </div>
           </div>
       )}

@@ -27,6 +27,7 @@ export const logActivity = async (params: LogActivityParams): Promise<void> => {
     const { error } = await supabase
       .from('activity_logs')
       .insert({
+        site_id: params.facilityId || null,  // Map facilityId param to site_id column
         actor_id: params.actorId,
         actor_name: params.actorName,
         action_type: params.actionType,
@@ -34,7 +35,7 @@ export const logActivity = async (params: LogActivityParams): Promise<void> => {
         target_type: params.targetType,
         target_id: params.targetId,
         target_name: params.targetName,
-        facility_id: params.facilityId || null,
+        facility_id: params.facilityId || null,  // Keep facility_id for reference
         related_data: params.relatedData || null,
         visibility: params.visibility || 'private',
         created_at: new Date().toISOString()

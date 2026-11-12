@@ -8,12 +8,12 @@ import ThemeProvider from './components/theme/ThemeProvider'
 import './styles/globals.css'
 
 // Prevent theme flash by reading appearance from the persisted settings store.
-// useSettingsStore persists to 'coldsense-settings'; the appearance field lives there.
-// Fall back to reading the legacy 'theme' key so existing sessions aren't broken.
+// useSettingsStore persists to 'systmii-settings'; the appearance field lives there.
+// Fall back to reading the legacy 'coldsense-settings' / 'theme' key so existing sessions aren't broken.
 // Default to 'light' theme when no preference is stored.
 const resolveInitialTheme = (): 'dark' | 'light' => {
   try {
-    const settings = localStorage.getItem('coldsense-settings');
+    const settings = localStorage.getItem('systmii-settings') || localStorage.getItem('coldsense-settings');
     if (settings) {
       const parsed = JSON.parse(settings);
       const appearance: string = parsed?.state?.appearance ?? 'light';

@@ -1,6 +1,6 @@
 /**
  * Centralized Unit Conversion Helpers
- * Standardized crate weight across ColdSense system.
+ * Standardized crate weight across SystmII platform.
  */
 
 export const KG_PER_CRATE = 25;

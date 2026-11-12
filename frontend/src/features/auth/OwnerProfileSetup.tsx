@@ -5,6 +5,9 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import SearchableSelect from '../../components/ui/SearchableSelect';
 import { User, MapPin, Calendar, Check, AlertCircle, Building, Phone } from 'lucide-react';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
 import { supabase } from '../../lib/supabase';
 import { getOwnerRoleId } from '../../services/roleService';
 import type { State, District, Locality } from '../../lib/supabase';
@@ -162,17 +165,24 @@ const OwnerProfileSetup: React.FC = () => {
       // Get signup data from localStorage
       const signupData = JSON.parse(localStorage.getItem('signupData') || '{}');
 
-      // Verify session exists first
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('No authenticated session found. Please complete signup first.');
+      // Validate date of birth if provided
+      if (formData.dateOfBirth) {
+        const [day, month, year] = formData.dateOfBirth.split('/').map(Number);
+        const isValidDate = day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2040;
+        if (!isValidDate) {
+          setError('Please enter a valid date of birth (dd/mm/yyyy)');
+          setLoading(false);
+          return;
+        }
       }
 
       // Get auth user from Supabase
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('No authenticated user found');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('No authenticated session found. Please complete signup first.');
       }
+
+      const user = session.user;
 
       // Check if profile already exists to prevent duplicates
       const { data: existingProfile } = await supabase
@@ -211,8 +221,14 @@ const OwnerProfileSetup: React.FC = () => {
           id: user.id,
           email: userEmail,
           full_name: fullName,
-          role: 'owner',
-          phone: formData.phoneNumber || null,
+          role_id: ownerRoleId,
+          user_type: 'owner',
+          phone_number: formData.phoneNumber || null,
+          date_of_birth: formData.dateOfBirth || null,
+          gender: formData.gender || null,
+          state_id: selectedStateId || null,
+          district_id: selectedDistrictId || null,
+          locality_id: selectedLocalityId || null,
           is_active: true,
         }, { onConflict: 'id' });
 
@@ -283,287 +299,214 @@ const OwnerProfileSetup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 p-4">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Illustration Section - Professional Cold Storage Business */}
-        <div className="hidden lg:flex flex-col items-center justify-center">
-          <svg viewBox="0 0 400 400" className="w-full h-full max-w-md">
-            <defs>
-              <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#87CEEB" />
-                <stop offset="100%" stopColor="#E0F7FA" />
-              </linearGradient>
-              <linearGradient id="buildingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#4A90E2" />
-                <stop offset="100%" stopColor="#357ABD" />
-              </linearGradient>
-              <linearGradient id="roofGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#2C3E50" />
-                <stop offset="100%" stopColor="#34495E" />
-              </linearGradient>
-              <linearGradient id="truckGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#E74C3C" />
-                <stop offset="100%" stopColor="#C0392B" />
-              </linearGradient>
-            </defs>
-            
-            {/* Sky */}
-            <rect x="0" y="0" width="400" height="400" fill="url(#skyGradient)" />
-            
-            {/* Sun */}
-            <circle cx="320" cy="60" r="40" fill="#FFD700" opacity="0.9" />
-            
-            {/* Ground */}
-            <rect x="0" y="320" width="400" height="80" fill="#95A5A6" />
-            
-            {/* Cold Storage Building */}
-            <rect x="80" y="140" width="240" height="180" fill="url(#buildingGradient)" rx="5" />
-            
-            {/* Roof */}
-            <polygon points="80,140 200,100 320,140" fill="url(#roofGradient)" />
-            
-            {/* Company Sign */}
-            <rect x="150" y="115" width="100" height="25" fill="#2C3E50" rx="3" />
-            <text x="200" y="133" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">COLDSENSE</text>
-            
-            {/* Large Loading Door */}
-            <rect x="160" y="240" width="80" height="80" fill="#34495E" rx="3" />
-            <rect x="165" y="245" width="70" height="70" fill="#7F8C8D" rx="2" />
-            
-            {/* Windows with reflection effect */}
-            <rect x="100" y="160" width="35" height="45" fill="#87CEEB" rx="3" />
-            <rect x="100" y="160" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
-            
-            <rect x="255" y="160" width="35" height="45" fill="#87CEEB" rx="3" />
-            <rect x="255" y="160" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
-            
-            <rect x="100" y="220" width="35" height="45" fill="#87CEEB" rx="3" />
-            <rect x="100" y="220" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
-            
-            <rect x="255" y="220" width="35" height="45" fill="#87CEEB" rx="3" />
-            <rect x="255" y="220" width="35" height="20" fill="rgba(255,255,255,0.3)" rx="3" />
-            
-            {/* AC Units on roof */}
-            <rect x="110" y="145" width="25" height="15" fill="#7F8C8D" rx="2" />
-            <rect x="265" y="145" width="25" height="15" fill="#7F8C8D" rx="2" />
-            
-            {/* Delivery Truck #1 */}
-            <g transform="translate(20, 290)">
-              <rect x="0" y="15" width="60" height="25" fill="url(#truckGradient)" rx="3" />
-              <rect x="50" y="10" width="30" height="15" fill="#C0392B" rx="2" />
-              <circle cx="15" cy="40" r="6" fill="#2C3E50" />
-              <circle cx="15" cy="40" r="3" fill="#95A5A6" />
-              <circle cx="55" cy="40" r="6" fill="#2C3E50" />
-              <circle cx="55" cy="40" r="3" fill="#95A5A6" />
-              <rect x="55" y="17" width="20" height="10" fill="rgba(255,255,255,0.3)" rx="1" />
-            </g>
-            
-            {/* Delivery Truck #2 */}
-            <g transform="translate(320, 290)">
-              <rect x="0" y="15" width="60" height="25" fill="#27AE60" rx="3" />
-              <rect x="50" y="10" width="30" height="15" fill="#229954" rx="2" />
-              <circle cx="15" cy="40" r="6" fill="#2C3E50" />
-              <circle cx="15" cy="40" r="3" fill="#95A5A6" />
-              <circle cx="55" cy="40" r="6" fill="#2C3E50" />
-              <circle cx="55" cy="40" r="3" fill="#95A5A6" />
-              <rect x="55" y="17" width="20" height="10" fill="rgba(255,255,255,0.3)" rx="1" />
-            </g>
-            
-            {/* Snowflake icon on building (indicating cold storage) */}
-            <g transform="translate(200, 180)">
-              <circle cx="0" cy="0" r="20" fill="rgba(255,255,255,0.2)" />
-              <path d="M 0,-12 L 0,12 M -12,0 L 12,0 M -8,-8 L 8,8 M -8,8 L 8,-8" 
-                    stroke="#E8F8F5" strokeWidth="3" strokeLinecap="round" />
-            </g>
-          </svg>
-          
-          <div className="text-center mt-6">
-            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Business Owner!</h2>
-            <p className="text-white/80">Manage your cold storage empire with ColdSense</p>
-          </div>
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-sky-500 selection:text-white overflow-hidden">
+      {/* Role-Specific Background Animation (Cold Storage Facility: +30% brightness, warehouse, AGVs, cyan lasers) */}
+      <RoleBackground role="owner" />
+
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
         </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
 
-        {/* Form Card */}
-        <Card variant="default" className="w-full max-w-lg">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Building className="h-8 w-8 text-white" />
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full max-w-2xl mx-auto">
+        <div className="w-full rounded-2xl bg-[#1A2A3A]/90 backdrop-blur-md border border-[#304458] p-6 sm:p-8 shadow-2xl">
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-sky-500/25">
+              <Building className="h-7 w-7 text-white" />
             </div>
-            <CardTitle className="text-3xl">Owner Profile Setup</CardTitle>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Let's set up your profile to get started
+            <h2 className="text-2xl font-bold text-white">Owner Profile Setup</h2>
+            <p className="text-slate-300 text-sm mt-1">
+              Step 2/2 &bull; Setup your facility telemetry and operations hub
             </p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    First Name *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange('firstName', e.target.value)}
-                      placeholder="Enter your first name"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      required
-                    />
-                  </div>
-                </div>
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Last Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange('lastName', e.target.value)}
-                      placeholder="Enter your last name"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-rose-950/50 border border-rose-500/40 text-rose-300 rounded-xl text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  First Name <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    placeholder="Enter your first name"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    required
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Phone Number
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Last Name
                 </label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
-                    type="tel"
-                    value={formData.phoneNumber}
-                    onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                    placeholder="Enter your phone number"
-                    pattern="[0-9]{10}"
-                    maxLength={10}
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    placeholder="Enter your last name"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional - 10 digits if provided</p>
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Gender
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => handleInputChange('gender', e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Location Information
-                </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      State *
-                    </label>
-                    <SearchableSelect
-                      placeholder="Select state"
-                      options={states.map(s => s.name)}
-                      value={formData.state}
-                      onChange={handleStateSelect}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      District *
-                    </label>
-                    <SearchableSelect
-                      placeholder="Select district"
-                      options={districts.map(d => d.name)}
-                      value={formData.district}
-                      onChange={handleDistrictSelect}
-                      disabled={!selectedStateId}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Locality
-                    </label>
-                    <SearchableSelect
-                      placeholder="Select locality"
-                      options={localities.map(l => l.name)}
-                      value={formData.locality}
-                      onChange={handleLocalitySelect}
-                      disabled={!selectedDistrictId}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Phone Number (10 digits)
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <input
-                  type="checkbox"
-                  id="terms"
-                  checked={acceptTerms}
-                  onChange={(e) => setAcceptTerms(e.target.checked)}
-                  className="mt-1 rounded"
-                  required
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleInputChange('phoneNumber', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  maxLength={10}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
-                <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-400">
-                  I accept the Terms & Conditions *
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Date of Birth
                 </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                      if (val.length >= 2) val = val.slice(0, 2) + '/' + val.slice(2);
+                      if (val.length >= 5) val = val.slice(0, 5) + '/' + val.slice(5, 9);
+                      handleInputChange('dateOfBirth', val);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
               </div>
 
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-                loading={loading}
-              >
-                Continue to Setup Wizard
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Gender
+                </label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => handleInputChange('gender', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="" className="bg-slate-900 text-slate-300">Select gender</option>
+                  <option value="male" className="bg-slate-900 text-white">Male</option>
+                  <option value="female" className="bg-slate-900 text-white">Female</option>
+                  <option value="other" className="bg-slate-900 text-white">Other</option>
+                  <option value="prefer_not_to_say" className="bg-slate-900 text-white">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Location Information Section */}
+            <div className="border-t border-slate-700 pt-5">
+              <h3 className="text-base font-semibold text-white mb-3.5 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-sky-400" />
+                Location Information
+              </h3>
+              
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    State <span className="text-rose-400">*</span>
+                  </label>
+                  <SearchableSelect
+                    placeholder="Select state"
+                    options={states.map(s => s.name)}
+                    value={formData.state}
+                    onChange={handleStateSelect}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    District <span className="text-rose-400">*</span>
+                  </label>
+                  <SearchableSelect
+                    placeholder="Select district"
+                    options={districts.map(d => d.name)}
+                    value={formData.district}
+                    onChange={handleDistrictSelect}
+                    disabled={!selectedStateId}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Locality
+                  </label>
+                  <SearchableSelect
+                    placeholder="Select locality"
+                    options={localities.map(l => l.name)}
+                    value={formData.locality}
+                    onChange={handleLocalitySelect}
+                    disabled={!selectedDistrictId}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 pt-2">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-1 rounded bg-slate-800 border-slate-700 text-sky-500 focus:ring-sky-500"
+                required
+              />
+              <label htmlFor="terms" className="text-xs text-slate-300">
+                I accept the Terms &amp; Conditions <span className="text-rose-400">*</span>
+              </label>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-sky-500/25 transition-all text-sm"
+              loading={loading}
+            >
+              Continue to Setup Wizard &rarr;
+            </Button>
+          </form>
+        </div>
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

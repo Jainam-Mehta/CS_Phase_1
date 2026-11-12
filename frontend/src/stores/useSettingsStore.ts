@@ -70,7 +70,7 @@ export const useSettingsStore = create<SettingsState>()(
       resetSettings: () => set(defaultSettings),
     }),
     {
-      name: 'coldsense-settings',
+      name: 'systmii-settings',
     }
   )
 );

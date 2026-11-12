@@ -60,7 +60,8 @@ export default function FarmerDashboard() {
 
 function FarmerDashboardCore() {
   const { user } = useAuthStore();
-  const { activeRoomId, activeProductId, setActiveRoomId, setActiveProductId } = useFarmerStore();
+  const { activeRoomId, setActiveRoomId } = useFarmerStore();
+  // Note: Products no longer used - removed product selector from UI
   
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -79,6 +80,7 @@ function FarmerDashboardCore() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [energyData, setEnergyData] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [lastSensorReadingTime, setLastSensorReadingTime] = useState<Date | null>(null);
   
   const [hasAnyApproved, setHasAnyApproved] = useState(false);
   const [hasAnyPending, setHasAnyPending] = useState(false);
@@ -99,27 +101,18 @@ function FarmerDashboardCore() {
     return () => clearInterval(interval);
   }, []);
 
-  // When facility changes, update room and reset product selection
+  // When facility changes, update room 
   const handleFacilityChange = (facilityId: string) => {
     setSelectedFacilityId(facilityId);
     const newRoom = rooms.find(r => r.facilityId === facilityId);
     if (newRoom) {
       setActiveRoomId(newRoom.roomId);
-      setActiveProductId(null); // Reset product when room changes
     }
   };
 
-  // When room changes, reset product selection
+  // When room changes
   const handleRoomChange = (roomId: string) => {
     setActiveRoomId(roomId);
-    setActiveProductId(null); // Reset product when room changes
-  };
-
-  // When product changes, verify it's still in the list
-  const handleProductChange = (productId: string) => {
-    if (products.find(p => p.id === productId)) {
-      setActiveProductId(productId);
-    }
   };
 
   useEffect(() => {
@@ -185,19 +178,11 @@ function FarmerDashboardCore() {
             setFacilities(facs);
             setRooms(approvedRooms);
 
-            // Fetch farmer's products
-            const { data: farmerProds } = await supabase
-              .from('farmer_products')
-              .select('products(id, name)')
-              .eq('farmer_id', profile.id);
+            // Fetch farmer's products from localStorage (ProductSelection stores them there)
+            const storageRequest = localStorage.getItem('storageAccessRequest');
+            const selectedProducts = storageRequest ? JSON.parse(storageRequest).products : [];
             
-            const prodList: any[] = [];
-            if (farmerProds) {
-              farmerProds.forEach((fp: any) => {
-                const prod = Array.isArray(fp.products) ? fp.products[0] : fp.products;
-                if (prod) prodList.push(prod);
-              });
-            }
+            const prodList = selectedProducts || [];
             setProducts(prodList.length > 0 ? prodList : []);
 
             let currentFac = facs[0].id;
@@ -243,32 +228,6 @@ function FarmerDashboardCore() {
     }
   }, [loading]);
 
-  // Auto-select first product if products loaded but no product selected
-  // Also validate that activeProductId from store still exists in products list
-  useEffect(() => {
-    if (products.length > 0) {
-      // Check if the stored activeProductId still exists in the products list
-      const productExists = products.some(p => p.id === activeProductId);
-      
-      if (!activeProductId || !productExists) {
-        // Auto-select first product if none is selected or selected one doesn't exist
-        console.log('Auto-selecting first product:', products[0].id);
-        setActiveProductId(products[0].id);
-      }
-    }
-  }, [products]);
-
-  // Load product data when activeProductId changes
-  useEffect(() => {
-    if (!activeProductId || !products.length) return;
-    
-    const product = products.find((p: any) => p.id === activeProductId);
-    if (product) {
-      setActiveProductData(product);
-      console.log('Product data loaded:', product);
-    }
-  }, [activeProductId, products]);
-
   // Load live conditions and subscribe to real-time updates when active room changes
   useEffect(() => {
     if (!activeRoomId) return;
@@ -278,11 +237,33 @@ function FarmerDashboardCore() {
     // Clear old data immediately when room changes
     setLiveConditions({ temp: 0, hum: 0, ambientTemp: 0, ambientHum: 0, date: new Date().toISOString() });
     setTemperatureHistory([]);
+    setLastSensorReadingTime(null);
 
     const loadLiveConditions = async () => {
       try {
-        // Fetch averaged sensor data from backend (like owner dashboard does)
+        // Fetch last sensor reading timestamp from dedicated endpoint
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          
+          const response = await fetch(`${apiUrl}/api/sensors/last-reading-time/${activeRoomId}`, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const timestampData = await response.json();
+            if (timestampData.last_reading_time) {
+              setLastSensorReadingTime(new Date(timestampData.last_reading_time));
+              console.log('[FarmerDashboard] Last reading time:', timestampData.last_reading_time);
+            }
+          }
+        } catch (error) {
+          console.debug('[FarmerDashboard] Last reading endpoint unavailable');
+        }
+
+        // Fetch averaged sensor data from backend (like owner dashboard does)
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -311,57 +292,141 @@ function FarmerDashboardCore() {
         } catch (error) {
           console.debug('[FarmerDashboard] Averaging endpoint unavailable, falling back to raw data');
           
-          // Fallback: Fetch latest temperature reading
-          const { data: tempData, error: tempError } = await supabase
+          // Fallback: Fetch latest conditions with ALL temperature and humidity sensors + door status
+          const { data: condData, error: condError } = await supabase
             .from('cold_storage_conditions')
-            .select('temperature, recorded_at')
+            .select('temperature_1, temperature_2, temperature_3, temperature_4, humidity_1, humidity_2, humidity_3, humidity_4, door_status_1, door_status_2, door_status_3, door_status_4, recorded_at')
             .eq('room_id', activeRoomId)
-            .not('temperature', 'is', null)
             .order('recorded_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
-          // Fallback: Fetch latest humidity reading
-          const { data: humData, error: humError } = await supabase
-            .from('cold_storage_conditions')
-            .select('humidity, recorded_at')
-            .eq('room_id', activeRoomId)
-            .not('humidity', 'is', null)
-            .order('recorded_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          if (condData) {
+            // Calculate average temperature from all available sensors
+            const temps = [condData.temperature_1, condData.temperature_2, condData.temperature_3, condData.temperature_4]
+              .filter(t => t != null)
+              .map(t => parseFloat((t).toFixed(2)));
+            const temp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length) : 0;
 
-          if (tempData || humData) {
-            const temp = tempData?.temperature ? parseFloat((tempData.temperature / 100).toFixed(2)) : 0;
-            const hum = humData?.humidity ? parseFloat((humData.humidity / 100).toFixed(2)) : 0;
+            // Calculate average humidity from all available sensors
+            const hums = [condData.humidity_1, condData.humidity_2, condData.humidity_3, condData.humidity_4]
+              .filter(h => h != null)
+              .map(h => parseFloat((h).toFixed(2)));
+            const hum = hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length) : 0;
+            
+            // Get door status - if ANY door shows "closed", display "Closed"
+            const doorValues = [condData.door_status_1, condData.door_status_2, condData.door_status_3, condData.door_status_4];
+            const anyClosed = doorValues.some(v => v === 'closed' || v === 'Closed');
+            const doorStatus = anyClosed ? 'Closed' : (doorValues.some(v => v != null) ? 'Open' : 'Unknown');
+            
+            // Set last reading time from the condition data
+            if (condData.recorded_at) {
+              setLastSensorReadingTime(new Date(condData.recorded_at));
+            }
             
             setLiveConditions({
               temp,
               hum,
               ambientTemp: 0,
               ambientHum: 0,
-              date: tempData?.recorded_at || humData?.recorded_at
+              doorStatus,
+              date: condData?.recorded_at
             });
           }
         }
 
-        // Fetch temperature history for chart
+        // Fetch temperature history for chart - get ALL temperature sensors
         const { data: tempHistory, error: tempHistError } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature, recorded_at')
+          .select('temperature_1, temperature_2, temperature_3, temperature_4, recorded_at')
           .eq('room_id', activeRoomId)
-          .not('temperature', 'is', null)
           .order('recorded_at', { ascending: true })
           .limit(100);
 
         console.log('[FarmerDashboard] Temp history query:', { tempHistError, count: tempHistory?.length });
 
-        // Fetch humidity history for chart
+        // Fetch energy data from energy_consumption table for THIS ROOM ONLY (cumulative)
+        const { data: energyRecords } = await supabase
+          .from('energy_consumption')
+          .select('kwh_total, kwh_solar, kwh_grid, recorded_at')
+          .eq('room_id', activeRoomId)
+          .order('recorded_at', { ascending: true });
+
+        if (energyRecords && energyRecords.length > 0) {
+          // Calculate cumulative total across all records for this room
+          let cumulativeTotal = 0;
+          let cumulativeSolar = 0;
+          let cumulativeGrid = 0;
+          
+          const energyChartData = energyRecords.map((record: any) => {
+            cumulativeTotal += Number(record.kwh_total) || 0;
+            cumulativeSolar += Number(record.kwh_solar) || 0;
+            cumulativeGrid += Number(record.kwh_grid) || 0;
+
+            const date = new Date(record.recorded_at);
+            const dateStr = date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+            
+            return {
+              date: dateStr,
+              total_kwh: cumulativeTotal,
+              solar_kwh: cumulativeSolar,
+              grid_kwh: cumulativeGrid,
+              recorded_at: record.recorded_at
+            };
+          });
+
+          setEnergyData(energyChartData);
+          console.log('[FarmerDashboard] Energy data loaded for room:', activeRoomId, 'records:', energyChartData.length, 'cumulative total:', cumulativeTotal, 'kWh');
+        }
+
+        // Fetch energy data from the site level (cumulative total consumed by the facility)
+        // Get the site_id from the room first
+        const { data: roomData } = await supabase
+          .from('cold_storage_rooms')
+          .select('site_id')
+          .eq('id', activeRoomId)
+          .single();
+
+        if (roomData?.site_id) {
+          const { data: energyRecords } = await supabase
+            .from('energy_consumption')
+            .select('kwh_total, kwh_solar, kwh_grid, recorded_at')
+            .eq('site_id', roomData.site_id)
+            .order('recorded_at', { ascending: true });
+
+          if (energyRecords && energyRecords.length > 0) {
+            // Calculate cumulative total across all records
+            let cumulativeTotal = 0;
+            let cumulativeSolar = 0;
+            let cumulativeGrid = 0;
+            
+            const energyChartData = energyRecords.map((record: any) => {
+              cumulativeTotal += Number(record.kwh_total) || 0;
+              cumulativeSolar += Number(record.kwh_solar) || 0;
+              cumulativeGrid += Number(record.kwh_grid) || 0;
+
+              const date = new Date(record.recorded_at);
+              const dateStr = date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+              
+              return {
+                date: dateStr,
+                total_kwh: cumulativeTotal,
+                solar_kwh: cumulativeSolar,
+                grid_kwh: cumulativeGrid,
+                recorded_at: record.recorded_at
+              };
+            });
+
+            setEnergyData(energyChartData);
+            console.log('[FarmerDashboard] Energy data loaded:', energyChartData.length, 'records, total:', cumulativeTotal, 'kWh');
+          }
+        }
+
+        // Fetch humidity history for chart - get ALL humidity sensors
         const { data: humHistory, error: humHistError } = await supabase
           .from('cold_storage_conditions')
-          .select('humidity, recorded_at')
+          .select('humidity_1, humidity_2, humidity_3, humidity_4, recorded_at')
           .eq('room_id', activeRoomId)
-          .not('humidity', 'is', null)
           .order('recorded_at', { ascending: true })
           .limit(100);
 
@@ -374,12 +439,16 @@ function FarmerDashboardCore() {
         if (tempHistory) {
           tempHistory.forEach((t: any) => {
             const utcDate = new Date(t.recorded_at);
-            // Convert UTC to IST (UTC+5:30) using proper date arithmetic
-            const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
-            const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-            // Format value: divide by 100 for display (1206 → 12.06)
-            const formattedTemp = t.temperature ? parseFloat((t.temperature / 100).toFixed(2)) : 0;
-            const timestamp = istTime.getTime(); // Use milliseconds for proper sorting
+            // Don't manually add timezone offset - timestamp is already correct
+            const time = utcDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            
+            // Average all temperature sensors
+            const temps = [t.temperature_1, t.temperature_2, t.temperature_3, t.temperature_4]
+              .filter((v: any) => v != null)
+              .map((v: any) => parseFloat((v).toFixed(2)));
+            const formattedTemp = temps.length > 0 ? (temps.reduce((a: number, b: number) => a + b, 0) / temps.length) : 0;
+            
+            const timestamp = utcDate.getTime(); // Use milliseconds for proper sorting
             timeMap.set(time, { 
               time, 
               value: formattedTemp, 
@@ -392,12 +461,16 @@ function FarmerDashboardCore() {
         if (humHistory) {
           humHistory.forEach((h: any) => {
             const utcDate = new Date(h.recorded_at);
-            // Convert UTC to IST (UTC+5:30) using proper date arithmetic
-            const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
-            const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-            // Format value: divide by 100 for display (6000 → 60.00)
-            const formattedHum = h.humidity ? parseFloat((h.humidity / 100).toFixed(2)) : 0;
-            const timestamp = istTime.getTime();
+            // Don't manually add timezone offset - timestamp is already correct
+            const time = utcDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            
+            // Average all humidity sensors
+            const hums = [h.humidity_1, h.humidity_2, h.humidity_3, h.humidity_4]
+              .filter((v: any) => v != null)
+              .map((v: any) => parseFloat((v).toFixed(2)));
+            const formattedHum = hums.length > 0 ? (hums.reduce((a: number, b: number) => a + b, 0) / hums.length) : 0;
+            
+            const timestamp = utcDate.getTime();
             if (timeMap.has(time)) {
               timeMap.get(time).humidity = formattedHum;
               // Update timestamp if this humidity reading is newer
@@ -436,7 +509,7 @@ function FarmerDashboardCore() {
       loadLiveConditions();
     }, 10000);
 
-    // Subscribe to real-time updates
+    // Subscribe to real-time updates for conditions
     const channel = supabase
       .channel(`room_conditions_${activeRoomId}`)
       .on(
@@ -508,8 +581,30 @@ function FarmerDashboardCore() {
       )
       .subscribe();
 
+    // Subscribe to real-time updates for sensor readings to update last reading time
+    const sensorReadingChannel = supabase
+      .channel(`sensor_readings_${activeRoomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sensor_readings',
+          filter: `room_id=eq.${activeRoomId}`
+        },
+        (payload: any) => {
+          const newReading = payload.new;
+          console.log('[FarmerDashboard] New sensor reading:', newReading);
+          
+          // Update the last reading timestamp
+          setLastSensorReadingTime(new Date(newReading.recorded_at));
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(sensorReadingChannel);
       clearInterval(pollInterval);
     };
   }, [activeRoomId]);
@@ -540,12 +635,17 @@ function FarmerDashboardCore() {
 
   const roomOptions = rooms.filter(r => r.facilityId === selectedFacilityId);
   
+  // Get door status from liveConditions (from cold_storage_conditions table)
+  const getDoorStatusFarmer = () => {
+    return (liveConditions as any)?.doorStatus ?? 'Unknown';
+  };
+  
   // NO DEMO DATA - Use real data or fallback to 0/empty
   const displayTemp = liveConditions?.temp ?? 0;
   const displayHum = liveConditions?.hum ?? 0;
   const displayAmbientTemp = liveConditions?.ambientTemp ?? 0;
   const displayAmbientHum = liveConditions?.ambientHum ?? 0;
-  const displayDoorStats = doorStats ?? { status: 'Unknown', count: 0, duration: 0, lastOpenTime: 'N/A' };
+  const displayDoorStats = { status: getDoorStatusFarmer(), count: doorStats?.count ?? 0, duration: doorStats?.duration ?? 0, lastOpenTime: doorStats?.lastOpenTime ?? 'N/A' };
   const displayEnergyData = energyData.length > 0 ? energyData : [];
   const displayTemperatureHistory = temperatureHistory.length > 0 ? temperatureHistory : [];
   const displayHumidityHistory = temperatureHistory.length > 0
@@ -555,11 +655,11 @@ function FarmerDashboardCore() {
   let tempEval = { status: 'GOOD', style: 'bg-emerald-100 text-emerald-700', message: 'Optimal' };
   let humEval = { status: 'GOOD', style: 'bg-emerald-100 text-emerald-700', message: 'Optimal' };
   
-  // Use optimal ranges from database (products table)
-  const tempMin = activeProductData?.storage_temp_min ?? 1;
-  const tempMax = activeProductData?.storage_temp_max ?? 5;
-  const humMin = activeProductData?.storage_humidity_min ?? 82;
-  const humMax = activeProductData?.storage_humidity_max ?? 96;
+  // Standard cold storage ranges for all products
+  const tempMin = 1;
+  const tempMax = 5;
+  const humMin = 82;
+  const humMax = 96;
   
   if (liveConditions) {
       if (displayTemp < tempMin) {
@@ -617,33 +717,18 @@ function FarmerDashboardCore() {
                   <ChevronDown className="absolute right-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
                 </div>
              </div>
-             <div className="flex-1 relative">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Product</label>
-                <div className="relative">
-                  <select 
-                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg p-3 font-semibold outline-none focus:ring-2 focus:ring-primary-500 appearance-none disabled:opacity-50"
-                     value={activeProductId || ''}
-                     onChange={(e) => handleProductChange(e.target.value)}
-                     disabled={products.length === 0}
-                  >
-                     {products.length === 0 && <option value="">No Products Saved</option>}
-                     {products.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
-                </div>
-             </div>
           </CardContent>
        </Card>
 
-       {!activeProductId || products.length === 0 ? (
+       {!selectedFacilityId || !activeRoomId ? (
            <div className="p-12 text-center border-2 border-dashed border-slate-300 rounded-xl mt-8">
-               <h2 className="text-xl font-bold text-slate-600">No Product Data Available</h2>
-               <p className="text-slate-500">Please select a product from the dropdown above to view storage conditions.</p>
+               <h2 className="text-xl font-bold text-slate-600">Select a Room</h2>
+               <p className="text-slate-500">Please select a facility and room above to view storage conditions.</p>
            </div>
        ) : (
            <div className="space-y-6 pt-2">
               {/* 3 & 4 & 5. KEY METRICS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
                  {/* Gauges */}
                  <Card className="shadow-sm border-slate-200">
                     <CardContent className="p-6 flex flex-col justify-center items-center h-full">
@@ -678,7 +763,7 @@ function FarmerDashboardCore() {
                        <CardContent className="p-6 flex justify-between items-center h-full">
                           <div>
                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Energy Consumed</p>
-                             <p className="text-3xl font-black mt-2 text-slate-800">{energyData.length > 0 ? `${energyData[0].total_kwh} kWh` : '0 kWh'}</p>
+                             <p className="text-3xl font-black mt-2 text-slate-800">{energyData.length > 0 ? `${energyData[energyData.length - 1].total_kwh.toFixed(1)} kWh` : '0 kWh'}</p>
                           </div>
                           <div className="p-4 bg-amber-50 text-amber-500 rounded-2xl"><Zap className="w-8 h-8"/></div>
                        </CardContent>
@@ -697,10 +782,10 @@ function FarmerDashboardCore() {
                  </div>
 
                  {/* Door Events & Alerts */}
-                 <div className="flex flex-col gap-6">
+                 <div className="flex flex-col gap-6 w-full">
                     {/* 4. Door Monitoring Card */}
-                    <Card className="flex-1 shadow-sm border-slate-200">
-                       <CardContent className="p-6 flex justify-between items-center h-full group">
+                    <Card className="flex-1 shadow-sm border-slate-200 w-full">
+                       <CardContent className="p-6 flex justify-between items-center h-full group w-full">
                           <div>
                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest group-hover:text-primary-600 transition-colors">Door Monitor</p>
                              <div className="flex items-center gap-3 mt-2">
@@ -713,18 +798,19 @@ function FarmerDashboardCore() {
                        </CardContent>
                     </Card>
                  {/* 9. Alerts */}
-                    <Card className="flex-1 shadow-sm border-slate-200">
-                       <CardContent className="p-6 flex justify-between items-center h-full">
-                          <div>
-                             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Alerts</p>
-                             {/* Use real alerts.length instead of hardcoded 1 */}
-                             <p className="text-3xl font-black mt-2 text-amber-600">{alerts.length}</p>
-                             <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[120px]">
-                               {alerts.length === 0 ? 'All Clear' : `${alerts.length} Alert${alerts.length > 1 ? 's' : ''}`}
-                             </p>
-                          </div>
-                          <div className={`p-4 rounded-2xl ${alerts.length > 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                             {alerts.length > 0 ? <AlertCircle className="w-8 h-8"/> : <CheckCircle2 className="w-8 h-8" />}
+                    <Card className="flex-1 shadow-sm border-slate-200 w-full">
+                       <CardContent className="p-6 flex flex-col gap-3 w-full">
+                          <div className="flex items-center gap-3">
+                             <div className="flex flex-col gap-3 flex-1">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Last Reading</p>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{lastSensorReadingTime ? lastSensorReadingTime.toLocaleDateString() : 'No Date'}</p>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{lastSensorReadingTime ? lastSensorReadingTime.toLocaleTimeString() : 'No Time'}</p>
+                                <p className="text-xs font-medium text-slate-500">When sensor data</p>
+                                <p className="text-xs font-medium text-slate-500">was received</p>
+                             </div>
+                             <div className={`p-4 rounded-2xl flex-shrink-0 ${lastSensorReadingTime ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-50 text-slate-400'}`}>
+                                {lastSensorReadingTime ? <CheckCircle2 className="w-8 h-8"/> : <Clock className="w-8 h-8" />}
+                             </div>
                           </div>
                        </CardContent>
                     </Card>
@@ -732,7 +818,7 @@ function FarmerDashboardCore() {
               </div>
 
               {/* 6. CHARTS SECTION */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
                  <Card className="shadow-sm border-slate-200">
                     <CardHeader><CardTitle className="text-sm text-slate-500 font-bold uppercase tracking-widest">Temperature History</CardTitle></CardHeader>
                     <CardContent className="h-72">

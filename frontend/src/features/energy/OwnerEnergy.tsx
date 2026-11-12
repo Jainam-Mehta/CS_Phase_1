@@ -66,31 +66,37 @@ const OwnerEnergy: React.FC = () => {
       const roomIds = resolvedRooms.map(r => r.id);
       const roomMap = new Map(resolvedRooms.map(r => [r.id, { name: r.room_name || r.room_code, site_name: siteData?.facility_name || 'Your Site' }]));
 
-      // Get latest energy readings for ALL rooms
+      // Get ALL energy readings for each room (cumulative from first day to today)
       const { data: energyData } = await supabase
-        .from('energy_usage')
-        .select('room_id, solar_kwh, grid_kwh, total_kwh, recorded_at')
+        .from('energy_consumption')
+        .select('room_id, kwh_solar, kwh_grid, kwh_total, recorded_at')
+        .eq('site_id', selectedFacilityId)
         .in('room_id', roomIds)
         .order('recorded_at', { ascending: false });
 
-      // Group by room and get latest reading for each
-      const latestByRoom = new Map<string, any>();
-      (energyData || []).forEach((reading: any) => {
-        if (!latestByRoom.has(reading.room_id)) {
-          latestByRoom.set(reading.room_id, reading);
+      // Group by room_id and SUM all energy values (cumulative from day 1 to today)
+      const cumulativePerRoom = new Map<string, {solar: number, grid: number, total: number}>();
+      (energyData || []).forEach((record: any) => {
+        const roomId = record.room_id;
+        if (!cumulativePerRoom.has(roomId)) {
+          cumulativePerRoom.set(roomId, { solar: 0, grid: 0, total: 0 });
         }
+        const curr = cumulativePerRoom.get(roomId)!;
+        curr.solar += Number(record.kwh_solar) || 0;
+        curr.grid += Number(record.kwh_grid) || 0;
+        curr.total += Number(record.kwh_total) || 0;
       });
 
-      // Build room energy data
+      // Build room energy data from cumulative totals
       const roomEnergyData: RoomEnergy[] = [];
       let totalSolar = 0;
       let totalGrid = 0;
 
       resolvedRooms.forEach((room: any) => {
-        const latest = latestByRoom.get(room.id);
-        const solar = latest ? Number(latest.solar_kwh) || 0 : 0;
-        const grid = latest ? Number(latest.grid_kwh) || 0 : 0;
-        const total = latest ? Number(latest.total_kwh) || 0 : 0;
+        const roomTotals = cumulativePerRoom.get(room.id) || { solar: 0, grid: 0, total: 0 };
+        const solar = roomTotals.solar;
+        const grid = roomTotals.grid;
+        const total = roomTotals.total;
 
         roomEnergyData.push({
           room_id: room.id,

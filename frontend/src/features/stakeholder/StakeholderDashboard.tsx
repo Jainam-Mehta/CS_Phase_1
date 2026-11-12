@@ -105,13 +105,13 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
               // Get today's energy consumption
               const { data: energyData } = await supabase
                 .from('energy_consumption')
-                .select('total_kwh')
+                .select('kwh_total, recorded_at')
                 .eq('site_id', fac.id)
-                .gte('reading_date', new Date(new Date().setHours(0,0,0,0)).toISOString().split('T')[0])
-                .order('reading_date', { ascending: false })
+                .gte('recorded_at', new Date(new Date().setHours(0,0,0,0)).toISOString())
+                .order('recorded_at', { ascending: false })
                 .limit(1);
 
-              const todayEnergy = energyData && energyData.length > 0 ? energyData[0].total_kwh : 0;
+              const todayEnergy = energyData && energyData.length > 0 ? energyData[0].kwh_total : 0;
 
               setTelemetry({
                 temperature: Number(avgTemp.toFixed(1)),
@@ -228,19 +228,18 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
         {/* Core Financial KPIs */}
         <div className="lg:col-span-1 space-y-6">
-           <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl transform translate-x-1/2 -translate-y-1/2" />
-             <h4 className="text-indigo-100 font-medium uppercase tracking-wider text-xs mb-1">Your Investment</h4>
-             <div className="text-4xl font-black mb-4">₹{capVal.toLocaleString()}</div>
+           <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 rounded-3xl p-6 shadow-sm">
+             <h4 className="text-slate-600 dark:text-slate-300 font-medium uppercase tracking-wider text-xs mb-2">Facility Details</h4>
+             <div className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{facility.facility_name}</div>
              
-             <div className="flex justify-between items-end border-t border-indigo-400/30 pt-4">
+             <div className="flex justify-between items-end">
                <div>
-                 <p className="text-indigo-200 text-xs uppercase mb-1">Est. ROI</p>
-                 <p className="font-bold text-xl">{roiVal.toFixed(2)}%</p>
+                 <p className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Location</p>
+                 <p className="font-semibold text-slate-800 dark:text-slate-200">{districtStr}, {stateStr}</p>
                </div>
                <div className="text-right">
-                 <p className="text-indigo-200 text-xs uppercase mb-1">Monthly Yield</p>
-                 <p className="font-bold text-xl text-emerald-300">+₹{estProfitMonthly.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
+                 <p className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Capacity</p>
+                 <p className="font-semibold text-slate-800 dark:text-slate-200">{(facility.total_capacity_kg || 0).toLocaleString()} kg</p>
                </div>
              </div>
            </div>
@@ -368,7 +367,7 @@ const StakeholderDashboard: React.FC<FullAccessDashboardProps> = () => {
               <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
            </div>
            <p className="text-sm text-slate-600 dark:text-slate-400 mt-6 leading-relaxed">
-             AI engine forecasts a <strong>{roiVal.toFixed(1)}% yield stability</strong> for the next 3 quarters assuming optimal occupancy rates (+80%) are met consistently.
+             This facility is actively monitoring environmental impact and tracking carbon credits earned through sustainable cold chain operations.
            </p>
          </div>
 

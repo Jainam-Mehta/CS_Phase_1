@@ -21,35 +21,35 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Modal */}
+      {/* Modal - Responsive with scrolling support */}
       <div
         className={cn(
-          'relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full mx-4',
+          'relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-h-[90vh] overflow-y-auto flex flex-col',
           sizeClasses[size]
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        {/* Header - Sticky */}
+        <div className="sticky top-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10 shrink-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
           >
             <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">{children}</div>
+        {/* Content - Scrollable */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

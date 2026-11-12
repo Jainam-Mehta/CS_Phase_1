@@ -14,7 +14,7 @@ interface FarmerProfileData {
   email?: string;
   full_name?: string;
   role?: string;
-  phone?: string;
+  phone_number?: string;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -47,8 +47,8 @@ const FarmerProfile: React.FC = () => {
 
   // Edit Mode Data
   const [formData, setFormData] = useState({
-     phone: '',
-     dateOfBirth: '',
+     phone_number: '',
+     date_of_birth: '',
      gender: '',
      state: '',
      district: '',
@@ -130,8 +130,8 @@ const FarmerProfile: React.FC = () => {
 
       // Init edit form
       setFormData({
-         phone: data.phone || '',
-         dateOfBirth: data.date_of_birth || '',
+         phone_number: data.phone_number || '',
+         date_of_birth: data.date_of_birth || '',
          gender: data.gender || '',
          state: '',
          district: '',
@@ -158,17 +158,40 @@ const FarmerProfile: React.FC = () => {
          }
       }
 
-      const { count: aProd } = await supabase.from('farmer_products').select('*', { count: 'exact', head: true }).eq('farmer_id', data.id);
+      // Get count of approved products (stored in farmer_batch_products after approval)
+      const { data: approvedBatches } = await supabase
+        .from('farmer_room_access')
+        .select('id')
+        .eq('farmer_id', data.id)
+        .eq('status', 'Approved');
+      
+      let aProd = 0;
+      if (approvedBatches && approvedBatches.length > 0) {
+        const batchIds = approvedBatches.map((b: any) => b.id);
+        const { count } = await supabase
+          .from('farmer_batch_products')
+          .select('*', { count: 'exact', head: true })
+          .in('farmer_room_access_id', batchIds);
+        aProd = count || 0;
+      }
       
       let totKg = 0;
-      // farmer_inventory table doesn't exist — use batch_room_allocations joined with batches
-      const { data: inv } = await supabase
-        .from('batch_room_allocations')
-        .select('quantity_kg, batches!inner(farmer_id)')
-        .eq('batches.farmer_id', data.id)
-        .is('removed_at', null);
-      if (inv) {
-         totKg = inv.reduce((sum, item) => sum + (Number(item.quantity_kg) || 0), 0);
+      // Get total quantity stored across all batches for this farmer
+      const { data: farmerBatchesForKg } = await supabase
+        .from('batches')
+        .select('id')
+        .eq('farmer_id', data.id);
+      
+      if (farmerBatchesForKg && farmerBatchesForKg.length > 0) {
+        const batchIdsForKg = farmerBatchesForKg.map((b: any) => b.id);
+        const { data: inv } = await supabase
+          .from('batch_room_allocations')
+          .select('quantity_kg')
+          .in('batch_id', batchIdsForKg)
+          .is('removed_at', null);
+        if (inv) {
+           totKg = inv.reduce((sum, item) => sum + (Number(item.quantity_kg) || 0), 0);
+        }
       }
 
       setStats({
@@ -191,8 +214,8 @@ const FarmerProfile: React.FC = () => {
     try {
         setSaving(true);
         const { error } = await supabase.from('profiles').update({
-            phone: formData.phone || null,
-            date_of_birth: formData.dateOfBirth || null,
+            phone_number: formData.phone_number || null,
+            date_of_birth: formData.date_of_birth || null,
             gender: formData.gender || null,
             state_id: selectedStateId || null,
             district_id: selectedDistrictId || null,
@@ -217,7 +240,11 @@ const FarmerProfile: React.FC = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Not Provided';
-    return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
   
   const getFieldValue = (value: any) => value || 'Not Provided';
@@ -316,8 +343,8 @@ const FarmerProfile: React.FC = () => {
               {!isEditing ? (
                 <Button variant="outline" size="sm" onClick={async () => { 
                   setFormData({
-                    phone: profileData?.phone || '',
-                    dateOfBirth: profileData?.date_of_birth || '',
+                    phone_number: profileData?.phone_number || '',
+                    date_of_birth: profileData?.date_of_birth || '',
                     gender: profileData?.gender || '',
                     state: getStateName(profileData?.state_id) || '',
                     district: getDistrictName(profileData?.district_id) || '',
@@ -361,15 +388,15 @@ const FarmerProfile: React.FC = () => {
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Phone Number</label>
                     {isEditing ? (
-                       <Input value={formData.phone} onChange={(e) => setFormData(p => ({...p, phone: e.target.value}))} placeholder="Enter your phone" />
+                       <Input value={formData.phone_number} onChange={(e) => setFormData(p => ({...p, phone_number: e.target.value}))} placeholder="Enter your phone" />
                     ) : ( 
-                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.phone)}</p>
+                       <p className="text-base text-gray-900 dark:text-gray-100">{getFieldValue(profileData.phone_number)}</p>
                     )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Date of Birth</label>
                     {isEditing ? (
-                       <Input type="date" value={formData.dateOfBirth} onChange={(e) => setFormData(p => ({...p, dateOfBirth: e.target.value}))} />
+                       <Input type="date" min="1950-01-01" max="2010-12-31" value={formData.date_of_birth} onChange={(e) => setFormData(p => ({...p, date_of_birth: e.target.value}))} />
                     ) : (
                        <p className="text-base text-gray-900 dark:text-gray-100">{formatDate(profileData.date_of_birth)}</p>
                     )}

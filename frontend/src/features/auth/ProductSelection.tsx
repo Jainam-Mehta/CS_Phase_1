@@ -4,26 +4,15 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
-import { Apple, Carrot, Grape, Milk, Check, AlertCircle, Sprout, Thermometer, Droplets, Clock, Package } from 'lucide-react';
+import { Check, AlertCircle, Sprout, Clock, Package, X, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
 import type { Product } from '../../lib/supabase';
-import { convertCratesToKg } from '../../utils/units';
 
-interface ProductCategory {
-  name: string;
-  icon: React.ReactNode;
-  color: string;
-}
-
-const PRODUCT_CATEGORIES: ProductCategory[] = [
-  { name: 'Fruits', icon: <Apple className="h-5 w-5" />, color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
-  { name: 'Vegetables', icon: <Carrot className="h-5 w-5" />, color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' },
-  { name: 'Exotic Fruits', icon: <Grape className="h-5 w-5" />, color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
-  { name: 'Dairy', icon: <Milk className="h-5 w-5" />, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
-];
-
-interface ProductDetails {
-  quantity: number | string; // quantity in crates (1 crate = 25 kg)
+interface ProductWithType extends Product {
+  product_type?: 'I' | 'II' | 'III' | string; // Type in Roman numerals
 }
 
 const ProductSelection: React.FC = () => {
@@ -31,12 +20,13 @@ const ProductSelection: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
   const { completeStep } = useOnboarding();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithType[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
-  const [productDetails, setProductDetails] = useState<Record<string, ProductDetails>>({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const isExtensionMode = searchParams.get('mode') === 'extension';
 
   useEffect(() => {
@@ -48,12 +38,17 @@ const ProductSelection: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('*, product_categories(name)')
+        .select('*')
         .order('name');
       
       if (error) throw error;
       console.log('Products loaded:', data);
-      setProducts(data || []);
+      // Add default product types (I, II, III) based on index
+      const productsWithTypes = (data || []).map((p: any, idx: number) => ({
+        ...p,
+        product_type: idx % 3 === 0 ? 'I' : idx % 3 === 1 ? 'II' : 'III'
+      }));
+      setProducts(productsWithTypes);
     } catch (err) {
       console.error('Error loading products:', err);
       setError('Failed to load products. Please check your internet connection and try again.');
@@ -67,59 +62,22 @@ const ProductSelection: React.FC = () => {
       const newSet = new Set(prev);
       if (newSet.has(productId)) {
         newSet.delete(productId);
-        // Remove details when deselected
-        setProductDetails(prev => {
-          const updated = { ...prev };
-          delete updated[productId];
-          return updated;
-        });
       } else {
         newSet.add(productId);
-        // Initialize with empty quantity when selected (no default 0)
-        setProductDetails(prev => ({
-          ...prev,
-          [productId]: {
-            quantity: '' as any, // Empty string instead of 0
-          }
-        }));
       }
       return newSet;
     });
+    setSearchQuery('');
+    setIsDropdownOpen(false);
   };
 
-  const handleDetailChange = (productId: string, field: keyof ProductDetails, value: any) => {
-    setProductDetails(prev => ({
-      ...prev,
-      [productId]: {
-        ...prev[productId],
-        [field]: value
-      }
-    }));
-  };
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const getProductsByCategory = (category: string) => {
-    return products.filter(p => (p as any).product_categories?.name === category || p.category === category);
-  };
-
-  const getTotalQuantity = () => {
-    return Array.from(selectedProducts).reduce((total, productId) => {
-      const details = productDetails[productId];
-      if (!details || !details.quantity || details.quantity === '') return total;
-      
-      // Convert crates to kg using centralized helper
-      const qty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
-      return total + convertCratesToKg(qty);
-    }, 0);
-  };
-
-  const getAverageShelfLife = () => {
-    if (selectedProducts.size === 0) return 0;
-    const totalShelfLife = Array.from(selectedProducts).reduce((total, productId) => {
-      const product = products.find(p => p.id === productId);
-      return total + (product?.shelf_life_days || 0);
-    }, 0);
-    return Math.round(totalShelfLife / selectedProducts.size);
-  };
+  const selectedProductDetails = Array.from(selectedProducts)
+    .map(id => products.find(p => p.id === id))
+    .filter(Boolean) as ProductWithType[];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,15 +86,6 @@ const ProductSelection: React.FC = () => {
     if (selectedProducts.size === 0) {
       setError('Please select at least one product');
       return;
-    }
-
-    // Validate that all selected products have quantity > 0
-    for (const productId of selectedProducts) {
-      const details = productDetails[productId];
-      if (!details || !details.quantity || details.quantity === '' || (typeof details.quantity === 'number' && details.quantity <= 0)) {
-        setError('Please specify quantity for all selected products');
-        return;
-      }
     }
 
     setLoading(true);
@@ -157,72 +106,13 @@ const ProductSelection: React.FC = () => {
         throw new Error('Farmer profile not found');
       }
 
-      // Get farmer's room access request natively bypass Approved status bounds
-      const { data: roomAccess } = await supabase
-        .from('farmer_room_access')
-        .select('room_id')
-        .eq('farmer_id', profile.id)
-        .order('requested_at', { ascending: false })
-        .limit(1);
-
-      if (!roomAccess || roomAccess.length === 0) {
-        throw new Error('No room access bounds found. Please ensure you select a storage room natively before confirming.');
-      }
-
-      // Use the first approved room for now
-      const roomId = roomAccess[0].room_id;
-
-      // Save product selections to farmer_products
-      const productInserts = Array.from(selectedProducts).map(productId => ({
-        farmer_id: profile.id,
-        product_id: productId,
-      }));
-
-      const { error: productInsertError } = await supabase
-        .from('farmer_products')
-        .insert(productInserts);
-
-      if (productInsertError) throw productInsertError;
-
-      // Create batches for each selected product
-      // NEW SCHEMA: batches table doesn't have room_id anymore
-      // Since this is product selection (before room assignment), we only create batches
-      // Room allocation will happen later when farmer selects a room
-      const batchInserts = Array.from(selectedProducts).map(productId => {
-        const details = productDetails[productId];
-        const product = products.find(p => p.id === productId);
-        
-        // Generate unique batch_code
-        const batchCode = `BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        
-        // Calculate quantity in kg using centralized helper
-        const crateQty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
-        const quantityKg = convertCratesToKg(crateQty);
-        
-        // Calculate expiry_date based on product shelf life
-        const harvestDate = new Date();
-        const expiryDate = new Date(harvestDate);
-        const shelfLifeDays = product?.shelf_life_days || 30;
-        expiryDate.setDate(expiryDate.getDate() + shelfLifeDays);
-
-        return {
-          batch_code: batchCode,
-          farmer_id: profile.id,
-          product_id: productId,
-          harvest_date: harvestDate.toISOString().split('T')[0],
-          expiry_date: expiryDate.toISOString().split('T')[0],
-          initial_quantity_kg: quantityKg,
-          remaining_quantity_kg: quantityKg,
-          quality_grade: 'A',
-          remarks: null,
-        };
-      });
-
-      const { error: batchInsertError } = await supabase
-        .from('batches')
-        .insert(batchInserts);
-
-      if (batchInsertError) throw batchInsertError;
+      // Store selected products in localStorage for next step (room selection)
+      // Products will be saved to farmer_batch_products after room is selected
+      const storageRequest = localStorage.getItem('storageAccessRequest');
+      const request = storageRequest ? JSON.parse(storageRequest) : {};
+      
+      request.products = Array.from(selectedProducts);
+      localStorage.setItem('storageAccessRequest', JSON.stringify(request));
 
       // Complete onboarding step only if not in extension mode
       if (!isExtensionMode) {
@@ -253,14 +143,30 @@ const ProductSelection: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-7xl">
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-emerald-500 selection:text-white overflow-hidden">
+      {/* Consistent Role-Specific 3D Background Animation */}
+      <RoleBackground role="farmer" />
+
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full overflow-y-auto">
+
+      <div className="w-full max-w-md">
         <Card variant="default" className="w-full">
           <CardHeader className="text-center relative">
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 3/4
+                Step 3/3
               </span>
             </div>
             
@@ -290,125 +196,85 @@ const ProductSelection: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  {PRODUCT_CATEGORIES.map((category) => {
-                    const categoryProducts = getProductsByCategory(category.name);
-                    if (categoryProducts.length === 0) return null;
-
-                    return (
-                      <div key={category.name} className="space-y-3">
-                        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${category.color}`}>
-                          {category.icon}
-                          <h3 className="font-semibold">{category.name}</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                          {categoryProducts.map((product) => {
-                            const isSelected = selectedProducts.has(product.id);
-                            const details = productDetails[product.id];
-                            
-                            return (
-                              <div
+                  {/* Searchable Dropdown */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Search & Select Products
+                    </label>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search for crops..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onFocus={() => setIsDropdownOpen(true)}
+                          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      
+                      {/* Dropdown list */}
+                      {isDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+                          {filteredProducts.length === 0 ? (
+                            <div className="p-4 text-gray-500 dark:text-gray-400 text-center">
+                              No products found
+                            </div>
+                          ) : (
+                            filteredProducts.map(product => (
+                              <button
                                 key={product.id}
-                                className={`border-2 rounded-lg transition-all ${
-                                  isSelected
-                                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                    : 'border-gray-200 dark:border-slate-700'
+                                type="button"
+                                onClick={() => handleProductToggle(product.id)}
+                                className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors border-b border-gray-200 dark:border-slate-700 last:border-b-0 ${
+                                  selectedProducts.has(product.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                                 }`}
                               >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    // Only toggle if clicking outside of input fields
-                                    if (!(e.target instanceof HTMLInputElement)) {
-                                      handleProductToggle(product.id);
-                                    }
-                                  }}
-                                  className="w-full p-3 text-left"
-                                >
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-1">
-                                      {product.name}
-                                    </span>
-                                    {isSelected && (
-                                      <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                                    )}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium text-gray-900 dark:text-white">{product.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      Shelf life: {product.shelf_life_days} days
+                                    </p>
                                   </div>
-                                  
-                                  {!isSelected && (
-                                    <div className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
-                                      <div className="flex items-center gap-1">
-                                        <Thermometer className="h-3 w-3" />
-                                        <span>{product.optimal_temp}°C</span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <Droplets className="h-3 w-3" />
-                                        <span>{product.min_humidity}-{product.max_humidity}%</span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        <span>{product.shelf_life_days} days</span>
-                                      </div>
-                                    </div>
+                                  {selectedProducts.has(product.id) && (
+                                    <Check className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                                   )}
-                                </button>
-                                
-                                {isSelected && details && (
-                                  <div className="px-3 pb-3 space-y-2 border-t border-gray-200 dark:border-slate-600 pt-2">
-                                    <div>
-                                      <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">
-                                        Quantity (Crates)
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={details.quantity}
-                                        onChange={(e) => handleDetailChange(product.id, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value))}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded dark:bg-slate-800"
-                                        placeholder="Enter quantity"
-                                        required
-                                      />
-                                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        1 crate = 25 kg
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                </div>
+                              </button>
+                            ))
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  </div>
 
-                  {/* Live Summary */}
+                  {/* Selected Products List */}
                   {selectedProducts.size > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                      <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-3">Selection Summary</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <p className="text-blue-700 dark:text-blue-300">Products Selected</p>
-                          <p className="font-semibold text-blue-900 dark:text-blue-100">{selectedProducts.size}</p>
-                        </div>
-                        <div>
-                          <p className="text-blue-700 dark:text-blue-300">Total Quantity</p>
-                          <p className="font-semibold text-blue-900 dark:text-blue-100">
-                            {Array.from(selectedProducts).reduce((total, productId) => {
-                              const details = productDetails[productId];
-                              if (!details || !details.quantity || details.quantity === '') return total;
-                              const qty = typeof details.quantity === 'string' ? parseInt(details.quantity) : details.quantity;
-                              return total + qty;
-                            }, 0)} crates ({getTotalQuantity()} kg)
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-blue-700 dark:text-blue-300">Avg Shelf Life</p>
-                          <p className="font-semibold text-blue-900 dark:text-blue-100">{getAverageShelfLife()} days</p>
-                        </div>
-                        <div>
-                          <p className="text-blue-700 dark:text-blue-300">Storage</p>
-                          <p className="font-semibold text-blue-900 dark:text-blue-100">Cold Storage</p>
-                        </div>
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Selected Products ({selectedProducts.size})</h3>
+                      <div className="space-y-2">
+                        {selectedProductDetails.map(product => (
+                          <div
+                            key={product.id}
+                            className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900 dark:text-white">{product.name}</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                Shelf life: {product.shelf_life_days} days
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleProductToggle(product.id)}
+                              className="ml-4 p-1 hover:bg-blue-200 dark:hover:bg-blue-800 rounded transition-colors"
+                            >
+                              <X className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -432,6 +298,15 @@ const ProductSelection: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+    
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

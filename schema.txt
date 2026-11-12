@@ -1,0 +1,1284 @@
+-- ============================================================================
+-- COMPLETE PRODUCTION DATABASE SCHEMA - 32 TABLES
+-- SystmII - GCP Compute Engine Deployment
+-- ============================================================================
+-- WARNING: This schema is complete and ready for Supabase/GCP PostgreSQL
+-- Includes: All 32 tables (17 original + 5 pricing/costing + 10 other), 
+--           Foreign Keys, Constraints, Indexes, Triggers
+-- Generated for: Production deployment (test on Supabase dev account first)
+-- ============================================================================
+
+-- ============================================================================
+-- ⚠️  PERMISSION REQUIREMENTS (Database-Specific)
+-- ============================================================================
+-- 
+-- SUPABASE (Current):
+-- ─────────────────
+--   1. Disable RLS on these tables (used by backend scripts):
+--      - market_prices
+--   
+--   2. OR create RLS policies for backend service_role:
+--      CREATE POLICY "Allow service_role" ON public.market_prices
+--        FOR ALL USING (true) WITH CHECK (true) TO service_role;
+--   
+--   3. Grant API access:
+--      GRANT SELECT, INSERT, DELETE ON public.market_prices TO service_role;
+--
+-- AWS RDS / PostgreSQL (Migration):
+-- ──────────────────────────────────
+--   1. Create application database user:
+--      CREATE USER app_user WITH PASSWORD 'secure_password';
+--   
+--   2. Grant permissions for backend operations:
+--      GRANT CONNECT ON DATABASE systmii TO app_user;
+--      GRANT USAGE ON SCHEMA public TO app_user;
+--      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
+--      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
+--   
+--   3. Specific table permissions:
+--      GRANT SELECT, INSERT, DELETE ON public.market_prices TO app_user;
+--      GRANT SELECT, INSERT ON public.batches TO app_user;
+--
+-- FIREBASE / CLOUD FIRESTORE (Future):
+-- ─────────────────────────────────────
+--   1. Use Firebase Security Rules instead of SQL permissions
+--   2. Define Firestore rules in Firebase Console
+--   3. Update .env to use Firebase credentials
+--
+-- ============================================================================
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ============================================================================
+-- TABLE 1-5: REFERENCE TABLES
+-- ============================================================================
+
+-- 1. ROLES (RBAC)
+CREATE TABLE public.roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name character varying(50) NOT NULL UNIQUE,
+  description text,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT roles_name_check CHECK (name IN ('owner', 'farmer', 'stakeholder'))
+);
+
+CREATE INDEX idx_roles_name ON public.roles(name);
+
+-- 2. STATES (India Geography)
+CREATE TABLE public.states (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  code text,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_states_name ON public.states(name);
+CREATE INDEX idx_states_code ON public.states(code);
+
+-- 3. DISTRICTS (State -> Districts)
+CREATE TABLE public.districts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  state_id uuid NOT NULL REFERENCES public.states(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  code text,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(state_id, name)
+);
+
+CREATE INDEX idx_districts_state_id ON public.districts(state_id);
+CREATE INDEX idx_districts_name ON public.districts(name);
+
+-- 4. LOCALITIES (District -> Localities)
+CREATE TABLE public.localities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  district_id uuid NOT NULL REFERENCES public.districts(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  pincode text,
+  latitude numeric(10, 8),
+  longitude numeric(11, 8),
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(district_id, name)
+);
+
+CREATE INDEX idx_localities_district_id ON public.localities(district_id);
+CREATE INDEX idx_localities_pincode ON public.localities(pincode);
+CREATE INDEX idx_localities_name ON public.localities(name);
+
+-- 5. SENSOR_TYPES (Sensor Registry)
+CREATE TABLE public.sensor_types (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sensor_name character varying(100) NOT NULL UNIQUE,
+  sensor_code character varying(50) NOT NULL UNIQUE,
+  unit character varying(20),
+  category character varying(50),
+  mandatory_by_default boolean DEFAULT false,
+  description text,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT sensor_types_valid_names CHECK (sensor_name IN (
+    'Temperature', 'Humidity', 'Door', 'SuctionPressure', 'DischargePressure',
+    'Oxygen', 'CO2', 'Ethylene', 'Ammonia', 'Battery', 'Solar', 'GridPower',
+    'Motion', 'Vibration', 'Smoke', 'WaterLeakage', 'Compressor', 'PowerMeter',
+    'AmbientTemperature', 'AmbientHumidity', 'Temperature+Humidity',
+    'AmbientTemperature+AmbientHumidity'
+  ))
+);
+
+CREATE INDEX idx_sensor_types_name ON public.sensor_types(sensor_name);
+CREATE INDEX idx_sensor_types_code ON public.sensor_types(sensor_code);
+
+-- ============================================================================
+-- TABLE 6: IDENTITY & ACCESS
+-- ============================================================================
+
+-- 6. PROFILES (Users - Owner, Farmer, Stakeholder)
+-- NOTE: Removed subquery constraints (PostgreSQL doesn't support them in CHECK)
+-- Role consistency will be enforced at application level + triggers
+CREATE TABLE public.profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_id uuid NOT NULL REFERENCES public.roles(id) ON DELETE RESTRICT,
+  user_type character varying(50) NOT NULL,
+  email text UNIQUE NOT NULL,
+  full_name character varying(255),
+  phone_number character varying(20),
+  farm_name character varying(255),
+  date_of_birth date,
+  gender character varying(20),
+  locality_id uuid REFERENCES public.localities(id) ON DELETE SET NULL,
+  state_id uuid REFERENCES public.states(id) ON DELETE SET NULL,
+  district_id uuid REFERENCES public.districts(id) ON DELETE SET NULL,
+  state character varying(100),  -- Denormalized state name for quick lookup (market prices)
+  district character varying(100),  -- Denormalized district name for quick lookup (market prices)
+  pincode character varying(6) UNIQUE,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT profile_user_type_check CHECK (user_type IN ('owner', 'farmer', 'stakeholder'))
+);
+
+CREATE INDEX idx_profiles_role_id ON public.profiles(role_id);
+CREATE INDEX idx_profiles_user_type ON public.profiles(user_type);
+CREATE INDEX idx_profiles_email ON public.profiles(email);
+CREATE INDEX idx_profiles_pincode ON public.profiles(pincode);
+CREATE INDEX idx_profiles_is_active ON public.profiles(is_active);
+CREATE INDEX idx_profiles_state ON public.profiles(state);
+CREATE INDEX idx_profiles_state_district ON public.profiles(state, district);
+
+-- ============================================================================
+-- TABLE 7-9: FACILITY STRUCTURE
+-- ============================================================================
+
+-- 7. SITES (Cold Storage Facilities)
+CREATE TABLE public.sites (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  site_code character varying(10),
+  facility_name text NOT NULL,
+  address text,
+  state_id uuid REFERENCES public.states(id) ON DELETE SET NULL,
+  district_id uuid REFERENCES public.districts(id) ON DELETE SET NULL,
+  locality_id uuid REFERENCES public.localities(id) ON DELETE SET NULL,
+  latitude numeric(10, 8),
+  longitude numeric(11, 8),
+  total_capacity_kg numeric(12, 2) DEFAULT 0,
+  current_utilization_kg numeric(12, 2) DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(owner_profile_id, site_code)
+);
+
+CREATE INDEX idx_sites_owner_profile_id ON public.sites(owner_profile_id);
+CREATE INDEX idx_sites_site_code ON public.sites(site_code);
+CREATE INDEX idx_sites_is_active ON public.sites(is_active);
+
+-- Trigger to auto-generate site_code on insert
+CREATE OR REPLACE FUNCTION public.generate_site_code()
+RETURNS TRIGGER AS $$
+DECLARE
+  next_num INTEGER;
+BEGIN
+  IF NEW.site_code IS NULL THEN
+    SELECT COALESCE(MAX(CAST(SUBSTRING(site_code, 2) AS INTEGER)), 0) + 1 INTO next_num
+    FROM public.sites
+    WHERE owner_profile_id = NEW.owner_profile_id;
+    NEW.site_code := 'S' || LPAD(next_num::text, 3, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sites_auto_site_code
+BEFORE INSERT ON public.sites
+FOR EACH ROW
+EXECUTE FUNCTION public.generate_site_code();
+
+-- 8. GATEWAYS (MQTT Gateways)
+CREATE TABLE public.gateways (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  gateway_number character varying(10) NOT NULL,
+  gateway_id character varying(50),
+  status character varying(20) DEFAULT 'offline',
+  last_heartbeat timestamp with time zone,
+  last_sync timestamp with time zone,
+  firmware_version character varying(50),
+  mac_address character varying(17),
+  ip_address inet,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(site_id, gateway_number),
+  CONSTRAINT gateway_status_check CHECK (status IN ('online', 'offline', 'error'))
+);
+
+CREATE INDEX idx_gateways_site_id ON public.gateways(site_id);
+CREATE INDEX idx_gateways_status ON public.gateways(status);
+CREATE INDEX idx_gateways_last_heartbeat ON public.gateways(last_heartbeat);
+
+-- 9. COLD_STORAGE_ROOMS (Storage Chambers)
+CREATE TABLE public.cold_storage_rooms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_code character varying(10),
+  room_name character varying(255),
+  room_type character varying(50),
+  max_temperature numeric(5, 2),
+  min_temperature numeric(5, 2),
+  capacity_kg numeric(12, 2) NOT NULL DEFAULT 0,
+  current_utilization_kg numeric(12, 2) NOT NULL DEFAULT 0,
+  storage_rate_per_kg_month numeric(8, 2) DEFAULT 1.40,
+  temperature_sensor_count integer DEFAULT 0,
+  humidity_sensor_count integer DEFAULT 0,
+  door_sensor_count integer DEFAULT 4,
+  pressure_sensor_count integer DEFAULT 0,
+  status character varying(20) DEFAULT 'active',
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(site_id, room_code),
+  CONSTRAINT room_status_check CHECK (status IN ('active', 'inactive', 'maintenance'))
+);
+
+CREATE INDEX idx_cold_storage_rooms_site_id ON public.cold_storage_rooms(site_id);
+CREATE INDEX idx_cold_storage_rooms_room_code ON public.cold_storage_rooms(room_code);
+CREATE INDEX idx_cold_storage_rooms_is_active ON public.cold_storage_rooms(is_active);
+
+-- Trigger to auto-generate room_code on insert
+CREATE OR REPLACE FUNCTION public.generate_room_code()
+RETURNS TRIGGER AS $$
+DECLARE
+  next_num INTEGER;
+BEGIN
+  IF NEW.room_code IS NULL THEN
+    SELECT COALESCE(MAX(CAST(SUBSTRING(room_code, 2) AS INTEGER)), 0) + 1 INTO next_num
+    FROM public.cold_storage_rooms
+    WHERE site_id = NEW.site_id;
+    NEW.room_code := 'R' || LPAD(next_num::text, 3, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_cold_storage_rooms_auto_room_code
+BEFORE INSERT ON public.cold_storage_rooms
+FOR EACH ROW
+EXECUTE FUNCTION public.generate_room_code();
+
+-- ============================================================================
+-- TABLE 10-13: SENSOR INFRASTRUCTURE
+-- ============================================================================
+
+-- 10. SENSOR_DEVICES (Physical Sensors)
+CREATE TABLE public.sensor_devices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  sensor_type character varying(50) NOT NULL,
+  sensor_code character varying(100) NOT NULL,
+  sensor_name character varying(255),
+  sensor_number integer,
+  status character varying(20) DEFAULT 'Online',
+  gateway_id character varying(50),
+  slave_id integer,
+  device_id integer,
+  mqtt_identifier character varying(255),
+  last_reading timestamp with time zone,
+  last_reading_value numeric(10, 4),
+  last_reading_unit character varying(20),
+  last_seen timestamp with time zone,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT sensor_type_valid CHECK (sensor_type IN (
+    'Temperature', 'Humidity', 'Door', 'SuctionPressure', 'DischargePressure',
+    'Oxygen', 'CO2', 'Ethylene', 'Ammonia', 'Battery', 'Solar', 'GridPower',
+    'Motion', 'Vibration', 'Smoke', 'WaterLeakage', 'Compressor', 'PowerMeter',
+    'AmbientTemperature', 'AmbientHumidity', 'Temperature+Humidity',
+    'AmbientTemperature+AmbientHumidity'
+  )),
+  CONSTRAINT sensor_status_check CHECK (status IN ('Online', 'Offline', 'Maintenance'))
+);
+
+CREATE INDEX idx_sensor_devices_room_id ON public.sensor_devices(room_id);
+CREATE INDEX idx_sensor_devices_site_id ON public.sensor_devices(site_id);
+CREATE INDEX idx_sensor_devices_sensor_type ON public.sensor_devices(sensor_type);
+CREATE INDEX idx_sensor_devices_slave_id ON public.sensor_devices(slave_id);
+CREATE INDEX idx_sensor_devices_gateway_id ON public.sensor_devices(gateway_id);
+CREATE INDEX idx_sensor_devices_status ON public.sensor_devices(status);
+
+-- 11. SENSOR_READINGS (Time-Series Data - One Row Per MQTT Message)
+CREATE TABLE public.sensor_readings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sensor_id uuid NOT NULL REFERENCES public.sensor_devices(id) ON DELETE CASCADE,
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  reading_value numeric(10, 4) NOT NULL,
+  unit character varying(20),
+  gateway_id character varying(50),
+  slave_id integer,
+  mqtt_payload_key character varying(50),
+  recorded_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_sensor_readings_sensor_id ON public.sensor_readings(sensor_id);
+CREATE INDEX idx_sensor_readings_room_id ON public.sensor_readings(room_id);
+CREATE INDEX idx_sensor_readings_recorded_at ON public.sensor_readings(recorded_at);
+CREATE INDEX idx_sensor_readings_gateway_id ON public.sensor_readings(gateway_id);
+CREATE INDEX idx_sensor_readings_slave_id ON public.sensor_readings(slave_id);
+CREATE INDEX idx_sensor_readings_sensor_recorded ON public.sensor_readings(sensor_id, recorded_at DESC);
+
+-- 12. COLD_STORAGE_CONDITIONS (Sparse Analytics View - One Row Per Room Per Timestamp)
+CREATE TABLE public.cold_storage_conditions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  sensor_id uuid REFERENCES public.sensor_devices(id) ON DELETE SET NULL,
+  gateway_id character varying(50),
+  slave_id integer,
+  reading_source character varying(100),
+  sensor_type character varying(50),
+  
+  -- SPARSE SENSOR COLUMNS (all nullable)
+  temperature_1 numeric(5, 2),
+  temperature_2 numeric(5, 2),
+  temperature_3 numeric(5, 2),
+  temperature_4 numeric(5, 2),
+  humidity_1 numeric(5, 2),
+  humidity_2 numeric(5, 2),
+  humidity_3 numeric(5, 2),
+  humidity_4 numeric(5, 2),
+  ambient_temperature_1 numeric(5, 2),
+  ambient_temperature_2 numeric(5, 2),
+  ambient_humidity_1 numeric(5, 2),
+  ambient_humidity_2 numeric(5, 2),
+  door_status_1 character varying(20),
+  door_status_2 character varying(20),
+  door_status_3 character varying(20),
+  door_status_4 character varying(20),
+  suction_pressure numeric(8, 2),
+  discharge_pressure numeric(8, 2),
+  oxygen numeric(6, 2),
+  co2 numeric(6, 2),
+  ethylene numeric(8, 4),
+  ammonia numeric(8, 4),
+  battery_level numeric(5, 2),
+  solar_percentage numeric(5, 2),
+  grid_power numeric(8, 2),
+  power_meter numeric(10, 2),
+  smoke_level numeric(5, 2),
+  water_leakage character varying(20),
+  motion_detected boolean,
+  vibration_level numeric(5, 2),
+  compressor_status character varying(20),
+  
+  recorded_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_cold_storage_conditions_room_id ON public.cold_storage_conditions(room_id);
+CREATE INDEX idx_cold_storage_conditions_site_id ON public.cold_storage_conditions(site_id);
+CREATE INDEX idx_cold_storage_conditions_recorded_at ON public.cold_storage_conditions(recorded_at DESC);
+CREATE INDEX idx_cold_storage_conditions_room_recorded ON public.cold_storage_conditions(room_id, recorded_at DESC);
+CREATE INDEX idx_cold_storage_conditions_sensor_type ON public.cold_storage_conditions(sensor_type);
+
+-- 13. SENSOR_LOCATION_MAPPING (MQTT Code → UUID Resolution)
+CREATE TABLE public.sensor_location_mapping (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  location_code character varying(10) NOT NULL,
+  code_type character varying(20) NOT NULL,
+  mapped_entity_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(site_id, location_code, code_type),
+  CONSTRAINT location_mapping_code_type_check CHECK (code_type IN ('site', 'room'))
+);
+
+CREATE INDEX idx_sensor_location_mapping_site_id ON public.sensor_location_mapping(site_id);
+CREATE INDEX idx_sensor_location_mapping_location_code ON public.sensor_location_mapping(location_code);
+CREATE INDEX idx_sensor_location_mapping_code_type ON public.sensor_location_mapping(code_type);
+CREATE INDEX idx_sensor_location_mapping_entity ON public.sensor_location_mapping(site_id, location_code, code_type);
+
+-- ============================================================================
+-- TABLE 14: MONITORING & ALERTS
+-- ============================================================================
+
+-- 14. ALERTS (Consolidated Alert System)
+CREATE TABLE public.alerts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  sensor_id uuid REFERENCES public.sensor_devices(id) ON DELETE SET NULL,
+  batch_id uuid,
+  
+  alert_type character varying(100) NOT NULL,
+  alert_level character varying(20) NOT NULL,
+  status character varying(20) DEFAULT 'active',
+  
+  message text NOT NULL,
+  title character varying(255),
+  description text,
+  
+  sensor_type character varying(50),
+  triggered_value numeric(10, 4),
+  threshold_value numeric(10, 4),
+  unit character varying(20),
+  
+  triggered_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  acknowledged_at timestamp with time zone,
+  acknowledged_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  resolved_at timestamp with time zone,
+  
+  rule_id uuid,
+  is_recurring boolean DEFAULT false,
+  last_occurrence_at timestamp with time zone,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT alert_level_check CHECK (alert_level IN ('critical', 'warning', 'info')),
+  CONSTRAINT alert_status_check CHECK (status IN ('active', 'acknowledged', 'resolved'))
+);
+
+CREATE INDEX idx_alerts_site_id ON public.alerts(site_id);
+CREATE INDEX idx_alerts_room_id ON public.alerts(room_id);
+CREATE INDEX idx_alerts_alert_type ON public.alerts(alert_type);
+CREATE INDEX idx_alerts_status ON public.alerts(status);
+CREATE INDEX idx_alerts_triggered_at ON public.alerts(triggered_at DESC);
+CREATE INDEX idx_alerts_site_status ON public.alerts(site_id, status);
+
+-- ============================================================================
+-- TABLE 15-17: FARMER OPERATIONS (ORIGINAL)
+-- ============================================================================
+
+-- 15. BATCHES (Product Lots)
+CREATE TABLE public.batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_code text NOT NULL UNIQUE,
+  alphanumeric_code character varying(2),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  product_id uuid NOT NULL,
+  
+  harvest_date date,
+  expiry_date date,
+  
+  initial_quantity_kg numeric(12, 2) NOT NULL,
+  remaining_quantity_kg numeric(12, 2) NOT NULL,
+  
+  quality_grade character varying(20),
+  remarks text,
+  snapshot_price_per_kg numeric(10, 2) DEFAULT 0,  -- Market price snapshot when batch was created (for Net Worth)
+  
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_batches_farmer_id ON public.batches(farmer_id);
+CREATE INDEX idx_batches_batch_code ON public.batches(batch_code);
+CREATE INDEX idx_batches_alphanumeric_code ON public.batches(alphanumeric_code);
+CREATE INDEX idx_batches_is_active ON public.batches(is_active);
+CREATE INDEX idx_batches_snapshot_price ON public.batches(snapshot_price_per_kg);
+
+-- Partial unique index: Enforces uniqueness only for non-NULL alphanumeric codes per farmer
+CREATE UNIQUE INDEX idx_unique_alphanumeric_per_farmer 
+ON public.batches(farmer_id, alphanumeric_code) 
+WHERE alphanumeric_code IS NOT NULL;
+
+-- 16. BATCH_ROOM_ALLOCATIONS (Which Batch in Which Room)
+CREATE TABLE public.batch_room_allocations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id uuid NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  quantity_kg numeric(12, 2) NOT NULL,
+  
+  assigned_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  removed_at timestamp with time zone,
+  
+  CONSTRAINT quantity_positive CHECK (quantity_kg > 0)
+);
+
+CREATE INDEX idx_batch_room_allocations_batch_id ON public.batch_room_allocations(batch_id);
+CREATE INDEX idx_batch_room_allocations_room_id ON public.batch_room_allocations(room_id);
+CREATE INDEX idx_batch_room_allocations_active ON public.batch_room_allocations(removed_at);
+
+-- 17. FARMER_ROOM_ACCESS (Access Control)
+-- NOTE: Price is now stored ONLY in room_access_pricing table (single source of truth)
+CREATE TABLE public.farmer_room_access (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  
+  status character varying(20) NOT NULL DEFAULT 'Pending',
+  requested_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  approved_at timestamp with time zone,
+  approved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  
+  remarks text,
+  
+  CONSTRAINT access_status_check CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Revoked'))
+);
+
+CREATE INDEX idx_farmer_room_access_farmer_id ON public.farmer_room_access(farmer_id);
+CREATE INDEX idx_farmer_room_access_room_id ON public.farmer_room_access(room_id);
+CREATE INDEX idx_farmer_room_access_status ON public.farmer_room_access(status);
+
+-- 17B. FARMER_BATCH_PRODUCTS (Product Selection for Farmer Room Requests) ⭐ NEW
+CREATE TABLE public.farmer_batch_products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_room_access_id uuid NOT NULL REFERENCES public.farmer_room_access(id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  
+  quantity_kg numeric(12, 2) NOT NULL,
+  product_type character varying(50),
+  remarks text,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  UNIQUE(farmer_room_access_id, product_id),
+  CONSTRAINT quantity_positive CHECK (quantity_kg > 0)
+);
+
+CREATE INDEX idx_farmer_batch_products_access ON public.farmer_batch_products(farmer_room_access_id);
+CREATE INDEX idx_farmer_batch_products_product ON public.farmer_batch_products(product_id);
+CREATE INDEX idx_farmer_batch_products_created ON public.farmer_batch_products(created_at DESC);
+
+-- ============================================================================
+-- TABLE 18-20: BUSINESS & MARKET
+-- ============================================================================
+
+-- 18. PRODUCTS (Product Specifications)
+CREATE TABLE public.products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id uuid,
+  
+  name character varying(255) NOT NULL,
+  scientific_name character varying(255),
+  
+  storage_temp_min numeric(5, 2),
+  storage_temp_max numeric(5, 2),
+  storage_humidity_min numeric(5, 2),
+  storage_humidity_max numeric(5, 2),
+  
+  ideal_co2_min numeric(6, 2),
+  ideal_co2_max numeric(6, 2),
+  ideal_o2_min numeric(6, 2),
+  ideal_o2_max numeric(6, 2),
+  
+  shelf_life_days integer,
+  respiration_rate character varying(100),
+  
+  ethylene_producer boolean DEFAULT false,
+  ethylene_sensitive boolean DEFAULT false,
+  ammonia_sensitive boolean DEFAULT false,
+  
+  icon text,
+  image_url text,
+  
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_products_name ON public.products(name);
+CREATE INDEX idx_products_is_active ON public.products(is_active);
+
+-- 19. MARKET_PRICES (Market Intelligence)
+CREATE TABLE public.market_prices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid REFERENCES public.products(id) ON DELETE CASCADE,  -- nullable: can store prices without product mapping
+  
+  state character varying(100) NOT NULL,
+  city character varying(100),
+  market_name character varying(255),
+  
+  price_per_kg numeric(10, 2) NOT NULL,
+  
+  recorded_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  source text,
+  api_source character varying(100),
+  is_verified boolean DEFAULT false,
+  last_updated timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_market_prices_product_id ON public.market_prices(product_id);
+CREATE INDEX idx_market_prices_recorded_at ON public.market_prices(recorded_at DESC);
+CREATE INDEX idx_market_prices_state_city ON public.market_prices(state, city);
+
+-- 20. SALES (Transactions)
+CREATE TABLE public.sales (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id uuid NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
+  
+  quantity_kg numeric(12, 2),
+  selling_price numeric(10, 2),
+  total_amount numeric(14, 2),
+  
+  buyer text,
+  sold_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_sales_batch_id ON public.sales(batch_id);
+CREATE INDEX idx_sales_sold_at ON public.sales(sold_at DESC);
+
+-- ============================================================================
+-- TABLE 21-22: STAKEHOLDER & INVESTMENT
+-- ============================================================================
+
+-- 21. STAKEHOLDER_INVESTMENTS (ROI Tracking)
+CREATE TABLE public.stakeholder_investments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  stakeholder_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  investment_amount_inr numeric(14, 2) NOT NULL,
+  investment_date date NOT NULL DEFAULT CURRENT_DATE,
+  
+  roi_percentage_estimate numeric(8, 2),
+  carbon_credits integer DEFAULT 0,
+  
+  status character varying(20) NOT NULL DEFAULT 'Active',
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT investment_status_check CHECK (status IN ('Active', 'Pending', 'Inactive', 'Completed'))
+);
+
+CREATE INDEX idx_stakeholder_investments_site_id ON public.stakeholder_investments(site_id);
+CREATE INDEX idx_stakeholder_investments_stakeholder_id ON public.stakeholder_investments(stakeholder_id);
+CREATE INDEX idx_stakeholder_investments_status ON public.stakeholder_investments(status);
+
+-- 22. STAKEHOLDER_PAYMENTS (Payment Tracking)
+CREATE TABLE public.stakeholder_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  investment_id uuid NOT NULL REFERENCES public.stakeholder_investments(id) ON DELETE CASCADE,
+  stakeholder_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  amount_inr numeric(14, 2) NOT NULL,
+  payment_status character varying(20) DEFAULT 'Pending',
+  
+  payment_date timestamp without time zone,
+  received_by_owner_at timestamp without time zone,
+  received_by_owner_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  
+  remarks text,
+  
+  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT payment_status_check CHECK (payment_status IN ('Pending', 'Completed', 'Partial'))
+);
+
+CREATE INDEX idx_stakeholder_payments_investment_id ON public.stakeholder_payments(investment_id);
+CREATE INDEX idx_stakeholder_payments_stakeholder_id ON public.stakeholder_payments(stakeholder_id);
+CREATE INDEX idx_stakeholder_payments_status ON public.stakeholder_payments(payment_status);
+
+-- ============================================================================
+-- TABLE 23-24: LOGGING & AUDIT
+-- ============================================================================
+
+-- 23. ACTIVITY_LOGS (Owner/Stakeholder Actions)
+CREATE TABLE public.activity_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  actor_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  actor_name character varying(255),
+  
+  action_type character varying(100),
+  action_subtype character varying(100),
+  target_type character varying(50),
+  target_id character varying(100),
+  target_name character varying(255),
+  
+  description text,
+  details jsonb,
+  
+  facility_id uuid REFERENCES public.sites(id) ON DELETE SET NULL,
+  related_data jsonb,
+  visibility character varying(20) DEFAULT 'private',
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_activity_logs_site_id ON public.activity_logs(site_id);
+CREATE INDEX idx_activity_logs_user_id ON public.activity_logs(user_id);
+CREATE INDEX idx_activity_logs_action_type ON public.activity_logs(action_type);
+CREATE INDEX idx_activity_logs_created_at ON public.activity_logs(created_at DESC);
+
+-- 24. FARMER_ACTIVITY_LOGS (Farmer-Specific Events)
+CREATE TABLE public.farmer_activity_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  site_id uuid REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  batch_id uuid REFERENCES public.batches(id) ON DELETE CASCADE,
+  
+  event_type character varying(100) NOT NULL,
+  title text NOT NULL,
+  description text,
+  
+  severity character varying(20),
+  
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT event_type_valid CHECK (event_type IN (
+    'request_submitted', 'request_approved', 'request_rejected',
+    'batch_stored', 'batch_removed', 'inventory_update',
+    'sensor_alert', 'door_alert', 'temperature_alert', 'humidity_alert',
+    'system_message'
+  )),
+  CONSTRAINT severity_valid CHECK (severity IN ('info', 'warning', 'critical'))
+);
+
+CREATE INDEX idx_farmer_activity_logs_farmer_id ON public.farmer_activity_logs(farmer_id);
+CREATE INDEX idx_farmer_activity_logs_site_id ON public.farmer_activity_logs(site_id);
+CREATE INDEX idx_farmer_activity_logs_batch_id ON public.farmer_activity_logs(batch_id);
+CREATE INDEX idx_farmer_activity_logs_created_at ON public.farmer_activity_logs(created_at DESC);
+
+-- ============================================================================
+-- TABLE 25-26: INFRASTRUCTURE & MAINTENANCE
+-- ============================================================================
+
+-- 25. FACILITY_MAINTENANCE (Facility Health Tracking)
+CREATE TABLE public.facility_maintenance (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  
+  maintenance_type character varying(100),
+  description text,
+  notes text,
+  
+  scheduled_date timestamp with time zone,
+  completed_date timestamp with time zone,
+  last_service_date timestamp with time zone,
+  next_due_date timestamp with time zone,
+  critical_due_date timestamp with time zone,
+  
+  frequency character varying(50),
+  grace_period_days integer DEFAULT 60,
+  
+  status character varying(20) DEFAULT 'healthy',
+  health_status character varying(20) DEFAULT 'healthy',
+  
+  acknowledged_at timestamp with time zone,
+  performed_by character varying(255),
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT maintenance_status_check CHECK (status IN ('healthy', 'warning', 'overdue', 'completed'))
+);
+
+CREATE INDEX idx_facility_maintenance_site_id ON public.facility_maintenance(site_id);
+CREATE INDEX idx_facility_maintenance_status ON public.facility_maintenance(status);
+CREATE INDEX idx_facility_maintenance_next_due ON public.facility_maintenance(next_due_date);
+
+-- 26. FACILITY_MAINTENANCE_LOGS (Service History)
+CREATE TABLE public.facility_maintenance_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  maintenance_id uuid REFERENCES public.facility_maintenance(id) ON DELETE CASCADE,
+  
+  log_entry text,
+  notes text,
+  
+  service_date timestamp with time zone,
+  next_due_date timestamp with time zone,
+  
+  maintenance_type character varying(100),
+  status character varying(20),
+  performed_by character varying(255),
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT log_status_check CHECK (status IN ('scheduled', 'completed', 'pending'))
+);
+
+CREATE INDEX idx_facility_maintenance_logs_site_id ON public.facility_maintenance_logs(site_id);
+CREATE INDEX idx_facility_maintenance_logs_maintenance_id ON public.facility_maintenance_logs(maintenance_id);
+CREATE INDEX idx_facility_maintenance_logs_created_at ON public.facility_maintenance_logs(created_at DESC);
+
+-- ============================================================================
+-- TABLE 27-31: PRICING & COSTING (NEW PHASE 2 TABLES) ⭐ NEW
+-- ============================================================================
+
+-- 27. ROOM_PRICING (Owner Sets Price Per Crate Per Room)
+CREATE TABLE public.room_pricing (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  site_code character varying(10) NOT NULL,
+  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  price_per_crate numeric(8, 2) NOT NULL,           -- ₹ per crate (1 crate = 25kg)
+  effective_from date NOT NULL,                     -- When price becomes active
+  effective_until date,                             -- When price ends (NULL = ongoing)
+  currency character varying(3) DEFAULT 'INR',
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT price_positive CHECK (price_per_crate > 0)
+);
+
+CREATE INDEX idx_room_pricing_room_id ON public.room_pricing(room_id);
+CREATE INDEX idx_room_pricing_owner_id ON public.room_pricing(owner_id);
+CREATE INDEX idx_room_pricing_effective_date ON public.room_pricing(effective_from, effective_until);
+CREATE INDEX idx_room_pricing_site_code ON public.room_pricing(site_code);
+
+-- 28. FARMER_DAILY_STORAGE_COSTS (Daily Cumulative Billing - One Row Per Day Per Farmer Per Room)
+CREATE TABLE public.farmer_daily_storage_costs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  site_code character varying(10) NOT NULL,
+  
+  cost_date date NOT NULL,                          -- Cost for THIS date
+  daily_crate_count integer NOT NULL DEFAULT 0,    -- # of crates stored on this day
+  price_per_crate numeric(8, 2) NOT NULL,          -- Price on that day (snapshot)
+  daily_cost numeric(12, 2) NOT NULL,              -- daily_crate_count * price_per_crate
+  cumulative_cost numeric(14, 2) NOT NULL,         -- Running total from first day
+  
+  payment_status character varying(20) DEFAULT 'unpaid',  -- 'unpaid', 'partial', 'paid'
+  payment_date timestamp with time zone,           -- When owner marked as paid
+  
+  remarks text,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT cost_positive CHECK (daily_cost >= 0),
+  CONSTRAINT cumulative_positive CHECK (cumulative_cost >= 0),
+  UNIQUE(farmer_id, room_id, cost_date)
+);
+
+CREATE INDEX idx_farmer_daily_costs_farmer ON public.farmer_daily_storage_costs(farmer_id);
+CREATE INDEX idx_farmer_daily_costs_room ON public.farmer_daily_storage_costs(room_id);
+CREATE INDEX idx_farmer_daily_costs_date ON public.farmer_daily_storage_costs(cost_date);
+CREATE INDEX idx_farmer_daily_costs_status ON public.farmer_daily_storage_costs(payment_status);
+CREATE INDEX idx_farmer_daily_costs_composite ON public.farmer_daily_storage_costs(farmer_id, room_id, cost_date);
+
+-- 29. FARMER_MULTI_ROOM_SUMMARY (Total Costs Across All Rooms for Farmer - One Row Per Day)
+CREATE TABLE public.farmer_multi_room_summary (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  summary_date date NOT NULL,                       -- Aggregated for THIS date
+  total_rooms_active integer DEFAULT 0,             -- # of rooms farmer has access to
+  total_daily_cost numeric(12, 2) NOT NULL,         -- SUM(all rooms' daily_cost)
+  total_cumulative_cost numeric(14, 2) NOT NULL,    -- SUM(all rooms' cumulative_cost)
+  total_crates_stored integer DEFAULT 0,            -- Total crates across all rooms
+  total_quantity_kg numeric(12, 2) DEFAULT 0,       -- Total kg across all rooms
+  
+  -- Inventory Net Worth Tracking (new columns)
+  inventory_value_when_stored numeric(14, 2) DEFAULT 0,    -- Accumulated snapshot value (when items were stored)
+  inventory_value_current_market numeric(14, 2) DEFAULT 0, -- Accumulated current market value on this date
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT cost_positive2 CHECK (total_daily_cost >= 0),
+  CONSTRAINT cumulative_positive2 CHECK (total_cumulative_cost >= 0),
+  UNIQUE(farmer_id, summary_date)
+);
+
+CREATE INDEX idx_farmer_multi_summary_farmer ON public.farmer_multi_room_summary(farmer_id);
+CREATE INDEX idx_farmer_multi_summary_date ON public.farmer_multi_room_summary(summary_date);
+CREATE INDEX idx_farmer_multi_summary_composite ON public.farmer_multi_room_summary(farmer_id, summary_date);
+CREATE INDEX idx_farmer_multi_summary_inventory_value ON public.farmer_multi_room_summary(inventory_value_when_stored, inventory_value_current_market);
+
+-- 29B. FARMER_INVENTORY_NET_WORTH (Live Net Worth Snapshot - One Row Per Farmer) ⭐ NEW
+-- Purpose: Quick access to current inventory net worth without aggregating daily records
+-- Maintained by backend trigger/script that updates on batch creation or market price changes
+CREATE TABLE public.farmer_inventory_net_worth (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL UNIQUE REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  -- Accumulated values from all active batches
+  total_inventory_value_when_stored numeric(14, 2) DEFAULT 0,    -- Sum of (initial_quantity_kg * snapshot_price_per_kg) for all batches
+  total_inventory_value_current_market numeric(14, 2) DEFAULT 0,  -- Sum of (initial_quantity_kg * current_market_price) for all batches
+  
+  -- Metadata
+  total_active_batches integer DEFAULT 0,                         -- Count of batches with remaining_quantity_kg > 0
+  total_crates_in_storage integer DEFAULT 0,                      -- Total remaining crates across all batches
+  total_quantity_kg numeric(12, 2) DEFAULT 0,                     -- Total remaining kg across all batches
+  
+  last_updated timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_farmer_net_worth_farmer ON public.farmer_inventory_net_worth(farmer_id);
+CREATE INDEX idx_farmer_net_worth_value ON public.farmer_inventory_net_worth(total_inventory_value_when_stored, total_inventory_value_current_market);
+CREATE INDEX idx_farmer_net_worth_updated ON public.farmer_inventory_net_worth(last_updated DESC);
+
+-- ============================================================================
+-- TRIGGERS FOR NET WORTH AUTO-MAINTENANCE (Using SECURITY DEFINER to bypass RLS)
+-- ============================================================================
+
+-- Trigger Function 1: Update net worth when batch is created/updated/deleted
+CREATE OR REPLACE FUNCTION public.update_farmer_net_worth_on_batch_change()
+RETURNS TRIGGER AS $$
+DECLARE
+  farmer_id_var uuid;
+  total_when_stored numeric(14, 2);
+  total_crates numeric;
+  total_kg numeric(12, 2);
+  batch_count integer;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    farmer_id_var := NEW.farmer_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+    farmer_id_var := NEW.farmer_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    farmer_id_var := OLD.farmer_id;
+  END IF;
+
+  SELECT
+    COALESCE(SUM(initial_quantity_kg * snapshot_price_per_kg), 0),
+    COALESCE(SUM(initial_quantity_kg / 25), 0),
+    COALESCE(SUM(initial_quantity_kg), 0),
+    COUNT(*)
+  INTO
+    total_when_stored, total_crates, total_kg, batch_count
+  FROM public.batches
+  WHERE farmer_id = farmer_id_var AND remaining_quantity_kg > 0;
+
+  INSERT INTO public.farmer_inventory_net_worth (farmer_id, total_inventory_value_when_stored, total_active_batches, total_crates_in_storage, total_quantity_kg, last_updated)
+  VALUES (farmer_id_var, total_when_stored, batch_count, COALESCE(total_crates, 0), total_kg, CURRENT_TIMESTAMP)
+  ON CONFLICT (farmer_id) DO UPDATE SET
+    total_inventory_value_when_stored = total_when_stored,
+    total_active_batches = batch_count,
+    total_crates_in_storage = COALESCE(total_crates, 0),
+    total_quantity_kg = total_kg,
+    last_updated = CURRENT_TIMESTAMP;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE TRIGGER trg_batches_update_net_worth
+AFTER INSERT OR UPDATE OR DELETE ON public.batches
+FOR EACH ROW
+EXECUTE FUNCTION public.update_farmer_net_worth_on_batch_change();
+
+-- Trigger Function 2: Update net worth when batch allocation is removed (soft delete)
+CREATE OR REPLACE FUNCTION public.update_farmer_net_worth_on_allocation_remove()
+RETURNS TRIGGER AS $$
+DECLARE
+  farmer_id_var uuid;
+  total_when_stored numeric(14, 2);
+  total_crates numeric;
+  total_kg numeric(12, 2);
+  batch_count integer;
+BEGIN
+  SELECT farmer_id INTO farmer_id_var FROM public.batches WHERE id = NEW.batch_id;
+
+  SELECT
+    COALESCE(SUM(initial_quantity_kg * snapshot_price_per_kg), 0),
+    COALESCE(SUM(initial_quantity_kg / 25), 0),
+    COALESCE(SUM(initial_quantity_kg), 0),
+    COUNT(*)
+  INTO
+    total_when_stored, total_crates, total_kg, batch_count
+  FROM public.batches
+  WHERE farmer_id = farmer_id_var AND remaining_quantity_kg > 0;
+
+  UPDATE public.farmer_inventory_net_worth
+  SET
+    total_inventory_value_when_stored = total_when_stored,
+    total_active_batches = batch_count,
+    total_crates_in_storage = COALESCE(total_crates, 0),
+    total_quantity_kg = total_kg,
+    last_updated = CURRENT_TIMESTAMP
+  WHERE farmer_id = farmer_id_var;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE TRIGGER trg_allocations_update_net_worth
+AFTER UPDATE ON public.batch_room_allocations
+FOR EACH ROW
+WHEN (OLD.removed_at IS NULL AND NEW.removed_at IS NOT NULL)
+EXECUTE FUNCTION public.update_farmer_net_worth_on_allocation_remove();
+
+-- 30. ROOM_ACCESS_PRICING (Snapshot of Price When Farmer Access Approved)
+CREATE TABLE public.room_access_pricing (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_access_id uuid NOT NULL REFERENCES public.farmer_room_access(id) ON DELETE CASCADE UNIQUE,
+  
+  price_per_crate numeric(8, 2) NOT NULL,          -- Snapshot of price when approved
+  approved_at timestamp with time zone NOT NULL,   -- When owner approved this access
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT price_positive2 CHECK (price_per_crate > 0)
+);
+
+CREATE INDEX idx_room_access_pricing_room_access ON public.room_access_pricing(room_access_id);
+CREATE INDEX idx_room_access_pricing_date ON public.room_access_pricing(approved_at);
+
+-- 31. STAKEHOLDER_INVESTMENT_APPROVALS (Stakeholder Investment Request + Owner Approval)
+CREATE TABLE public.stakeholder_investment_approvals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  stakeholder_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  investment_amount_inr numeric(14, 2) NOT NULL,   -- Amount stakeholder wants to invest
+  investment_date date NOT NULL DEFAULT CURRENT_DATE,
+  
+  approval_status character varying(20) DEFAULT 'pending',  -- 'pending', 'approved', 'rejected'
+  approval_date timestamp with time zone,
+  approved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  
+  expected_return_date date,
+  roi_percentage_estimate numeric(8, 2),
+  carbon_credits integer DEFAULT 0,
+  
+  remarks text,
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT amount_positive CHECK (investment_amount_inr > 0),
+  CONSTRAINT approval_status_check CHECK (approval_status IN ('pending', 'approved', 'rejected'))
+);
+
+CREATE INDEX idx_stakeholder_inv_approvals_site ON public.stakeholder_investment_approvals(site_id);
+CREATE INDEX idx_stakeholder_inv_approvals_stakeholder ON public.stakeholder_investment_approvals(stakeholder_id);
+CREATE INDEX idx_stakeholder_inv_approvals_owner ON public.stakeholder_investment_approvals(owner_id);
+CREATE INDEX idx_stakeholder_inv_approvals_status ON public.stakeholder_investment_approvals(approval_status);
+CREATE INDEX idx_stakeholder_inv_approvals_date ON public.stakeholder_investment_approvals(created_at DESC);
+
+-- ============================================================================
+-- TABLE 32: FARMER PAYMENTS (UPDATED)
+-- ============================================================================
+
+-- 32. FARMER_PAYMENTS (Billing & Compensation - UPDATED with daily costing integration)
+CREATE TABLE public.farmer_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  batch_id uuid REFERENCES public.batches(id) ON DELETE SET NULL,
+  
+  period_start date,
+  period_end date,
+  
+  crates_stored integer,
+  rate_per_crate numeric(8, 2) DEFAULT 1.40,
+  quantity_kg numeric(12, 2),
+  total_amount numeric(14, 2),
+  
+  -- NEW FIELDS FROM DAILY COSTING
+  cumulative_daily_cost numeric(14, 2),            -- From farmer_daily_storage_costs (automated)
+  
+  amount numeric(14, 2),
+  payment_date timestamp with time zone,
+  
+  payment_status character varying(20) DEFAULT 'Pending',
+  status character varying(20) DEFAULT 'pending',
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT payment_status2_check CHECK (payment_status IN ('Pending', 'Completed', 'Partial'))
+);
+
+CREATE INDEX idx_farmer_payments_site_id ON public.farmer_payments(site_id);
+CREATE INDEX idx_farmer_payments_farmer_id ON public.farmer_payments(farmer_id);
+CREATE INDEX idx_farmer_payments_status ON public.farmer_payments(payment_status);
+
+-- ============================================================================
+-- ENERGY & SUSTAINABILITY
+-- ============================================================================
+
+-- 28. ENERGY_CONSUMPTION (Solar/Grid/Battery Tracking - Per Room)
+CREATE TABLE public.energy_consumption (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  
+  kwh_total numeric(10, 2),
+  kwh_solar numeric(10, 2),
+  kwh_grid numeric(10, 2),
+  
+  battery_discharge_kwh numeric(10, 2),
+  battery_charge_kwh numeric(10, 2),
+  solar_percentage numeric(5, 2),
+  
+  recorded_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_energy_consumption_site_id ON public.energy_consumption(site_id);
+CREATE INDEX idx_energy_consumption_room_id ON public.energy_consumption(room_id);
+CREATE INDEX idx_energy_consumption_recorded_at ON public.energy_consumption(recorded_at DESC);
+CREATE INDEX idx_energy_consumption_site_room ON public.energy_consumption(site_id, room_id);
+
+-- ============================================================================
+-- NOTIFICATIONS
+-- ============================================================================
+
+-- 29. FARMER_NOTIFICATIONS (UI Notification Queue)
+CREATE TABLE public.farmer_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  notification_type character varying(100) NOT NULL,
+  title text NOT NULL,
+  message text,
+  
+  site_id uuid REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  request_id uuid,
+  batch_id uuid,
+  
+  is_read boolean DEFAULT false,
+  read_at timestamp with time zone,
+  
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT notification_type_valid CHECK (notification_type IN (
+    'request_submitted', 'request_approved', 'request_rejected',
+    'batch_stored', 'batch_removed', 'alert_triggered', 'system_message',
+    'payment_received', 'payment_recorded'
+  ))
+);
+
+CREATE INDEX idx_farmer_notifications_farmer_id ON public.farmer_notifications(farmer_id);
+CREATE INDEX idx_farmer_notifications_is_read ON public.farmer_notifications(is_read);
+CREATE INDEX idx_farmer_notifications_created_at ON public.farmer_notifications(created_at DESC);
+
+-- ============================================================================
+-- TABLE 30: OWNER_NOTIFICATIONS (UI Notification Queue for Owners) ⭐ NEW
+-- Purpose: Track notifications for facility owners (payments, requests, alerts)
+-- ============================================================================
+
+CREATE TABLE public.owner_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  notification_type character varying(100) NOT NULL,
+  title text NOT NULL,
+  message text,
+  
+  site_id uuid REFERENCES public.sites(id) ON DELETE CASCADE,
+  room_id uuid REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  farmer_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  
+  is_read boolean DEFAULT false,
+  read_at timestamp with time zone,
+  
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT owner_notification_type_valid CHECK (notification_type IN (
+    'payment_recorded', 'farmer_request', 'room_alert', 'system_message'
+  ))
+);
+
+CREATE INDEX idx_owner_notifications_owner_id ON public.owner_notifications(owner_id);
+CREATE INDEX idx_owner_notifications_is_read ON public.owner_notifications(is_read);
+CREATE INDEX idx_owner_notifications_created_at ON public.owner_notifications(created_at DESC);
+
+-- ============================================================================
+-- SEED DATA
+-- ============================================================================
+
+-- Seed roles
+INSERT INTO public.roles (name, description) VALUES
+  ('owner', 'Cold storage facility owner - full access'),
+  ('farmer', 'Produces cold storage products - monitoring access'),
+  ('stakeholder', 'Investor/partner - read-only access')
+ON CONFLICT (name) DO NOTHING;
+
+-- Seed sensor types (first 10)
+INSERT INTO public.sensor_types (sensor_name, sensor_code, unit, category, mandatory_by_default) VALUES
+  ('Temperature', 'TEMP', '°C', 'Environmental', true),
+  ('Humidity', 'HUM', '%', 'Environmental', true),
+  ('Door', 'DOOR', 'Status', 'Security', false),
+  ('SuctionPressure', 'PSI_SUCTION', 'psi', 'Equipment', false),
+  ('DischargePressure', 'PSI_DISCHARGE', 'psi', 'Equipment', false),
+  ('Oxygen', 'O2', '%', 'Gas', false),
+  ('CO2', 'CO2', 'ppm', 'Gas', false),
+  ('Ethylene', 'ETHYLENE', 'ppm', 'Gas', false),
+  ('Ammonia', 'AMMONIA', 'ppm', 'Gas', false),
+  ('Battery', 'BATTERY', '%', 'Energy', false)
+ON CONFLICT (sensor_name) DO NOTHING;
+
+-- ============================================================================
+-- TABLE 33: FARMER PAYMENT HISTORY (NEW - AUDIT TRAIL) ⭐ NEW
+-- ============================================================================
+
+-- 33. FARMER_PAYMENT_HISTORY (Immutable Record of All Payments Made by Farmers)
+-- Purpose: Permanent audit trail for payment history (for insights/alerts)
+-- Workflow: On payment completion, record inserted here, then farmer_daily_storage_costs rows deleted
+CREATE TABLE public.farmer_payment_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  room_id uuid NOT NULL REFERENCES public.cold_storage_rooms(id) ON DELETE CASCADE,
+  site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
+  
+  -- Payment Period Details
+  period_start_date date NOT NULL,                -- First day of billing period
+  period_end_date date NOT NULL,                  -- Last day of billing period (payment day)
+  
+  -- Summary Statistics
+  total_daily_entries integer NOT NULL,           -- # of days in period
+  total_crates_stored numeric(12, 2),             -- Total crates summed across period
+  total_quantity_kg numeric(12, 2),               -- Total kg summed across period (crates × 25kg)
+  
+  -- Payment Amount (cumulative_cost at time of payment)
+  amount_paid numeric(14, 2) NOT NULL,            -- Total amount farmer paid to owner
+  
+  -- Payment Metadata
+  payment_date timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- When payment recorded
+  payment_received_by_owner_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,  -- Which owner recorded it
+  
+  payment_method character varying(50),           -- 'cash', 'bank_transfer', 'upi', 'check', etc.
+  transaction_id character varying(100),          -- Bank transaction ID or reference number
+  remarks text,                                   -- Any additional notes
+  
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  
+  CONSTRAINT amount_positive CHECK (amount_paid > 0)
+);
+
+-- Indexes for fast queries (Insights/Alerts tabs)
+CREATE INDEX idx_farmer_payment_history_farmer ON public.farmer_payment_history(farmer_id);
+CREATE INDEX idx_farmer_payment_history_owner ON public.farmer_payment_history(owner_id);
+CREATE INDEX idx_farmer_payment_history_room ON public.farmer_payment_history(room_id);
+CREATE INDEX idx_farmer_payment_history_site ON public.farmer_payment_history(site_id);
+CREATE INDEX idx_farmer_payment_history_payment_date ON public.farmer_payment_history(payment_date DESC);
+CREATE INDEX idx_farmer_payment_history_period ON public.farmer_payment_history(farmer_id, room_id, period_end_date DESC);
+
+-- ============================================================================
+-- END OF SCHEMA (34 TABLES COMPLETE - WITH PAYMENT HISTORY & OWNER NOTIFICATIONS)
+-- ============================================================================

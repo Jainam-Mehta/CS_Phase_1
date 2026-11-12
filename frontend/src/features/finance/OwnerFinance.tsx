@@ -14,6 +14,8 @@ const OwnerFinance: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [financeData, setFinanceData] = useState<any>(null);
   const [siteName, setSiteName] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<{ [key: string]: string }>({});
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
@@ -70,20 +72,20 @@ const OwnerFinance: React.FC = () => {
 
       console.log('Stakeholder Investment Revenue (from approved investments):', stakeholderRevenue);
 
-      // 3. Fetch FARMER STORAGE REVENUE
-      // Revenue = crates stored × price_per_crate from farmer_room_access
+      // 3. Fetch FARMER SALES REVENUE (actual revenue from sales with snapshot pricing)
       let farmerRevenue = 0;
       let totalCrates = 0;
       let totalFarmers = 0;
-      let farmerPricing: any[] = [];
       let farmerAllocations: any[] = [];
+      let salesData: any[] = [];
 
       if (roomIds.length > 0) {
-        // Get all batch allocations
+        // Get all batches in these rooms (via allocations)
         const { data: allocData, error: allocError } = await supabase
           .from('batch_room_allocations')
-          .select('room_id, quantity_kg, batches(farmer_id)')
-          .in('room_id', roomIds);
+          .select('batch_id, room_id, quantity_kg')
+          .in('room_id', roomIds)
+          .is('removed_at', null);  // Only active allocations
 
         if (allocError) {
           console.warn('Error fetching allocations:', allocError);
@@ -91,63 +93,63 @@ const OwnerFinance: React.FC = () => {
           farmerAllocations = allocData || [];
         }
 
-        // Get farmer pricing for these rooms
-        const { data: pricingData } = await supabase
-          .from('farmer_room_access')
-          .select('farmer_id, room_id, price_per_crate, status')
-          .in('room_id', roomIds)
-          .eq('status', 'Approved');
-        
-        farmerPricing = pricingData || [];
+        console.log('Allocations found:', farmerAllocations.length);
+        if (farmerAllocations.length > 0) {
+          console.log('First allocation:', farmerAllocations[0]);
+        }
 
-        // Calculate total farmer storage revenue
-        if (farmerAllocations && farmerAllocations.length > 0) {
+        // Extract unique batch IDs
+        const batchIds = [...new Set(farmerAllocations.map((a: any) => a.batch_id).filter(Boolean))];
+        console.log('Batch IDs extracted:', batchIds);
+        console.log('Room IDs:', roomIds);
+
+        // Fetch SALES data with batches info (actual revenue)
+        if (batchIds.length > 0) {
+          const { data: salesRecords } = await supabase
+            .from('sales')
+            .select(`
+              id, quantity_kg, selling_price, batch_id, sold_at, buyer,
+              batches!inner(id, farmer_id, snapshot_price_per_kg)
+            `)
+            .in('batch_id', batchIds)
+            .order('sold_at', { ascending: false });
+
+          salesData = salesRecords || [];
+          console.log('Sales records found:', salesData.length);
+          if (salesData.length > 0) {
+            console.log('First sale:', salesData[0]);
+          }
+
+          // Calculate revenue from actual sales using selling_price
           const uniqueFarmers = new Set<string>();
           
-          (farmerAllocations || []).forEach((alloc: any) => {
-            const qtyKg = Number(alloc.quantity_kg) || 0;
+          (salesData || []).forEach((sale: any) => {
+            const qtyKg = Number(sale.quantity_kg) || 0;
             const crates = convertKgToCrates(qtyKg);
+            const totalAmount = Number(sale.selling_price) || 0;
+            
             totalCrates += crates;
+            farmerRevenue += totalAmount;
             
             // Track unique farmers
-            const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
+            const batch = Array.isArray(sale.batches) ? sale.batches[0] : sale.batches;
             if (batch?.farmer_id) {
               uniqueFarmers.add(batch.farmer_id);
             }
-            
-            // Find price for this farmer + room
-            const batchData = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
-            const pricing = farmerPricing?.find((p: any) => 
-              p.farmer_id === batchData?.farmer_id && p.room_id === alloc.room_id
-            );
-            
-            const pricePerCrate = pricing?.price_per_crate || 1.20;
-            farmerRevenue += crates * pricePerCrate;
           });
           
           totalFarmers = uniqueFarmers.size;
         }
       }
 
-      console.log('Farmer Storage Revenue (from charges):', farmerRevenue);
+      console.log('Farmer Sales Revenue (actual selling_price):', farmerRevenue);
 
       console.log('Total Revenue (Stakeholder + Farmer Storage):', stakeholderRevenue + farmerRevenue);
 
       // 4. Fetch EXPENSES (if table exists)
+      // Skip expenses query - table doesn't exist
       let expData: any[] = [];
-      if (roomIds.length > 0) {
-        try {
-          const { data: expensesData, error: expError } = await supabase
-            .from('expenses')
-            .select('category, amount')
-            .in('room_id', roomIds);
-          if (!expError) {
-            expData = expensesData || [];
-          }
-        } catch (err) {
-          console.log('Expenses table not available');
-        }
-      }
+      // Removed: expenses table query (returns 404 - table not available)
 
       // Process expenses
       let energyCost = 0;
@@ -167,114 +169,168 @@ const OwnerFinance: React.FC = () => {
       const totalExpenses = energyCost + maintenanceCost + partsCost + otherCost;
       const totalExp = energyCost + maintenanceCost + partsCost + otherCost;
 
-      // 5. Build farmer revenue breakdown for detailed table
-      // Reuse the farmer allocations we already fetched earlier
-      console.log('Debug: farmerAllocations before enrichment:', farmerAllocations);
-
-      let tableAllocations = farmerAllocations || [];
+      // 5. Build farmer revenue breakdown from allocations (group by farmer + room)
+      let farmerStorageData: any[] = [];
       
-      // Fetch full batch profiles if we have allocations
-      if (tableAllocations.length > 0) {
-        // Extract farmer_ids from the allocations
-        const farmerIds = new Set<string>();
-        tableAllocations.forEach((alloc: any) => {
-          const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
-          if (batch?.farmer_id) {
-            farmerIds.add(batch.farmer_id);
+      if (roomIds.length > 0) {
+        // Query allocations grouped by farmer and room
+        const { data: allocData } = await supabase
+          .from('batch_room_allocations')
+          .select(`
+            batch_id,
+            room_id,
+            quantity_kg,
+            batches!inner(farmer_id)
+          `)
+          .in('room_id', roomIds)
+          .is('removed_at', null);  // Only active allocations
+
+        // Get room and site info for all rooms
+        const { data: roomData } = await supabase
+          .from('cold_storage_rooms')
+          .select(`
+            id,
+            room_name,
+            site_id,
+            sites(facility_name)
+          `)
+          .in('id', roomIds);
+
+        // Create room lookup
+        const roomLookup: any = {};
+        (roomData || []).forEach((room: any) => {
+          roomLookup[room.id] = room;
+        });
+
+        // Group allocations by (farmer_id, room_id) and calculate totals
+        const farmerRoomMap = new Map<string, {farmer_id: string, room_id: string, total_kg: number}>();
+        
+        (allocData || []).forEach((alloc: any) => {
+          const farmer_id = alloc.batches?.farmer_id;
+          const room_id = alloc.room_id;
+          const qty_kg = Number(alloc.quantity_kg) || 0;
+          
+          if (farmer_id) {
+            const key = `${farmer_id}|${room_id}`;
+            if (farmerRoomMap.has(key)) {
+              const curr = farmerRoomMap.get(key)!;
+              curr.total_kg += qty_kg;
+            } else {
+              farmerRoomMap.set(key, { farmer_id, room_id, total_kg: qty_kg });
+            }
           }
         });
 
-        console.log('Debug: farmerIds to fetch profiles for:', Array.from(farmerIds));
-
-        if (farmerIds.size > 0) {
-          // Fetch farmer profiles
-          const { data: farmerProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .in('id', Array.from(farmerIds));
-
-          console.log('Debug: farmer profiles fetched:', farmerProfiles);
-
-          // Create profile lookup map
-          const profileMap = new Map<string, any>();
-          (farmerProfiles || []).forEach((p: any) => {
-            profileMap.set(p.id, p);
-          });
-
-          // Enrich allocations with profile data
-          tableAllocations = tableAllocations.map((alloc: any) => {
-            const batch = Array.isArray(alloc.batches) ? alloc.batches[0] : alloc.batches;
-            if (batch) {
-              const profile = profileMap.get(batch.farmer_id);
-              return {
-                ...alloc,
-                batches: {
-                  ...batch,
-                  profiles: profile
-                }
-              };
-            }
-            return alloc;
-          });
-        }
+        // Convert to array with room info
+        farmerStorageData = Array.from(farmerRoomMap.values()).map((item: any) => ({
+          farmer_id: item.farmer_id,
+          room_id: item.room_id,
+          quantity_kg: item.total_kg,
+          room: roomLookup[item.room_id] || {}
+        }));
       }
 
-      console.log('Debug: tableAllocations after enrichment:', tableAllocations);
-
-      // Create a map of farmer_id + room_id -> price_per_crate for quick lookup
-      const pricingMap = new Map<string, number>();
-      (farmerPricing || []).forEach((access: any) => {
-        const key = `${access.farmer_id}_${access.room_id}`;
-        if (access.price_per_crate) {
-          pricingMap.set(key, access.price_per_crate);
-        }
+      // Get farmer names
+      const farmerIds = new Set<string>();
+      farmerStorageData.forEach((row: any) => {
+        if (row.farmer_id) farmerIds.add(row.farmer_id);
       });
 
-      // Group farmer revenue from allocations for detailed breakdown
-      const farmerMap = new Map<string, { farmer: string; crates: number; total: number; location: string; pricePerCrate: number }>();
-
-      console.log('Table allocations:', tableAllocations);
-      console.log('Pricing map entries:', Array.from(pricingMap.entries()));
-
-      (tableAllocations || []).forEach((alloc: any) => {
-        const b = alloc.batches;
-        if (!b) {
-          console.warn('Allocation has no batches:', alloc);
-          return;
-        }
+      let farmerProfiles: any = {};
+      if (farmerIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', Array.from(farmerIds));
         
-        const farmerId = b.farmer_id;
-        const name = b.profiles ? b.profiles.full_name : 'Farmer';
-        const qtyKg = Number(alloc.quantity_kg) || 0;
-        const crates = convertKgToCrates(qtyKg);
+        (profiles || []).forEach((p: any) => {
+          farmerProfiles[p.id] = p.full_name;
+        });
+      }
+
+      // Get payment history to calculate PAID amounts (already settled payments)
+      const { data: paymentHistory } = await supabase
+        .from('farmer_payment_history')
+        .select('farmer_id, amount_paid')
+        .in('farmer_id', Array.from(farmerIds));
+
+      const farmerPaymentTotals: any = {};
+      const farmerPaidAmounts: any = {};  // Track how much has been paid
+      (paymentHistory || []).forEach((payment: any) => {
+        farmerPaymentTotals[payment.farmer_id] = (farmerPaymentTotals[payment.farmer_id] || 0) + Number(payment.amount_paid);
+        farmerPaidAmounts[payment.farmer_id] = (farmerPaidAmounts[payment.farmer_id] || 0) + Number(payment.amount_paid);
+      });
+
+      // Build farmer revenue map with site & room info - TWO REVENUE COLUMNS
+      const farmerMap = new Map<string, { 
+        farmer_id: string;
+        farmer: string;
+        room_id: string;
+        siteName: string; 
+        roomName: string; 
+        crates: number; 
+        unpaidRevenue: number;
+        totalRevenue: number;
+      }>();
+
+      (farmerStorageData || []).forEach((row: any) => {
+        const farmerId = row.farmer_id;
+        const farmerName = farmerProfiles[farmerId] || 'Unknown Farmer';
+        const siteName = row.room?.sites?.facility_name || 'Site';
+        const roomName = row.room?.room_name || 'Room';
+        const roomId = row.room_id;
+        const quantity_kg = Number(row.quantity_kg) || 0;
+        const crates = Math.ceil(quantity_kg / 25);  // 1 crate = 25kg
         
-        // Get price_per_crate from pricing map, default to 1.20 if not set
-        const pricingKey = `${farmerId}_${alloc.room_id}`;
-        const pricePerCrate = pricingMap.get(pricingKey) || 1.20;
-        const rev = crates * pricePerCrate;
+        // Use the actual sales revenue for this farmer if available
+        const farmerSalesRevenue = (salesData || [])
+          .filter((sale: any) => {
+            const batch = Array.isArray(sale.batches) ? sale.batches[0] : sale.batches;
+            return batch?.farmer_id === farmerId;
+          })
+          .reduce((sum: number, sale: any) => sum + (Number(sale.selling_price) || 0), 0);
 
-        console.log(`Processing farmer ${name} (${farmerId}): ${crates} crates @ ₹${pricePerCrate} = ₹${rev}`);
+        // UNPAID = current sales revenue - what they've already paid
+        // TOTAL = just the current sales revenue (don't add payment history - that's already subtracted)
+        const unpaidRev = Math.max(0, farmerSalesRevenue - (farmerPaidAmounts[farmerId] || 0));
+        const totalRev = farmerSalesRevenue;  // Total is just the sales, not sales + payments
 
-        if (farmerMap.has(farmerId)) {
-          const curr = farmerMap.get(farmerId)!;
+        const key = farmerId;
+        if (farmerMap.has(key)) {
+          const curr = farmerMap.get(key)!;
           curr.crates += crates;
-          curr.total += rev;
+          curr.unpaidRevenue += unpaidRev;
+          curr.totalRevenue += totalRev;
         } else {
-          farmerMap.set(farmerId, {
-            farmer: name || 'Farmer',
+          farmerMap.set(key, {
+            farmer_id: farmerId,
+            farmer: farmerName,
+            room_id: roomId,
+            siteName: siteName,
+            roomName: roomName,
             crates,
-            total: rev,
-            location: 'Local Facility',
-            pricePerCrate,
+            unpaidRevenue: unpaidRev,    // Current outstanding charges
+            totalRevenue: totalRev       // Current + all previous payments
           });
         }
       });
 
-      console.log('Final farmer map:', Array.from(farmerMap.values()));
+      console.log('Final farmer map with site & room:', Array.from(farmerMap.values()));
       const farmerRevenueList = Array.from(farmerMap.values());
       
-      // Total revenue = stakeholder investments + farmer storage charges
-      const totalRevenue = stakeholderRevenue + farmerRevenue;
+      // Recalculate totals from farmer revenue list (not from global sales)
+      // This ensures KPI matches the table rows
+      const recalculatedTotalCrates = farmerRevenueList.reduce((sum: number, f: any) => sum + (f.crates || 0), 0);
+      const recalculatedTotalUnpaidRevenue = farmerRevenueList.reduce((sum: number, f: any) => sum + (f.unpaidRevenue || 0), 0);
+      const recalculatedTotalRevenue = farmerRevenueList.reduce((sum: number, f: any) => sum + (f.totalRevenue || 0), 0);
+      
+      console.log('=== REVENUE TOTALS DEBUG ===');
+      console.log('Recalculated Total Unpaid:', recalculatedTotalUnpaidRevenue);
+      console.log('Recalculated Total Revenue:', recalculatedTotalRevenue);
+      console.log('Individual farmers:', farmerRevenueList.map(f => ({farmer: f.farmer, unpaid: f.unpaidRevenue, total: f.totalRevenue})));
+      
+      // Total revenue = stakeholder investments + farmer revenue from table
+      const totalRevenue = stakeholderRevenue + recalculatedTotalRevenue;
       
       // TOTAL PROFIT = Total Revenue - Expenses
       const finalTotalProfit = totalRevenue - totalExpenses;
@@ -302,6 +358,7 @@ const OwnerFinance: React.FC = () => {
 
       // Fetch farmer storage allocations (historical - this is current state, not historical payments)
       // Note: This gives current allocations, not historical monthly breakdown
+      // EXCLUDE removed allocations to match the current revenue calculation
       const { data: farmerMonthlyAllocations } = await supabase
         .from('batch_room_allocations')
         .select(`
@@ -313,6 +370,7 @@ const OwnerFinance: React.FC = () => {
           )
         `)
         .in('room_id', roomIds)
+        .is('removed_at', null)
         .gte('assigned_at', sixMonthsAgo.toISOString())
         .order('assigned_at', { ascending: true });
       
@@ -320,22 +378,8 @@ const OwnerFinance: React.FC = () => {
       console.log('Stakeholder Investments (last 6 months):', stakeholderMonthly);
       console.log('Farmer Allocations (last 6 months):', farmerMonthlyAllocations);
         
-      // Fetch expenses history for same period
+      // Expenses table not available - skip historical expenses
       let expensesHistory: any = [];
-      if (roomIds.length > 0) {
-        try {
-          const { data: expensesData, error: expError } = await supabase
-            .from('expenses')
-            .select('amount, created_at')
-            .in('room_id', roomIds)
-            .gte('created_at', sixMonthsAgo.toISOString());
-          if (!expError) {
-            expensesHistory = expensesData || [];
-          }
-        } catch (err) {
-          console.log('Expenses history not available');
-        }
-      }
         
       // Group by month
       const monthlyData: any = {};
@@ -369,23 +413,14 @@ const OwnerFinance: React.FC = () => {
         }
       });
 
-      // Aggregate farmer storage revenue into months
-      (farmerMonthlyAllocations || []).forEach((alloc: any) => {
-        const date = new Date(alloc.assigned_at);  // Use assigned_at, not created_at
-        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      // Aggregate farmer storage revenue into months - use SALES data (actual revenue)
+      (salesData || []).forEach((sale: any) => {
+        const soldDate = sale.sold_at ? new Date(sale.sold_at) : new Date();
+        const monthKey = `${soldDate.getFullYear()}-${soldDate.getMonth()}`;
         
-        const qtyKg = Number(alloc.quantity_kg) || 0;
-        const crates = convertKgToCrates(qtyKg);
+        const amount = Number(sale.selling_price) || 0;
         
-        // Find price for this farmer + room
-        const pricing = farmerPricing?.find((p: any) => 
-          p.farmer_id === alloc.batches?.farmer_id && p.room_id === alloc.room_id
-        );
-        
-        const pricePerCrate = pricing?.price_per_crate || 1.20;
-        const amount = crates * pricePerCrate;
-        
-        console.log('Farmer allocation date:', date, 'monthKey:', monthKey, 'amount:', amount);
+        console.log('Sale date:', soldDate, 'monthKey:', monthKey, 'amount:', amount);
         if (monthlyData[monthKey]) {
           monthlyData[monthKey].revenue += amount;
         }
@@ -413,15 +448,16 @@ const OwnerFinance: React.FC = () => {
       setFinanceData({
         currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
         totalRevenue: totalRevenue,
+        totalUnpaidRevenue: recalculatedTotalUnpaidRevenue,
         totalExpenses: totalExpenses,
         totalProfit: finalTotalProfit,
         profitMargin,
         farmerRevenue: farmerRevenueList,
         expenses: finalExpensesList,
         monthlyTrend: monthlyTrendData,
-        totalCrates: totalCrates,
+        totalCrates: recalculatedTotalCrates,
         totalFarmers: farmerRevenueList.length,
-        avgPricePerCrate: avgPricePerCrate,
+        avgPricePerCrate: recalculatedTotalCrates > 0 ? (recalculatedTotalRevenue / recalculatedTotalCrates).toFixed(2) : '0',
       });
     } catch (error) {
       console.error('Error loading finance data:', error);
@@ -429,6 +465,7 @@ const OwnerFinance: React.FC = () => {
       setFinanceData({
         currentMonth: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
         totalRevenue: 0,
+        totalUnpaidRevenue: 0,
         totalExpenses: 0,
         totalProfit: 0,
         profitMargin: '0.0',
@@ -441,6 +478,96 @@ const OwnerFinance: React.FC = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePaymentStatusChange = async (farmerId: string, currentStatus: string, unpaidRevenue: number) => {
+    try {
+      setIsSavingPayment(true);
+      
+      // Validate: Can't record a payment if there's no unpaid revenue
+      if (unpaidRevenue <= 0) {
+        alert('No pending payment to record. Unpaid revenue is ₹0 or less.');
+        setIsSavingPayment(false);
+        return;
+      }
+      
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        alert('Not authenticated');
+        return;
+      }
+
+      // Only allow marking as PAID (recording payment)
+      if (currentStatus === 'paid') {
+        alert('Payment already marked as Paid');
+        return;
+      }
+
+      // Get farmer's room from financeData to populate room_id
+      const farmerData = financeData?.farmerRevenue?.find((f: any) => f.farmer_id === farmerId);
+      const roomId = farmerData?.room_id || selectedRoomId;
+      
+      // Record payment in farmer_payment_history
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const { error: historyError } = await supabase
+        .from('farmer_payment_history')
+        .insert({
+          farmer_id: farmerId,
+          owner_id: authUser.id,
+          site_id: selectedFacilityId,
+          room_id: roomId,
+          period_start_date: today,
+          period_end_date: today,
+          total_daily_entries: 1,
+          total_crates_stored: farmerData?.crates || 0,
+          total_quantity_kg: (farmerData?.crates || 0) * 25,
+          amount_paid: unpaidRevenue,
+          payment_received_by_owner_id: authUser.id,
+          payment_method: 'owner_dashboard',
+          remarks: 'Payment recorded from Owner Finance dashboard',
+          payment_date: new Date().toISOString()
+        });
+
+      if (historyError) {
+        console.error('Error creating payment history:', historyError);
+        alert(`Error recording payment: ${historyError.message}`);
+        return;
+      }
+
+      // 3. Create farmer notification (non-blocking)
+      try {
+        supabase.from('farmer_notifications').insert({
+          farmer_id: farmerId,
+          notification_type: 'payment_recorded',
+          title: 'Payment Recorded',
+          message: `Your payment of ₹${unpaidRevenue.toFixed(2)} has been recorded by the facility owner.`,
+          is_read: false
+        });
+      } catch (err) {
+        console.warn('Could not send farmer notification:', err);
+      }
+
+      console.log(`Payment of ₹${unpaidRevenue.toFixed(2)} from farmer recorded successfully.`);
+
+      // 4. Update UI state
+      setPaymentStatus(prev => ({
+        ...prev,
+        [farmerId]: 'paid'
+      }));
+
+      // 5. Show success message
+      alert(`Payment of ₹${unpaidRevenue.toFixed(2)} recorded successfully`);
+      
+      // 6. Reload data to reflect changes
+      await loadFinanceData();
+
+    } catch (error) {
+      console.error('Error handling payment:', error);
+      alert('An unexpected error occurred while processing payment');
+    } finally {
+      setIsSavingPayment(false);
     }
   };
 
@@ -496,48 +623,18 @@ const OwnerFinance: React.FC = () => {
       {/* Room Selector Removed - Using global useSiteStore selection */}
 
       {/* Top KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6 mb-8">
         {/* Total Revenue */}
         <Card variant="default" className="border-l-4 border-l-emerald-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Revenue</h3>
               <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <IndianRupee className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
             <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
               {formatCurrency(financeData?.totalRevenue)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Total Expenses */}
-        <Card variant="default" className="border-l-4 border-l-red-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Expenses</h3>
-              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
-              {formatCurrency(financeData?.totalExpenses)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Net Profit */}
-        <Card variant="default" className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Net Profit</h3>
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <IndianRupee className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
-              {formatCurrency(financeData?.totalProfit)}
             </p>
           </CardContent>
         </Card>
@@ -561,96 +658,6 @@ const OwnerFinance: React.FC = () => {
         </Card>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-        {/* Expenses Breakdown - Donut Chart */}
-        <Card variant="default" className="xl:col-span-1">
-          <CardHeader>
-            <CardTitle>Expense Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={financeData?.expenses}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="amount"
-                  >
-                    {financeData?.expenses.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip
-                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }}
-                    labelStyle={{ color: '#ffffff' }}
-                    formatter={(value: any) => [value >= 1000 ? `₹${(value / 1000).toFixed(1)}K` : `₹${value}`, '']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-3 mt-4">
-              {financeData?.expenses.map((expense: any, index: number) => {
-                const Icon = expense.icon;
-                return (
-                  <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: expense.color }}></div>
-                      <div className="flex items-center gap-2">
-                        <Icon className="w-4 h-4 text-slate-500" />
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{expense.category}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">
-                        {expense.amount >= 1000 ? `₹${(expense.amount / 1000).toFixed(1)}K` : `₹${expense.amount}`}
-                      </p>
-                      <p className="text-xs text-slate-500">{expense.percentage}%</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-      {/* Monthly Trend - Bar Chart */}
-        <Card variant="default" className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>6-Month Financial Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={financeData?.monthlyTrend || []}
-                  margin={{ left: 0, right: 10, top: 5, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
-                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} width={40} />
-                  <RechartsTooltip
-                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#ffffff' }}
-                    labelStyle={{ color: '#ffffff' }}
-                    formatter={(value: any) => {
-                      return [`₹${value.toFixed(2)}`, ''];
-                    }}
-                  />
-                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="revenue" fill="#10b981" radius={[8, 8, 0, 0]} name="Revenue" />
-                  <Bar dataKey="expenses" fill="#ef4444" radius={[8, 8, 0, 0]} name="Expenses" />
-                  <Bar dataKey="profit" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Profit" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Farmer Revenue Table */}
       <Card variant="default">
         <CardHeader>
@@ -661,9 +668,6 @@ const OwnerFinance: React.FC = () => {
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span className="text-slate-600 dark:text-slate-400">{financeData?.currentMonth}</span>
               </div>
-              <div className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full font-medium">
-                Avg: ₹{financeData?.avgPricePerCrate}/crate
-              </div>
             </div>
           </div>
         </CardHeader>
@@ -673,18 +677,20 @@ const OwnerFinance: React.FC = () => {
               <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="px-6 py-4 text-left font-semibold text-slate-700 dark:text-slate-300">Farmer Name</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-700 dark:text-slate-300">Location</th>
+                  <th className="px-6 py-4 text-left font-semibold text-slate-700 dark:text-slate-300">Room</th>
                   <th className="px-6 py-4 text-right font-semibold text-slate-700 dark:text-slate-300">Crates Stored</th>
-                  <th className="px-6 py-4 text-right font-semibold text-slate-700 dark:text-slate-300">Price/Crate</th>
+                  <th className="px-6 py-4 text-right font-semibold text-slate-700 dark:text-slate-300">Unpaid Revenue</th>
                   <th className="px-6 py-4 text-right font-semibold text-slate-700 dark:text-slate-300">Total Revenue</th>
-                  <th className="px-6 py-4 text-right font-semibold text-slate-700 dark:text-slate-300">% of Total</th>
+                  <th className="px-6 py-4 text-center font-semibold text-slate-700 dark:text-slate-300">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {financeData?.farmerRevenue.map((farmer: any, index: number) => {
-                  const percentage = ((farmer.total / financeData.totalRevenue) * 100).toFixed(1);
+                  const farmerId = farmer.farmer_id; // Use the actual UUID
+                  const status = paymentStatus[farmerId] || 'unpaid';
+                  
                   return (
-                    <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                    <tr key={farmerId} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center text-white font-semibold">
@@ -693,20 +699,30 @@ const OwnerFinance: React.FC = () => {
                           <span className="font-medium text-slate-900 dark:text-white">{farmer.farmer}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{farmer.location}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
+                        <span className="font-medium text-slate-900 dark:text-white">{farmer.roomName || 'Room'}</span>
+                      </td>
                       <td className="px-6 py-4 text-right font-medium text-slate-900 dark:text-white">
                         {formatNumber(farmer.crates)}
                       </td>
-                      <td className="px-6 py-4 text-right text-slate-600 dark:text-slate-400">
-                        ₹{farmer.pricePerCrate?.toFixed(2) || '0.00'}
+                      <td className="px-6 py-4 text-right font-bold text-orange-600 dark:text-orange-400">
+                        ₹{formatNumber(farmer.unpaidRevenue)}
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                        ₹{formatNumber(farmer.total)}
+                        ₹{formatNumber(farmer.totalRevenue)}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs font-medium">
-                          {farmer.percentageDisplay ? farmer.percentageDisplay : percentage}%
-                        </span>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => handlePaymentStatusChange(farmerId, status, farmer.unpaidRevenue)}
+                          disabled={isSavingPayment}
+                          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 ${
+                            status === 'paid'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
+                          }`}
+                        >
+                          {isSavingPayment ? 'Saving...' : (status === 'paid' ? 'Paid' : 'Unpaid')}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -714,19 +730,18 @@ const OwnerFinance: React.FC = () => {
               </tbody>
               <tfoot className="bg-slate-50 dark:bg-slate-800/50 border-t-2 border-slate-300 dark:border-slate-600">
                 <tr>
-                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-white" colSpan={2}>TOTAL</td>
+                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">TOTAL</td>
+                  <td className="px-6 py-4"></td>
                   <td className="px-6 py-4 text-right font-bold text-slate-900 dark:text-white">
                     {formatNumber(financeData?.totalCrates)}
                   </td>
-                  <td className="px-6 py-4"></td>
+                  <td className="px-6 py-4 text-right font-bold text-orange-600 dark:text-orange-400 text-lg">
+                    ₹{formatNumber(financeData?.totalUnpaidRevenue || 0)}
+                  </td>
                   <td className="px-6 py-4 text-right font-bold text-emerald-600 dark:text-emerald-400 text-lg">
                     ₹{formatNumber(financeData?.totalRevenue)}
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded text-xs font-bold">
-                      100%
-                    </span>
-                  </td>
+                  <td className="px-6 py-4 text-center"></td>
                 </tr>
               </tfoot>
             </table>

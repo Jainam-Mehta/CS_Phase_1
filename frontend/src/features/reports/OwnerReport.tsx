@@ -200,7 +200,7 @@ const OwnerReport: React.FC = () => {
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text('ColdSense AI Platform', margin, 12);
+        doc.text('SystmII Platform', margin, 12);
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.text('Facility Operations Report', margin, 19);
@@ -401,12 +401,12 @@ const OwnerReport: React.FC = () => {
         doc.setTextColor(100, 116, 139);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text('ColdSense AI Platform – Confidential Report', margin, 291);
+        doc.text('SystmII Platform – Confidential Report', margin, 291);
         doc.text(`Page ${p} of ${totalPages}`, pageW - margin, 291, { align: 'right' });
       }
 
       // Save PDF
-      const fileName = `ColdSense_Report_${data.facilityName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const fileName = `SystmII_Report_${data.facilityName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
       doc.save(fileName);
     } catch (err) {
       console.error('Report generation failed:', err);

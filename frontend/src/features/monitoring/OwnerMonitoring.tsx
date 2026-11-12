@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, Wind, ArchiveX, ShieldAlert, BadgeCheck, Wrench, Plus, X } from 'lucide-react';
+import { Activity, Users, Radio, Thermometer, Droplets, Battery, MapPin, Gauge, Wind, ArchiveX, ShieldAlert, BadgeCheck, Wrench, Plus, X, Zap, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
@@ -49,19 +49,27 @@ const OwnerMonitoring: React.FC = () => {
   const [rooms, setRooms] = useState<any[]>([]);
   const [siteName, setSiteName] = useState<string>('');
   const [sensorAverages, setSensorAverages] = useState<any>(null);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   useEffect(() => {
     if (user?.id && selectedFacilityId) {
       loadMonitoringData();
       
-      // Poll for sensor updates every 5 seconds to show real-time data
-      const interval = setInterval(() => {
-        loadMonitoringData();
-      }, 5000);
+      // AUTO-REFRESH DISABLED: Only refresh on manual button click
+      // Users can click the "Refresh" button to update data manually
+      // Previously this auto-refreshed every 5-10 seconds which interrupted scrolling
       
-      return () => clearInterval(interval);
+      return () => {};
     }
   }, [user?.id, selectedFacilityId, selectedRoomId]);
+
+  const handleManualRefresh = async () => {
+    setIsManualRefreshing(true);
+    await loadMonitoringData();
+    setLastRefreshTime(new Date());
+    setIsManualRefreshing(false);
+  };
 
   const loadMonitoringData = async () => {
     try {
@@ -82,7 +90,10 @@ const OwnerMonitoring: React.FC = () => {
         .select('*')
         .eq('site_id', selectedFacilityId);
 
-      const resolvedRooms = rmData || [];
+      const resolvedRooms = (rmData || []).map((room: any) => ({
+        ...room,
+        display_name: room.room_name || `Room ${room.room_code}`  // Use database room_name (e.g., "Room 1")
+      }));
       setRooms(resolvedRooms);
 
       // Set default room if not already selected
@@ -114,9 +125,10 @@ const OwnerMonitoring: React.FC = () => {
       const numberedSensors = (sensorData || []).map(sensor => {
         const type = sensor.sensor_type || 'Unknown';
         
-        // Use slave_id for unique identification if available
-        const displayName = sensor.slave_id 
-          ? `${type} ${sensor.slave_id}`  // e.g., "Temperature 1", "Temperature 3"
+        // Use slave_id or sensor_number for unique identification if available
+        const sensorNum = sensor.slave_id || sensor.sensor_number;
+        const displayName = sensorNum 
+          ? `${type} ${sensorNum}`  // e.g., "Temperature 1", "Temperature 3"
           : type;
         
         return {
@@ -156,78 +168,15 @@ const OwnerMonitoring: React.FC = () => {
         })();
       }
 
-      // ✅ NEW: Fetch latest readings from cold_storage_conditions table
-      // This ensures we show data even if sensor_devices.last_reading_value is null
+      // ✅ SIMPLIFIED: Fetch sensor data from sensor_devices (primary source)
+      // cold_storage_conditions is a complex sparse table - skip for now
+      // If sensor_devices doesn't have readings, they'll show "No Telemetry"
       try {
-        const { data: conditionsData } = await supabase
-          .from('cold_storage_conditions')
-          .select('room_id, sensor_id, slave_id, sensor_type, temperature, humidity, door_status, recorded_at')
-          .eq('room_id', roomToUse)
-          .order('recorded_at', { ascending: false })
-          .limit(100);
-
-        if (conditionsData && conditionsData.length > 0) {
-          // Create a map of sensor_type + slave_id → latest reading
-          // This prevents collapsing all Temperature sensors to one value
-          const latestBySlave: Record<string, any> = {};
-          for (const cond of conditionsData) {
-            const type = (cond.sensor_type || '').toLowerCase();
-            // Key by slave_id if available, otherwise by sensor_id or just type
-            const key = cond.slave_id != null 
-              ? `${type}_${cond.slave_id}` 
-              : (cond.sensor_id ? `${type}_${cond.sensor_id}` : type);
-            
-            if (!latestBySlave[key]) {
-              latestBySlave[key] = cond;
-            }
-          }
-
-          // Update sensor data with cold_storage_conditions readings
-          const updatedSensors = numberedSensors.map(sensor => {
-            const type = (sensor.sensor_type || '').toLowerCase();
-            // Try to match by type + slave_id first, then by type alone as fallback
-            const key = sensor.slave_id != null 
-              ? `${type}_${sensor.slave_id}` 
-              : type;
-            const condition = latestBySlave[key] || latestBySlave[type];
-
-            if (condition && sensor.last_reading_value == null) {
-              // Use reading from cold_storage_conditions if sensor_devices doesn't have it
-              let readingVal = null;
-              let readingUnit = '';
-              
-              if (type.includes('temp') && condition.temperature != null) {
-                readingVal = condition.temperature;
-                readingUnit = '°C';
-              } else if (type.includes('hum') && condition.humidity != null) {
-                readingVal = condition.humidity;
-                readingUnit = '%';
-              } else if (type.includes('door') && condition.door_status != null) {
-                readingVal = condition.door_status;
-                readingUnit = '';
-              }
-
-              if (readingVal != null) {
-                return {
-                  ...sensor,
-                  last_reading_value: readingVal,      // ← Store in primary field
-                  last_reading_unit: readingUnit,
-                  sensor_value: readingVal,            // ← Also store in fallback field
-                  sensor_unit: readingUnit,
-                  last_seen: condition.recorded_at,
-                  status: 'Online',
-                  is_active: true
-                };
-              }
-            }
-            return sensor;
-          });
-
-          setDbSensors(updatedSensors);
-        }
+        // Additional context: cold_storage_conditions could be queried later if needed,
+        // but sensor_devices.last_reading_value is the cleaner source for individual sensors
+        console.debug('Using sensor_devices as primary reading source');
       } catch (error) {
-        console.warn('Failed to fetch cold_storage_conditions:', error);
-        // Non-fatal - dashboard will still show individual sensors from sensor_devices
+        console.warn('Error in sensor reading fallback:', error);
       }
 
       // Get unique farmers count
@@ -265,6 +214,13 @@ const OwnerMonitoring: React.FC = () => {
     if (t.includes('co2') || t.includes('wind')) return <Wind className="w-5 h-5 text-gray-500" />;
     if (t.includes('ethylene')) return <ArchiveX className="w-5 h-5 text-yellow-600" />;
     if (t.includes('ammonia')) return <ShieldAlert className="w-5 h-5 text-orange-500" />;
+    if (t.includes('oxygen')) return <Wind className="w-5 h-5 text-cyan-500" />;
+    if (t.includes('motion')) return <Radio className="w-5 h-5 text-indigo-500" />;
+    if (t.includes('vibration')) return <Radio className="w-5 h-5 text-violet-500" />;
+    if (t.includes('smoke')) return <AlertCircle className="w-5 h-5 text-orange-600" />;
+    if (t.includes('water') || t.includes('leak')) return <Droplets className="w-5 h-5 text-blue-600" />;
+    if (t.includes('power') || t.includes('grid') || t.includes('solar')) return <Zap className="w-5 h-5 text-yellow-500" />;
+    if (t.includes('compressor')) return <Gauge className="w-5 h-5 text-gray-600" />;
     
     // Log unknown sensor types in development
     if (import.meta.env.DEV) {
@@ -333,7 +289,8 @@ const OwnerMonitoring: React.FC = () => {
               sensor_type: 'Temperature',  // ← TitleCase for consistency
               sensor_name: `Temperature ${tempNumber}`,
               sensor_code: `TEMP_${String(tempNumber).padStart(3, '0')}`,
-              slave_id: tempNumber,  // ← ADD THIS LINE (1, 2, 3, etc.)
+              slave_id: tempNumber,
+              sensor_number: tempNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -346,7 +303,8 @@ const OwnerMonitoring: React.FC = () => {
               sensor_type: 'Humidity',  // ← TitleCase for consistency
               sensor_name: `Humidity ${humidityNumber}`,
               sensor_code: `HUM_${String(humidityNumber).padStart(3, '0')}`,
-              slave_id: humidityNumber,  // ← ADD THIS LINE (1, 2, 3, etc.)
+              slave_id: humidityNumber,
+              sensor_number: humidityNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -368,6 +326,7 @@ const OwnerMonitoring: React.FC = () => {
               sensor_name: `Ambient Temperature ${ambTempNumber}`,
               sensor_code: `AMB_TEMP_${String(ambTempNumber).padStart(3, '0')}`,
               slave_id: ambTempNumber,
+              sensor_number: ambTempNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -381,6 +340,7 @@ const OwnerMonitoring: React.FC = () => {
               sensor_name: `Ambient Humidity ${ambHumNumber}`,
               sensor_code: `AMB_HUM_${String(ambHumNumber).padStart(3, '0')}`,
               slave_id: ambHumNumber,
+              sensor_number: ambHumNumber,
               status: 'Online',
               is_active: true,
               created_at: new Date().toISOString()
@@ -390,7 +350,8 @@ const OwnerMonitoring: React.FC = () => {
       } else {
         // Regular single-type sensor
         const normalizedType = normalizeSensorType(addSensorForm.sensor_type);
-        const existingOfType = dbSensors.filter(s => s.sensor_type === normalizedType);
+        // Filter by ORIGINAL sensor_type (as stored in DB), not normalized
+        const existingOfType = dbSensors.filter(s => s.sensor_type === addSensorForm.sensor_type);
         const startNumber = existingOfType.length + 1;
 
         for (let i = 0; i < addSensorForm.quantity; i++) {
@@ -402,15 +363,14 @@ const OwnerMonitoring: React.FC = () => {
             sensor_type: addSensorForm.sensor_type,  // Use as-is (already TitleCase from AVAILABLE_SENSOR_TYPES)
             sensor_name: `${addSensorForm.sensor_type} ${sensorNumber}`,
             sensor_code: `${normalizedType.toUpperCase().replace(/_/g, '-')}_${String(sensorNumber).padStart(3, '0')}`,
-            slave_id: sensorNumber,  // ← ADD THIS LINE
+            slave_id: sensorNumber,
+            sensor_number: sensorNumber,  // ← Also set sensor_number as fallback
             status: 'Online',
             is_active: true,
             created_at: new Date().toISOString()
           });
         }
       }
-
-      console.log('Inserting sensors:', sensorsToAdd);
 
       const { data: insertedData, error: insertError } = await supabase
         .from('sensor_devices')
@@ -470,7 +430,21 @@ const OwnerMonitoring: React.FC = () => {
     inventory.filter(i => i.farmer_id || i.farmer_profile_id)
       .map(i => i.farmer_id || i.farmer_profile_id)
   ).size;
-  const isNetworkConnected = true; // Always show as connected for presentation
+  
+  // Calculate Network Status: Connected if any sensor has data in last 30 minutes
+  const NETWORK_TIMEOUT_MINUTES = 30;
+  let isNetworkConnected = false;
+  
+  if (dbSensors.length > 0) {
+    const now = new Date();
+    const thirtyMinutesAgo = new Date(now.getTime() - NETWORK_TIMEOUT_MINUTES * 60000);
+    
+    isNetworkConnected = dbSensors.some(sensor => {
+      if (!sensor.last_seen) return false;
+      const lastReadingTime = new Date(sensor.last_seen);
+      return lastReadingTime >= thirtyMinutesAgo;
+    });
+  }
 
   return (
     <div className="p-8 max-w-[1400px] mx-auto min-h-screen">
@@ -483,15 +457,33 @@ const OwnerMonitoring: React.FC = () => {
             Real-time telemetry and active client monitoring across all sites.
           </p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm font-medium">
-          <BadgeCheck className="w-4 h-4" />
-          MQTT Data Connected
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Last Refreshed</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mt-1">{lastRefreshTime.toLocaleString()}</p>
+          </div>
+          <button 
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-slate-400 text-white rounded-lg font-medium transition-colors text-sm"
+            title="Manually refresh sensor data"
+          >
+            <svg 
+              className={`w-4 h-4 ${isManualRefreshing ? 'animate-spin' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
         </div>
       </div>
 
       {/* Room Selector removed - use header selector instead */}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* KPI Cards */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
@@ -500,16 +492,6 @@ const OwnerMonitoring: React.FC = () => {
           <div>
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Active Sensors</h3>
             <p className="text-3xl font-bold text-slate-900 dark:text-white">{activeSensors}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-start gap-4">
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl">
-            <Users className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Active Farmers</h3>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">{uniqueFarmers}</p>
           </div>
         </div>
 
@@ -578,13 +560,12 @@ const OwnerMonitoring: React.FC = () => {
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sensor Name</th>
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Reading</th>
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Maintenance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {dbSensors.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                     No sensors discovered for this facility.
                   </td>
                 </tr>
@@ -643,21 +624,6 @@ const OwnerMonitoring: React.FC = () => {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                           {displayStatus}
                         </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          {isMaintenance ? (
-                            <>
-                              <Wrench className="w-4 h-4 text-amber-500" />
-                              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Required</span>
-                            </>
-                          ) : (
-                            <>
-                              <BadgeCheck className="w-4 h-4 text-emerald-500" />
-                              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Not Required</span>
-                            </>
-                          )}
-                        </div>
                       </td>
                     </tr>
                   );

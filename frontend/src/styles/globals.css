@@ -7,6 +7,7 @@ html, body {
   @apply h-full w-full;
   overflow-x: hidden;
   overflow-y: scroll; /* Always show scrollbar to prevent layout shift */
+  scrollbar-gutter: stable; /* Reserve space for scrollbar, prevents layout shift */
   background-color: rgb(var(--background));
 }
 
@@ -176,3 +177,33 @@ button, a, input, select, textarea {
 .icon-2xl {
   @apply h-10 w-10;
 }
+
+/* Date input format override - Change mm/dd/yyyy to dd/mm/yyyy */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 4px;
+  margin-right: 2px;
+  opacity: 0.6;
+  filter: invert(0.8);
+}
+
+/* Hide the browser's default mm/dd/yyyy text completely */
+input[type="date"]::-webkit-input-placeholder {
+  display: none;
+}
+
+input[type="date"]::placeholder {
+  display: none;
+}
+
+/* Show our custom dd/mm/yyyy text */
+input[type="date"]:not([value]) {
+  color: rgb(148, 163, 184);
+}
+
+input[type="date"]:not([value])::before {
+  content: "dd/mm/yyyy";
+  color: rgb(148, 163, 184);
+}
+
+

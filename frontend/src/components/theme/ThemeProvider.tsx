@@ -11,7 +11,7 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     // Default to 'light' theme when no preference is stored
     const getInitialTheme = () => {
       try {
-        const stored = localStorage.getItem('coldsense-settings');
+        const stored = localStorage.getItem('systmii-settings') || localStorage.getItem('coldsense-settings');
         if (stored) {
           const parsed = JSON.parse(stored);
           return parsed.state?.appearance || 'light';

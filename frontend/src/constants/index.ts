@@ -202,11 +202,11 @@ export const DATE_FORMATS = {
 
 // Local Storage Keys
 export const STORAGE_KEYS = {
-  THEME: 'coldsense_theme',
-  USER: 'coldsense_user',
-  TOKEN: 'coldsense_token',
-  PREFERENCES: 'coldsense_preferences',
-  SIDEBAR_COLLAPSED: 'coldsense_sidebar_collapsed',
+  THEME: 'systmii_theme',
+  USER: 'systmii_user',
+  TOKEN: 'systmii_token',
+  PREFERENCES: 'systmii_preferences',
+  SIDEBAR_COLLAPSED: 'systmii_sidebar_collapsed',
 } as const;
 
 // File Size Limits

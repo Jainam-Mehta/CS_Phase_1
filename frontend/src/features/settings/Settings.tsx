@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { Plus, Building, User, Warehouse, Clock, CheckCircle, XCircle, Briefcase, Users, IndianRupee, Save, Edit2, CreditCard, AlertCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { logPaymentReceived } from '../../lib/activityLogger';
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -91,9 +92,8 @@ const SettingsPage: React.FC = () => {
              channelRef.current = null;
            }
          };
-    } else if (user?.role === 'owner') {
-         loadFacilitiesWithFarmers();
     }
+    // Sites Details section moved to dedicated SitesDetails component
   }, [user?.id]);
 
   const loadMyRequests = async () => {
@@ -118,6 +118,25 @@ const SettingsPage: React.FC = () => {
         if (error) {
           console.error('Error loading requests:', error);
           return;
+        }
+        
+        // Fetch pricing separately for each access record
+        if (data && data.length > 0) {
+          const accessIds = (data as any[]).map(req => req.id);
+          const { data: pricingData } = await supabase
+            .from('room_access_pricing')
+            .select('room_access_id, price_per_crate, approved_at')
+            .in('room_access_id', accessIds);
+          
+          const pricingMap = new Map((pricingData || []).map(p => [
+            p.room_access_id,
+            [{ price_per_crate: p.price_per_crate, approved_at: p.approved_at }]
+          ]));
+          
+          // Add pricing data to each request
+          (data as any[]).forEach(req => {
+            req.room_access_pricing = pricingMap.get(req.id) || [];
+          });
         }
           
         // Fetch owner names for each request
@@ -187,25 +206,28 @@ const SettingsPage: React.FC = () => {
            const { data: investmentsData } = await supabase
               .from('stakeholder_investments')
               .select(`
-                 id, site_id, investment_amount_inr, investment_date, status
+                 id, site_id, investment_amount_inr, investment_date, status,
+                 sites(
+                   id,
+                   facility_name,
+                   owner_profile_id,
+                   profiles(full_name)
+                 )
               `)
               .eq('stakeholder_id', stakeholderId)
               .order('investment_date', { ascending: false });
 
-           // Manually fetch site names for investments
            if (investmentsData && investmentsData.length > 0) {
-             const siteIds = investmentsData.map(i => i.site_id);
-             const { data: sites } = await supabase
-               .from('sites')
-               .select('id, facility_name')
-               .in('id', siteIds);
-             
-             const siteMap = new Map(sites?.map(s => [s.id, s.facility_name]) || []);
-             
-             investments = investmentsData.map(inv => ({
-               ...inv,
-               site_name: siteMap.get(inv.site_id) || 'Unknown Facility'
-             }));
+             investments = investmentsData.map(inv => {
+               const siteData = Array.isArray(inv.sites) ? inv.sites[0] : inv.sites;
+               const profilesData = siteData?.profiles;
+               const ownerProfile = Array.isArray(profilesData) ? profilesData[0] : profilesData;
+               return {
+                 ...inv,
+                 site_name: siteData?.facility_name || 'Unknown Facility',
+                 owner_name: (ownerProfile as any)?.full_name || 'Unknown Owner'
+               };
+             });
            }
          } catch (err) {
            console.warn('Could not fetch stakeholder investments:', err);
@@ -216,13 +238,14 @@ const SettingsPage: React.FC = () => {
            id: inv.id,
            site_id: inv.site_id,
            facility_name: inv.site_name,
+           owner_name: inv.owner_name,
            created_at: inv.investment_date,
            investment_amount: inv.investment_amount_inr,
-           status: inv.status === 'active' ? 'Approved' : (inv.status || 'Pending')
+           status: inv.status === 'Active' || inv.status === 'active' ? 'Approved' : (inv.status || 'Pending')
          }));
 
-         console.log('Investments from DB:', investments.map(i => ({ id: i.id, site: i.site_name, status: i.status })));
-         console.log('Transformed display data:', combined.map(c => ({ id: c.id, facility: c.facility_name, status: c.status })));
+         console.log('Investments from DB:', investments.map(i => ({ id: i.id, site: i.site_name, owner: i.owner_name, status: i.status })));
+         console.log('Transformed display data:', combined.map(c => ({ id: c.id, facility: c.facility_name, owner: c.owner_name, status: c.status })));
 
          setStakeholderRequests(combined);
      } catch (err) {
@@ -242,12 +265,38 @@ const SettingsPage: React.FC = () => {
           payment_date,
           received_by_owner_at,
           remarks,
-          created_at
+          created_at,
+          stakeholder_investments(
+            site_id,
+            sites(
+              facility_name,
+              owner_profile_id,
+              profiles(full_name)
+            )
+          )
         `)
         .eq('stakeholder_id', stakeholderId)
         .order('created_at', { ascending: false });
 
-      if (data) setStakeholderPayments(data);
+      if (data) {
+        const enrichedPayments = data.map(payment => {
+          const investment = Array.isArray(payment.stakeholder_investments) 
+            ? payment.stakeholder_investments[0] 
+            : payment.stakeholder_investments;
+          const siteData = Array.isArray(investment?.sites) 
+            ? investment?.sites[0] 
+            : investment?.sites;
+          const profilesData = siteData?.profiles;
+          const ownerProfile = Array.isArray(profilesData) ? profilesData[0] : profilesData;
+          
+          return {
+            ...payment,
+            facility_name: siteData?.facility_name || 'Unknown Facility',
+            owner_name: (ownerProfile as any)?.full_name || 'Unknown Owner'
+          };
+        });
+        setStakeholderPayments(enrichedPayments);
+      }
     } catch (err) {
       console.error('Failed loading payments', err);
     }
@@ -258,8 +307,12 @@ const SettingsPage: React.FC = () => {
 
     setPaymentLoading(true);
     try {
-      const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
+      const { data: profile } = await supabase.from('profiles').select('id, full_name').eq('id', user.id).maybeSingle();
       if (!profile) throw new Error('Profile not found');
+
+      // Get the investment to retrieve stakeholder name, facility name, and owner info
+      const investment = stakeholderRequests.find(inv => inv.id === selectedPaymentInvestment);
+      if (!investment) throw new Error('Investment not found');
 
       const { error } = await supabase
         .from('stakeholder_payments')
@@ -267,12 +320,42 @@ const SettingsPage: React.FC = () => {
           investment_id: selectedPaymentInvestment,
           stakeholder_id: profile.id,
           amount_inr: parseInt(paymentAmount),
-          payment_status: 'Pending',
+          payment_status: 'Completed', // Auto-complete on submission
+          payment_date: new Date().toISOString(),
           remarks: paymentRemarks || null,
           created_at: new Date().toISOString()
         });
 
       if (error) throw error;
+
+      // Log payment received activity for owner notification
+      try {
+        // Get owner info for this site
+        const { data: site } = await supabase
+          .from('sites')
+          .select('id, owner_profile_id, facility_name, profiles(full_name)')
+          .eq('id', investment.site_id)
+          .single();
+
+        if (site && site.owner_profile_id) {
+          const ownerData = Array.isArray(site.profiles) ? site.profiles[0] : site.profiles;
+          const ownerName = (ownerData as any)?.full_name || 'Owner';
+          
+          await logPaymentReceived(
+            site.owner_profile_id,
+            ownerName,
+            profile.id,
+            profile.full_name || 'Stakeholder',
+            investment.site_id,
+            investment.facility_name || site.facility_name || 'Unknown Site',
+            parseInt(paymentAmount),
+            selectedPaymentInvestment
+          );
+        }
+      } catch (logErr) {
+        console.error('Failed to log payment activity:', logErr);
+        // Don't throw - payment was still created successfully
+      }
 
       // Reload payments
       loadStakeholderPayments(profile.id);
@@ -344,11 +427,7 @@ const SettingsPage: React.FC = () => {
           // Get approved farmer accesses for these rooms
           const { data: accesses, error: accessError } = await supabase
             .from('farmer_room_access')
-            .select(`
-              id,
-              farmer_id,
-              price_per_crate
-            `)
+            .select('id, farmer_id')
             .in('room_id', roomIds)
             .eq('status', 'Approved');
 
@@ -375,16 +454,29 @@ const SettingsPage: React.FC = () => {
             f.full_name || 'Unknown Farmer'
           ]));
           
-          // Group by farmer (since we're treating 1 facility = 1 room concept)
+          // Now get pricing for each access record
+          const accessIds = accesses.map(a => a.id);
+          const { data: pricingData } = await supabase
+            .from('room_access_pricing')
+            .select('room_access_id, price_per_crate')
+            .in('room_access_id', accessIds);
+          
+          const pricingMap = new Map((pricingData || []).map(p => [
+            p.room_access_id,
+            p.price_per_crate
+          ]));
+          
+          // Group by farmer
           const farmerMap = new Map();
           accesses.forEach((access: any) => {
             const farmerName = farmerNameMap.get(access.farmer_id) || 'Unknown Farmer';
+            const pricePerCrate = pricingMap.get(access.id) || null;
               
             if (!farmerMap.has(access.farmer_id)) {
               farmerMap.set(access.farmer_id, {
                 farmerId: access.farmer_id,
                 farmerName: farmerName,
-                pricePerCrate: access.price_per_crate || null,
+                pricePerCrate: pricePerCrate,
                 accessId: access.id
               });
             }
@@ -408,16 +500,47 @@ const SettingsPage: React.FC = () => {
   const handleSavePricing = async (facilityId: string, farmerId: string, accessId: string) => {
     try {
       const price = parseFloat(pricingInput);
-      if (isNaN(price) || price < 0) {
-        alert('Please enter a valid price');
+      if (isNaN(price) || price <= 0) {
+        alert('Please enter a valid price greater than 0');
         return;
       }
       
-      // Update the farmer_room_access record with the new pricing
-      const { error } = await supabase
-        .from('farmer_room_access')
-        .update({ price_per_crate: price })
-        .eq('id', accessId);
+      console.log('Saving pricing:', { accessId, price });
+      
+      // First check if pricing record exists for this room_access_id
+      const { data: existingPricing, error: checkError } = await supabase
+        .from('room_access_pricing')
+        .select('id')
+        .eq('room_access_id', accessId)
+        .maybeSingle();
+      
+      if (checkError) throw checkError;
+      
+      let error;
+      
+      if (existingPricing) {
+        // Update existing record
+        const result = await supabase
+          .from('room_access_pricing')
+          .update({ 
+            price_per_crate: price,
+            approved_at: new Date().toISOString()
+          })
+          .eq('room_access_id', accessId);
+        error = result.error;
+        console.log('Updated existing pricing record:', existingPricing.id);
+      } else {
+        // Insert new record
+        const result = await supabase
+          .from('room_access_pricing')
+          .insert({ 
+            room_access_id: accessId,
+            price_per_crate: price,
+            approved_at: new Date().toISOString()
+          });
+        error = result.error;
+        console.log('Inserted new pricing record for accessId:', accessId);
+      }
       
       if (error) throw error;
       
@@ -436,6 +559,11 @@ const SettingsPage: React.FC = () => {
       
       setEditingPricing(null);
       setPricingInput('');
+      
+      // Reload facilities data to verify persistence
+      await loadFacilitiesWithFarmers();
+      
+      console.log('✓ Pricing saved successfully:', { facilityId, farmerId, price });
     } catch (err) {
       console.error('Failed to update pricing:', err);
       alert('Failed to update pricing. Please try again.');
@@ -510,178 +638,7 @@ const SettingsPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Sites Management (Owner Only) */}
-      {user?.role === 'owner' && (
-        <>
-          <Card variant="default" className="border-blue-100 dark:border-blue-900/30">
-            <CardHeader className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-50 dark:border-blue-900/20">
-              <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                <Building className="w-5 h-5" />
-                Sites Management
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">Add New Site</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mt-1">
-                    Register a new cold storage site to your network. This will begin the setup process for new rooms and sensor gateways.
-                  </p>
-                </div>
-                <Button variant="primary" onClick={() => navigate('/owner-setup')} className="flex items-center gap-2">
-                  <Plus className="w-4 h-4" /> Add Site
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Sites Details Section */}
-          <Card variant="default" className="border-emerald-100 dark:border-emerald-900/30">
-            <CardHeader className="bg-emerald-50/50 dark:bg-emerald-900/10 border-b border-emerald-50 dark:border-emerald-900/20">
-              <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                <Users className="w-5 h-5" />
-                Sites Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {loadingFacilities ? (
-                <div className="text-center py-8 text-gray-500">Loading sites...</div>
-              ) : facilities.length === 0 ? (
-                <div className="text-center py-8">
-                  <Building className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    No sites found. Add your first site to get started.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {facilities.map((facility) => (
-                    <div key={facility.id} className="border border-gray-200 dark:border-slate-700 rounded-xl p-5 bg-gray-50/30 dark:bg-slate-800/30">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Building className="w-5 h-5 text-emerald-600" />
-                            {facility.facility_name}
-                          </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                            Created {new Date(facility.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-sm font-medium">
-                          <Users className="w-4 h-4" />
-                          {facility.farmers.length} Farmer{facility.farmers.length !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-                      
-                      {facility.farmers.length === 0 ? (
-                        <div className="text-center py-6 bg-white dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700">
-                          <User className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500 dark:text-gray-400">No farmers currently using this site</p>
-                        </div>
-                      ) : (
-                        <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-200 dark:border-slate-700">
-                              <tr>
-                                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Farmer Name</th>
-                                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Price per Crate</th>
-                                <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                              {facility.farmers.map((farmer: any) => {
-                                const isEditing = editingPricing?.facilityId === facility.id && editingPricing?.farmerId === farmer.farmerId;
-                                
-                                return (
-                                  <tr key={farmer.farmerId} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                                      <div className="flex items-center gap-2">
-                                        <User className="w-4 h-4 text-gray-400" />
-                                        {farmer.farmerName}
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      {isEditing ? (
-                                        <div className="flex items-center gap-2">
-                                          <div className="relative flex-1 max-w-[120px]">
-                                            <IndianRupee className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                            <input
-                                              type="number"
-                                              value={pricingInput}
-                                              onChange={(e) => setPricingInput(e.target.value)}
-                                              className="w-full pl-9 pr-3 py-1.5 border border-emerald-300 dark:border-emerald-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
-                                              placeholder="0.00"
-                                              autoFocus
-                                            />
-                                          </div>
-                                          <span className="text-gray-500 dark:text-gray-400">/ crate</span>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
-                                          {farmer.pricePerCrate !== null ? (
-                                            <>
-                                              <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                                              <span className="font-semibold">{farmer.pricePerCrate.toFixed(2)}</span>
-                                              <span className="text-gray-500 dark:text-gray-400">/ crate</span>
-                                            </>
-                                          ) : (
-                                            <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                      {isEditing ? (
-                                        <div className="flex items-center justify-end gap-2">
-                                          <Button
-                                            variant="primary"
-                                            onClick={() => handleSavePricing(facility.id, farmer.farmerId, farmer.accessId)}
-                                            className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1"
-                                          >
-                                            <Save className="w-3 h-3" /> Save
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                              setEditingPricing(null);
-                                              setPricingInput('');
-                                            }}
-                                            className="px-3 py-1.5 text-xs"
-                                          >
-                                            Cancel
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <Button
-                                          variant="outline"
-                                          onClick={() => startEditingPricing(facility.id, farmer.farmerId, farmer.pricePerCrate)}
-                                          className="px-3 py-1.5 text-xs flex items-center gap-1"
-                                        >
-                                          <Edit2 className="w-3 h-3" />
-                                          {farmer.pricePerCrate !== null ? 'Edit' : 'Set'} Price
-                                        </Button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30">
-                <p className="text-sm text-blue-700 dark:text-blue-400">
-                  <strong>Note:</strong> Multiple farmers can use the same site at different times. Set individual pricing per farmer per site based on your agreement. Price is charged per crate (25kg).
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {/* Sites Management (Owner Only) - MOVED TO SitesDetails.tsx */}
 
       {/* Storage Access Management (Farmer Only) */}
       {user?.role === 'farmer' && (
@@ -729,7 +686,7 @@ const SettingsPage: React.FC = () => {
                        <th className="px-6 py-4 font-semibold">Room</th>
                        <th className="px-6 py-4 font-semibold">Requested On</th>
                        <th className="px-6 py-4 font-semibold">Status</th>
-                       <th className="px-6 py-4 font-semibold text-right">Remarks</th>
+                       <th className="px-6 py-4 font-semibold text-right">Price per Crate</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
@@ -740,16 +697,25 @@ const SettingsPage: React.FC = () => {
                           const site = room?.sites;
                           const ownerName = req._ownerName || 'Unknown Owner';
                           const siteName = site?.facility_name || 'Unknown Site';
-                          const roomCode = room?.room_code || '—';
+                          const roomName = room?.room_name || 'Unknown Room';
                           
                           return (
                             <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
                               <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{ownerName}</td>
                               <td className="px-6 py-4 text-gray-900 dark:text-gray-100">{siteName}</td>
-                              <td className="px-6 py-4 text-gray-600 dark:text-gray-300 font-mono font-semibold">{roomCode}</td>
+                              <td className="px-6 py-4 text-gray-600 dark:text-gray-300 font-semibold">{roomName}</td>
                               <td className="px-6 py-4 text-gray-500">{new Date(req.requested_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                               <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                              <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">{req.remarks || '—'}</td>
+                              <td className="px-6 py-4 text-right text-gray-900 dark:text-white font-semibold">
+                                {req.room_access_pricing?.[0]?.price_per_crate ? (
+                                  <span className="flex items-center justify-end gap-1">
+                                    <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                    {req.room_access_pricing[0].price_per_crate.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })
@@ -768,158 +734,7 @@ const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Investment Management (Stakeholder Only) */}
-      {user?.role === 'stakeholder' && (
-        <div className="space-y-6">
-           <Card variant="default" className="border-t-4 border-t-purple-500 shadow-md">
-             <CardHeader className="border-b border-gray-100 dark:border-slate-800 bg-purple-50/30 dark:bg-purple-900/10">
-               <CardTitle className="flex items-center gap-2 text-purple-800 dark:text-purple-400">
-                 <Briefcase className="w-5 h-5" /> Explore More Investments
-               </CardTitle>
-             </CardHeader>
-             <CardContent className="pt-6">
-               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                 <div>
-                   <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xl leading-relaxed">
-                     Browse additional cold storage facilities and submit investment requests to expand your portfolio.
-                   </p>
-                 </div>
-                 <Button variant="primary" onClick={() => navigate('/stakeholder-investment-preferences?mode=extension')} className="flex-shrink-0 bg-purple-600 hover:bg-purple-700 shadow-sm border-transparent flex items-center gap-2">
-                   <Plus className="w-4 h-4" /> Find Investment Opportunities
-                 </Button>
-               </div>
-               {location.search.includes('extended') && (
-                  <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 rounded-lg flex items-center gap-3 border border-purple-100 dark:border-purple-800/30">
-                     <CheckCircle className="w-5 h-5" />
-                     <div>
-                         <p className="font-semibold text-sm">Investment Request Submitted!</p>
-                         <p className="text-xs">Your request has been sent successfully. Current Status: <span className="font-bold">Pending Approval</span></p>
-                     </div>
-                  </div>
-               )}
-             </CardContent>
-           </Card>
-
-           <Card variant="default">
-             <CardHeader className="border-b border-gray-100 dark:border-slate-800">
-               <CardTitle className="text-lg">My Investment Requests</CardTitle>
-             </CardHeader>
-             <CardContent className="p-0">
-               <div className="overflow-x-auto">
-                 <table className="w-full text-sm text-left">
-                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-slate-800/50">
-                     <tr>
-                       <th className="px-6 py-4 font-semibold">Site</th>
-                       <th className="px-6 py-4 font-semibold">Requested On</th>
-                       <th className="px-6 py-4 font-semibold">Investment Amount</th>
-                       <th className="px-6 py-4 font-semibold">Status</th>
-                       <th className="px-6 py-4 font-semibold text-right">Remarks</th>
-                     </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      {stakeholderRequests.length > 0 ? (
-                        stakeholderRequests.map((req: any) => (
-                          <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
-                              {req.facility_name || 'Unknown Facility'}
-                            </td>
-                            <td className="px-6 py-4 text-gray-500">
-                              {new Date(req.created_at || req.investment_date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
-                            </td>
-                            <td className="px-6 py-4 text-gray-900 dark:text-gray-400 font-medium">
-                              ₹{(req.investment_amount || 0).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                req.status === 'Approved' 
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                              }`}>
-                                {req.status === 'Approved' ? 'Approved' : 'Pending'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right text-gray-500 text-xs max-w-[200px] truncate">—</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                            No investments yet
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                 </table>
-               </div>
-             </CardContent>
-           </Card>
-
-           {/* My Payments Section - for Stakeholders */}
-           <Card variant="default">
-             <CardHeader className="border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
-               <CardTitle className="text-lg flex items-center gap-2">
-                 <CreditCard className="w-5 h-5" /> My Payments
-               </CardTitle>
-               <Button 
-                 variant="primary" 
-                 size="sm"
-                 onClick={() => setShowPaymentModal(true)}
-                 className="flex items-center gap-2"
-               >
-                 <Plus className="w-4 h-4" /> Add Payment
-               </Button>
-             </CardHeader>
-             <CardContent className="p-0">
-               <div className="overflow-x-auto">
-                 <table className="w-full text-sm text-left">
-                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-slate-800/50">
-                     <tr>
-                       <th className="px-6 py-4 font-semibold">Amount</th>
-                       <th className="px-6 py-4 font-semibold">Status</th>
-                       <th className="px-6 py-4 font-semibold">Paid On</th>
-                       <th className="px-6 py-4 font-semibold">Approved On</th>
-                       <th className="px-6 py-4 font-semibold">Remarks</th>
-                     </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      {stakeholderPayments.length > 0 ? (
-                        stakeholderPayments.map((payment: any) => (
-                          <tr key={payment.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
-                              ₹{payment.amount_inr?.toLocaleString() || '0'}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                payment.payment_status === 'Received' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
-                                payment.payment_status === 'Verified' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' :
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                              }`}>
-                                {payment.payment_status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-gray-500">
-                              {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : 'Not yet'}
-                            </td>
-                            <td className="px-6 py-4 text-gray-500">
-                              {payment.received_by_owner_at ? new Date(payment.received_by_owner_at).toLocaleDateString() : '—'}
-                            </td>
-                            <td className="px-6 py-4 text-gray-500 text-xs max-w-[200px] truncate">{payment.remarks || '—'}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                            No payments yet
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                 </table>
-               </div>
-             </CardContent>
-           </Card>
-        </div>
-      )}
+      {/* Payment Modal - REMOVED FOR STAKEHOLDERS */}
       
       {/* Payment Modal */}
       {showPaymentModal && user?.role === 'stakeholder' && (
@@ -941,7 +756,7 @@ const SettingsPage: React.FC = () => {
                   <option value="">Select an investment</option>
                   {stakeholderRequests.map((inv: any) => (
                     <option key={inv.id} value={inv.id}>
-                      {inv.facility_name} - ₹{inv.investment_amount?.toLocaleString() || '0'}
+                      {inv.facility_name} - {inv.owner_name}
                     </option>
                   ))}
                 </select>
@@ -970,15 +785,15 @@ const SettingsPage: React.FC = () => {
                   value={paymentRemarks}
                   onChange={(e) => setPaymentRemarks(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g., Bank transfer reference, payment method, etc."
+                  placeholder="Bank transfer reference, payment method, etc."
                   rows={3}
                 />
               </div>
 
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex gap-2">
-                <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Payment will be marked as "Pending" until owner verifies receipt.
+              <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg flex gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Payment will be credited directly to your investment account.
                 </p>
               </div>
 
@@ -1024,64 +839,66 @@ const SettingsPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Notifications Section */}
-      <Card variant="default">
-        <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Door Alerts</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Get notified when storage door is left open</p>
+      {/* Notifications Section - Only for Owners/Farmers */}
+      {user?.role !== 'stakeholder' && (
+        <Card variant="default">
+          <CardHeader>
+            <CardTitle>Notifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Door Alerts</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Get notified when storage door is left open</p>
+                </div>
+                <button
+                  onClick={() => setDoorAlerts(!doorAlerts)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ doorAlerts ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ doorAlerts ? 'translate-x-6' : 'translate-x-1' }`} />
+                </button>
               </div>
-              <button
-                onClick={() => setDoorAlerts(!doorAlerts)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ doorAlerts ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ doorAlerts ? 'translate-x-6' : 'translate-x-1' }`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Market Updates</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Receive market price changes and trends</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Market Updates</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Receive market price changes and trends</p>
+                </div>
+                <button
+                  onClick={() => setMarketUpdates(!marketUpdates)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ marketUpdates ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ marketUpdates ? 'translate-x-6' : 'translate-x-1' }`} />
+                </button>
               </div>
-              <button
-                onClick={() => setMarketUpdates(!marketUpdates)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ marketUpdates ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ marketUpdates ? 'translate-x-6' : 'translate-x-1' }`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Weekly Reports</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Get weekly summary reports via email</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Weekly Reports</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Get weekly summary reports via email</p>
+                </div>
+                <button
+                  onClick={() => setWeeklyReports(!weeklyReports)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ weeklyReports ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ weeklyReports ? 'translate-x-6' : 'translate-x-1' }`} />
+                </button>
               </div>
-              <button
-                onClick={() => setWeeklyReports(!weeklyReports)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ weeklyReports ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ weeklyReports ? 'translate-x-6' : 'translate-x-1' }`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">AI Recommendations</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Receive AI-powered insights and suggestions</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">AI Recommendations</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Receive AI-powered insights and suggestions</p>
+                </div>
+                <button
+                  onClick={() => setAiRecommendations(!aiRecommendations)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ aiRecommendations ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ aiRecommendations ? 'translate-x-6' : 'translate-x-1' }`} />
+                </button>
               </div>
-              <button
-                onClick={() => setAiRecommendations(!aiRecommendations)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${ aiRecommendations ? 'bg-primary-600' : 'bg-gray-200 dark:bg-slate-700' }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${ aiRecommendations ? 'translate-x-6' : 'translate-x-1' }`} />
-              </button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Appearance Section */}
       <Card variant="default">

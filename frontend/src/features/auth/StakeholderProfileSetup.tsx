@@ -9,6 +9,10 @@ import SearchableSelect from '../../components/ui/SearchableSelect';
 import { User, MapPin, Calendar, Phone, Check, AlertCircle, Briefcase } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { State, District, Locality } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 
 const StakeholderProfileSetup: React.FC = () => {
   const navigate = useNavigate();
@@ -135,6 +139,46 @@ const StakeholderProfileSetup: React.FC = () => {
     }
   };
 
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleStateSelect = (stateName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      state: stateName,
+      district: '',
+      locality: ''
+    }));
+    const selectedState = states.find(s => s.name === stateName);
+    setSelectedStateId(selectedState?.id || null);
+    setSelectedDistrictId(null);
+    setSelectedLocalityId(null);
+  };
+
+  const handleDistrictSelect = (districtName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      district: districtName,
+      locality: ''
+    }));
+    const selectedDistrict = districts.find(d => d.name === districtName);
+    setSelectedDistrictId(selectedDistrict?.id || null);
+    setSelectedLocalityId(null);
+  };
+
+  const handleLocalitySelect = (localityName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      locality: localityName
+    }));
+    const selectedLocality = localities.find(l => l.name === localityName);
+    setSelectedLocalityId(selectedLocality?.id || null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -160,6 +204,17 @@ const StakeholderProfileSetup: React.FC = () => {
     setLoading(true);
 
     try {
+      // Validate date of birth if provided
+      if (formData.dateOfBirth) {
+        const [day, month, year] = formData.dateOfBirth.split('/').map(Number);
+        const isValidDate = day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2040;
+        if (!isValidDate) {
+          setError('Please enter a valid date of birth (dd/mm/yyyy)');
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         throw new Error('No authenticated session found');
@@ -180,8 +235,9 @@ const StakeholderProfileSetup: React.FC = () => {
           id: session.user.id,
           email: session.user.email || '',
           full_name: fullName,
-          role: 'stakeholder',
-          phone: formData.phoneNumber || null,
+          role_id: stakeholderRoleId,
+          user_type: 'stakeholder',
+          phone_number: formData.phoneNumber || null,
           date_of_birth: formData.dateOfBirth || null,
           gender: formData.gender || null,
           state_id: selectedStateId || null,
@@ -230,279 +286,222 @@ const StakeholderProfileSetup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 p-4">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Illustration Section */}
-        <div className="hidden lg:flex flex-col items-center justify-center">
-          <svg viewBox="0 0 400 400" className="w-full h-full max-w-md">
-            <defs>
-              <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#667EEA" />
-                <stop offset="100%" stopColor="#764BA2" />
-              </linearGradient>
-              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#48BB78" />
-                <stop offset="100%" stopColor="#38A169" />
-              </linearGradient>
-            </defs>
-            
-            {/* Background */}
-            <rect x="0" y="0" width="400" height="400" fill="url(#skyGradient)" />
-            
-            {/* Globe/Map background */}
-            <circle cx="200" cy="200" r="150" fill="rgba(255,255,255,0.1)" />
-            <circle cx="200" cy="200" r="120" fill="rgba(255,255,255,0.1)" />
-            
-            {/* Investment Chart Bars */}
-            <g transform="translate(100, 250)">
-              <rect x="0" y="-80" width="40" height="80" fill="url(#chartGradient)" rx="5" />
-              <rect x="60" y="-120" width="40" height="120" fill="url(#chartGradient)" rx="5" />
-              <rect x="120" y="-100" width="40" height="100" fill="url(#chartGradient)" rx="5" />
-              <rect x="180" y="-140" width="40" height="140" fill="url(#chartGradient)" rx="5" />
-            </g>
-            
-            {/* Trend Arrow */}
-            <g transform="translate(150, 120)">
-              <path d="M 0,50 L 30,30 L 60,40 L 90,10" 
-                    stroke="#FFD700" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              <polygon points="90,10 80,5 85,15" fill="#FFD700" />
-            </g>
-            
-            {/* Rupee Signs */}
-            <g fill="#FFD700" opacity="0.8">
-              <text x="80" y="100" fontSize="30" fontWeight="bold">₹</text>
-              <text x="280" y="140" fontSize="25" fontWeight="bold">₹</text>
-              <text x="320" y="240" fontSize="20" fontWeight="bold">₹</text>
-            </g>
-            
-            {/* Investment Icons - Briefcase */}
-            <g transform="translate(200, 200)">
-              <rect x="-30" y="-20" width="60" height="40" fill="rgba(255,255,255,0.3)" rx="5" />
-              <rect x="-15" y="-30" width="30" height="15" fill="rgba(255,255,255,0.3)" rx="3" />
-              <line x1="-20" y1="-5" x2="20" y2="-5" stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
-            </g>
-          </svg>
-          
-          <div className="text-center mt-6">
-            <h2 className="text-2xl font-bold text-white mb-2">Welcome, Investor!</h2>
-            <p className="text-white/80">Start investing in cold storage opportunities</p>
-          </div>
-        </div>
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-amber-500 selection:text-white overflow-hidden">
+      {/* Role-Specific Background Animation (Stakeholder: Financial Growth, +35% brightness, golden trends, glowing charts) */}
+      <RoleBackground role="stakeholder" />
 
-        {/* Form Card */}
-        <Card variant="default" className="w-full max-w-lg">
-          <CardHeader className="text-center relative">
-            {/* Step Indicator */}
-            <div className="absolute top-4 right-4">
-              <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm font-medium rounded-full">
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full max-w-2xl mx-auto">
+        <div className="w-full rounded-2xl bg-[#1A2A3A]/90 backdrop-blur-md border border-[#304458] p-6 sm:p-8 shadow-2xl">
+          {/* Header inside card */}
+          <div className="text-center mb-6 relative">
+            <div className="absolute top-0 right-0">
+              <span className="px-3 py-1 bg-amber-950/80 border border-amber-500/40 text-amber-300 text-xs font-semibold rounded-full">
                 Step 2/2
               </span>
             </div>
             
-            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Briefcase className="h-8 w-8 text-white" />
+            <div className="w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/25">
+              <Briefcase className="h-7 w-7 text-white" />
             </div>
-            <CardTitle className="text-3xl">Stakeholder Profile Setup</CardTitle>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">
-              Complete your profile to start viewing cold storage opportunities
+            <h2 className="text-2xl font-bold text-white">Stakeholder Profile Setup</h2>
+            <p className="text-slate-300 text-sm mt-1">
+              Join the verified cold chain investment network
             </p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 text-error-600 dark:text-error-400 rounded-lg text-sm">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
-              
-              {/* Name Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    First Name *
-                  </label>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-rose-950/50 border border-rose-500/40 text-rose-300 rounded-xl text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  First Name <span className="text-amber-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
                     value={formData.firstName}
-                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    onChange={(e) => handleInputChange('firstName', e.target.value)}
                     placeholder="Enter your first name"
-                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Last Name *
-                  </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Last Name <span className="text-amber-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
                     value={formData.lastName}
-                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
                     placeholder="Enter your last name"
-                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     required
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Phone Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Phone Number *
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="tel"
-                    value={formData.phoneNumber}
-                    onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                    placeholder="Enter your phone number"
-                    pattern="[0-9]{10}"
-                    maxLength={10}
-                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">10 digits only</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Date of Birth */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.dateOfBirth ? formData.dateOfBirth.split('-').reverse().join('/') : ''}
-                      onChange={(e) => handleDateChange(e.target.value)}
-                      placeholder="DD/MM/YYYY"
-                      className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: DD/MM/YYYY</p>
-                </div>
-
-                {/* Gender */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Gender
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                    <option value="Prefer not to say">Prefer not to say</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Location - State */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  State *
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <select
-                    value={selectedStateId || ''}
-                    onChange={(e) => setSelectedStateId(e.target.value || null)}
-                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  >
-                    <option value="">Select state</option>
-                    {states.map((state) => (
-                      <option key={state.id} value={state.id}>
-                        {state.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Location - District */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  District *
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <select
-                    value={selectedDistrictId || ''}
-                    onChange={(e) => setSelectedDistrictId(e.target.value || null)}
-                    disabled={!selectedStateId}
-                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    required
-                  >
-                    <option value="">Select district</option>
-                    {districts.map((district) => (
-                      <option key={district.id} value={district.id}>
-                        {district.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Location - Locality */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Locality
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <select
-                    value={selectedLocalityId || ''}
-                    onChange={(e) => setSelectedLocalityId(e.target.value || null)}
-                    disabled={!selectedDistrictId}
-                    className="w-full pl-10 px-4 py-2.5 bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Select locality</option>
-                    {localities.map((locality) => (
-                      <option key={locality.id} value={locality.id}>
-                        {locality.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Terms & Conditions */}
-              <div className="flex items-start gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Phone Number (10 digits)
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <input
-                  type="checkbox"
-                  id="terms"
-                  checked={acceptTerms}
-                  onChange={(e) => setAcceptTerms(e.target.checked)}
-                  className="mt-1 h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                  required
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleInputChange('phoneNumber', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  maxLength={10}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
-                <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-400">
-                  I accept the Terms & Conditions and Privacy Policy
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Date of Birth
                 </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                      if (val.length >= 2) val = val.slice(0, 2) + '/' + val.slice(2);
+                      if (val.length >= 5) val = val.slice(0, 5) + '/' + val.slice(5, 9);
+                      handleInputChange('dateOfBirth', val);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? 'Creating Profile...' : 'Continue to Dashboard'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Gender
+                </label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => handleInputChange('gender', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="" className="bg-slate-900 text-slate-300">Select gender</option>
+                  <option value="male" className="bg-slate-900 text-white">Male</option>
+                  <option value="female" className="bg-slate-900 text-white">Female</option>
+                  <option value="other" className="bg-slate-900 text-white">Other</option>
+                  <option value="prefer_not_to_say" className="bg-slate-900 text-white">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Location Section */}
+            <div className="border-t border-slate-700 pt-4">
+              <h3 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Location Information
+              </h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    State <span className="text-amber-400">*</span>
+                  </label>
+                  <SearchableSelect
+                    value={formData.state}
+                    onChange={handleStateSelect}
+                    options={states.map(s => s.name)}
+                    placeholder="Search for your state..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    District <span className="text-amber-400">*</span>
+                  </label>
+                  <SearchableSelect
+                    value={formData.district}
+                    onChange={handleDistrictSelect}
+                    options={districts.map(d => d.name)}
+                    placeholder="Search for your district..."
+                    disabled={!selectedStateId}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Locality
+                  </label>
+                  <SearchableSelect
+                    value={formData.locality}
+                    onChange={handleLocalitySelect}
+                    options={localities.map(l => l.name)}
+                    placeholder="Search for your locality..."
+                    disabled={!selectedDistrictId}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-1 rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-amber-500"
+                required
+              />
+              <label htmlFor="terms" className="text-xs text-slate-300">
+                I accept the Terms &amp; Conditions and Privacy Policy <span className="text-amber-400">*</span>
+              </label>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all text-sm"
+              loading={loading}
+            >
+              Continue to Dashboard &rarr;
+            </Button>
+          </form>
+        </div>
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

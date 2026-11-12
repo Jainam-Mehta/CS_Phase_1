@@ -6,7 +6,12 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Check, AlertCircle, Warehouse, Clock, Sprout } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 import type { FarmerRoomAccess } from '../../lib/supabase';
+
 import { RoomRequestStatus } from '../../constants/roomRequestStatus';
 import { logRoomRequestSubmitted } from '../../services/activityLogService';
 
@@ -32,7 +37,7 @@ const RoomSelection: React.FC = () => {
   const loadRoomsForLocation = async () => {
     try {
       if (!user?.id) {
-        console.warn('[RoomSelection] No user ID, loading all rooms');
+        console.warn('[RoomSelection] No user ID, showing empty rooms');
         throw new Error('No authenticated user found');
       }
 
@@ -76,12 +81,12 @@ const RoomSelection: React.FC = () => {
         console.log('[RoomSelection] Loading rooms by district_id:', districtIdToUse);
         await loadRoomsByDistrict(districtIdToUse);
       } else {
-        console.warn('[RoomSelection] No location found, loading all rooms');
-        await loadAllRooms();
+        console.warn('[RoomSelection] No location found, showing empty rooms');
+        setRooms([]);
       }
     } catch (err) {
       console.error('Error loading rooms for location:', err);
-      await loadAllRooms();
+      setRooms([]);
     }
   };
 
@@ -123,12 +128,13 @@ const RoomSelection: React.FC = () => {
         }
       }
       
-      // Fallback to all rooms if locality has no sites
-      console.warn('[RoomSelection.loadRooms] No rooms found for this locality, falling back to all rooms');
-      await loadAllRooms();
+      // NO FALLBACK: If locality has no sites or no rooms, show empty state
+      // This ensures filtering is strict and farmers only see rooms from selected locality
+      console.warn('[RoomSelection.loadRooms] No rooms found for this locality');
+      setRooms([]);
     } catch (err) {
       console.error('Error loading rooms:', err);
-      await loadAllRooms();
+      setRooms([]);
     }
   };
 
@@ -170,12 +176,13 @@ const RoomSelection: React.FC = () => {
         }
       }
       
-      // Fallback to all rooms if district has no sites
-      console.warn('[RoomSelection.loadRoomsByDistrict] No rooms found for this district, falling back to all rooms');
-      await loadAllRooms();
+      // NO FALLBACK: If district has no sites or no rooms, show empty state
+      // This ensures filtering is strict and farmers only see rooms from selected district
+      console.warn('[RoomSelection.loadRoomsByDistrict] No rooms found for this district');
+      setRooms([]);
     } catch (err) {
       console.error('Error loading rooms by district:', err);
-      await loadAllRooms();
+      setRooms([]);
     }
   };
 
@@ -254,6 +261,11 @@ const RoomSelection: React.FC = () => {
         throw new Error('Farmer profile not found');
       }
 
+      // Get selected products from localStorage
+      const storageRequest = localStorage.getItem('storageAccessRequest');
+      const selectedProducts = storageRequest ? JSON.parse(storageRequest).products || [] : [];
+      console.log('✓ Products fetched from localStorage:', selectedProducts);
+
       // Create pending room requests
       const roomRequests = Array.from(selectedRooms).map(roomId => ({
         farmer_id: profile.id,
@@ -266,6 +278,36 @@ const RoomSelection: React.FC = () => {
         .insert(roomRequests);
 
       if (insertError) throw insertError;
+
+      // Now save selected products to farmer_batch_products for each room request
+      // Get the newly created farmer_room_access records
+      const { data: createdRequests } = await supabase
+        .from('farmer_room_access')
+        .select('id, room_id')
+        .eq('farmer_id', profile.id)
+        .in('room_id', Array.from(selectedRooms));
+
+      if (createdRequests && createdRequests.length > 0 && selectedProducts.length > 0) {
+        // Create batch product records for each room request
+        const batchProducts = createdRequests.flatMap((req: any) =>
+          (selectedProducts as any[]).map((product: any) => ({
+            farmer_room_access_id: req.id,
+            product_id: typeof product === 'string' ? product : product.id,
+            quantity_kg: 100, // Default quantity to satisfy CHECK constraint (quantity_kg > 0)
+          }))
+        );
+
+        const { error: batchError } = await supabase
+          .from('farmer_batch_products')
+          .insert(batchProducts);
+
+        if (batchError) {
+          console.error('ERROR: Could not save batch products:', batchError);
+          // Don't throw - the room request was created successfully
+        } else {
+          console.log('✓ Successfully saved', batchProducts.length, 'products to farmer_batch_products');
+        }
+      }
 
       // Log each room request submission
       for (const roomId of selectedRooms) {
@@ -286,25 +328,6 @@ const RoomSelection: React.FC = () => {
           );
         }
       }
-
-      // Get farmer's selected products
-      const { data: farmerProducts } = await supabase
-        .from('farmer_products')
-        .select('product_id')
-        .eq('farmer_id', profile.id);
-
-      // Get product details
-      const { data: products } = await supabase
-        .from('products')
-        .select('*')
-        .in('id', farmerProducts?.map(p => p.product_id) || []);
-
-      // Store onboarding completion
-      const storageRequest = localStorage.getItem('storageAccessRequest');
-      let parsedRequest = storageRequest ? JSON.parse(storageRequest) : {};
-      
-      parsedRequest.rooms = Array.from(selectedRooms);
-      localStorage.setItem('storageAccessRequest', JSON.stringify(parsedRequest));
 
       // In extension mode, navigate to product selection to continue the flow
       // In normal onboarding mode, complete the step and navigate to product selection
@@ -335,14 +358,30 @@ const RoomSelection: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-7xl">
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-emerald-500 selection:text-white overflow-hidden">
+      {/* Consistent Role-Specific 3D Background Animation */}
+      <RoleBackground role="farmer" />
+
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full overflow-y-auto">
+
+      <div className="w-full max-w-3xl">
         <Card variant="default" className="w-full">
           <CardHeader className="text-center relative">
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 2/4
+                Step 2/3
               </span>
             </div>
             
@@ -371,7 +410,7 @@ const RoomSelection: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   {rooms.map((room) => (
                     <button
                       key={room.id}
@@ -438,6 +477,15 @@ const RoomSelection: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+    
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

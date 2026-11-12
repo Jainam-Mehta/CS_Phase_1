@@ -1,5 +1,6 @@
+import { SystmIcon } from '../components/common/SystmLogo';
 import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../stores/useAuthStore';
 import {
@@ -46,6 +47,7 @@ const ownerNavigation = [
   // { name: 'Batch Traceability', href: '/owner/batch-traceability', icon: GitBranch },
   { name: 'Maintenance', href: '/owner/maintenance', icon: Wrench },
   { name: 'Approvals', href: '/owner/approvals', icon: CheckSquare },
+  { name: 'Sites Details', href: '/owner/sites-details', icon: Building2 },
 ];
 
 const settingsNavigation = [
@@ -55,6 +57,7 @@ const settingsNavigation = [
 
 const OwnerLayout: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuthStore();
@@ -65,7 +68,24 @@ const OwnerLayout: React.FC = () => {
   const [fetchingSites, setFetchingSites] = useState(true);
   const { selectedRoomId, setSelectedRoomId } = useSiteStore();
 
-  // Header Dropdown States
+  // Hide selector for these routes
+  const hideSelector = [
+    '/owner/approvals',
+    '/owner/finance', 
+    '/owner/sites-details',
+    '/owner/settings',
+    '/owner/profile',
+    '/owner/maintenance',
+    '/owner/alerts',
+    '/owner/energy'
+  ].some(route => location.pathname.includes(route));
+
+  // Hide site selector for these routes
+  const hideSiteSelector = [
+    '/owner/settings',
+    '/owner/profile',
+    '/owner/approvals'
+  ].some(route => location.pathname.includes(route));
   // Derive isDark from the persisted settings store — stays correct after refresh
   const isDark = appearance === 'dark' || (appearance === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -180,23 +200,21 @@ const OwnerLayout: React.FC = () => {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-slate-800">
           {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <span className="font-bold text-xl text-gray-900 dark:text-gray-100">
-                SystemII
+            <div className="flex items-center gap-2.5">
+              <SystmIcon size={36} />
+              <span className="font-extrabold text-xl tracking-tight text-gray-900 dark:text-white leading-tight">
+                Systm<span className="text-sky-500 dark:text-sky-400">II</span>
               </span>
             </div>
           )}
           {collapsed && (
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center mx-auto">
-              <span className="text-white font-bold text-lg">C</span>
+            <div className="mx-auto">
+              <SystmIcon size={36} />
             </div>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto"
           >
             {collapsed ? (
               <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
@@ -288,30 +306,32 @@ const OwnerLayout: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Building2 className="w-5 h-5 text-gray-400" />
-              <div className="w-64 flex items-center gap-2">
-                <SearchableSelect
-                  value={facilities.find(f => f.id === selectedFacilityId)?.facility_name || ''}
-                  onChange={(facilityName) => {
-                    const facility = facilities.find(f => f.facility_name === facilityName);
-                    if (facility) {
-                      setSelectedFacilityId(facility.id);
-                      setSelectedRoomId(null); // Reset room when site changes
-                    }
-                  }}
-                  options={facilities.map(f => f.facility_name)}
-                  placeholder={fetchingSites ? 'Loading sites...' : facilities.length === 0 ? 'No Sites Available' : 'Select site...'}
-                  disabled={fetchingSites || facilities.length === 0}
-                />
-                {facilities.length === 0 && !fetchingSites && (
-                  <button
-                    onClick={() => navigate('/owner-setup')}
-                    title="Add Site"
-                    className="flex items-center justify-center p-2 text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+              {!hideSiteSelector && (
+                <div className="w-64 flex items-center gap-2">
+                  <SearchableSelect
+                    value={facilities.find(f => f.id === selectedFacilityId)?.facility_name || ''}
+                    onChange={(facilityName) => {
+                      const facility = facilities.find(f => f.facility_name === facilityName);
+                      if (facility) {
+                        setSelectedFacilityId(facility.id);
+                        setSelectedRoomId(null); // Reset room when site changes
+                      }
+                    }}
+                    options={facilities.map(f => f.facility_name)}
+                    placeholder={fetchingSites ? 'Loading sites...' : facilities.length === 0 ? 'No Sites Available' : 'Select site...'}
+                    disabled={fetchingSites || facilities.length === 0}
+                  />
+                  {facilities.length === 0 && !fetchingSites && (
+                    <button
+                      onClick={() => navigate('/owner-setup')}
+                      title="Add Site"
+                      className="flex items-center justify-center p-2 text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             
             <div className="flex items-center gap-4 border-l border-gray-200 dark:border-slate-800 pl-4 ml-4">
@@ -403,8 +423,8 @@ const OwnerLayout: React.FC = () => {
             </div>
           </div>
 
-          {/* Second Row: Room Selector (only if rooms exist for selected site) */}
-          {selectedFacilityId && rooms.length > 0 && (
+          {/* Second Row: Room Selector (only if rooms exist for selected site and not on hidden-selector routes) */}
+          {!hideSelector && selectedFacilityId && rooms.length > 0 && (
             <div className="flex items-center gap-3 pl-0">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Room:</span>
               <select
@@ -422,7 +442,7 @@ const OwnerLayout: React.FC = () => {
           )}
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main className="relative flex-1 overflow-auto bg-gray-50 dark:bg-slate-900">
           <Outlet />
         </main>
       </div>

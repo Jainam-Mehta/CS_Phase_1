@@ -21,7 +21,7 @@ export async function resolveProfile(authUserId: string) {
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, full_name, owner_company_id, role')
+      .select('id, full_name, phone_number, user_type')
       .eq('id', authUserId)
       .maybeSingle();
 

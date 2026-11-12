@@ -3,8 +3,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { supabase } from '../../lib/supabase';
 import { resolveProfile } from '../../lib/profileUtils';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Check, X, Clock, MapPin, Building2, User, Briefcase, CheckCircle, IndianRupee } from 'lucide-react';
-import { logFarmerApproved, logStakeholderApproved, logPaymentReceived } from '../../lib/activityLogger';
+import { Check, X, Clock, MapPin, Building2, User } from 'lucide-react';
 import { logRoomRequestApproved, logRoomRequestRejected } from '../../services/activityLogService';
 import { notifyRequestApproved, notifyRequestRejected } from '../../services/notificationService';
 
@@ -17,36 +16,15 @@ interface ApprovalRequest {
   farmerEmail: string;
   facilityName: string;
   roomName: string;
-}
-
-interface InvestmentRequest {
-  id: string;
-  stakeholder_id: string;
-  stakeholder_name: string;
-  facility_id: string;
-  facility_name: string;
-  created_at: string;
-  investment_amount: number;
-  interest_id?: string; // Track the interest record to delete it later
-}
-
-interface PaymentRequest {
-  id: string;
-  investment_id: string;
-  stakeholder_id: string;
-  stakeholder_name: string;
-  facility_name: string;
-  amount_inr: number;
-  payment_status: string;
-  created_at: string;
-  remarks: string | null;
+  requestedProducts: Array<{
+    name: string;
+    shelf_life_days?: number;
+  }>;
 }
 
 const OwnerApprovals: React.FC = () => {
   const { user } = useAuthStore();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
-  const [investmentRequests, setInvestmentRequests] = useState<InvestmentRequest[]>([]);
-  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -135,13 +113,42 @@ const OwnerApprovals: React.FC = () => {
          const siteName = siteId ? siteMap.get(siteId) || 'Unknown Site' : 'Unknown Site';
          
          // Get farmer profile to fetch name
-         const { data: farmerProfile } = await supabase
+         const { data: farmerProfiles, error: profileErr } = await supabase
            .from('profiles')
            .select('full_name')
-           .eq('id', req.farmer_id)
-           .single();
+           .eq('id', req.farmer_id);
+         
+         const farmerProfile = Array.isArray(farmerProfiles) ? farmerProfiles[0] : farmerProfiles;
+         console.log(`Farmer profile for ${req.farmer_id}:`, { farmerProfile, profileErr });
          
          const name = farmerProfile?.full_name || 'Unknown Farmer';
+         console.log(`✓ Farmer name resolved:`, name, `(from profile:`, farmerProfile?.full_name, `)`);
+
+         // Get products farmer requested via farmer_batch_products join
+         // farmer_batch_products links via farmer_room_access_id, not farmer_id
+         const { data: batchProducts, error: productsErr } = await supabase
+           .from('farmer_batch_products')
+           .select('product_id')
+           .eq('farmer_room_access_id', req.id);
+
+         if (productsErr) {
+           console.error(`Error fetching batch products for request ${req.id}:`, productsErr);
+         }
+
+         // Now fetch product details
+         let requestedProducts: Array<{name: string; avg_shelf_life?: number; product_type?: string}> = [];
+         if (batchProducts && batchProducts.length > 0) {
+           const productIds = batchProducts.map((bp: any) => bp.product_id);
+           const { data: productDetails } = await supabase
+             .from('products')
+             .select('id, name, shelf_life_days')
+             .in('id', productIds);
+           
+           requestedProducts = (productDetails || []).map((p: any) => ({
+             name: p.name || 'Unknown Product',
+             shelf_life_days: p.shelf_life_days,
+           }));
+         }
 
          formattedRequests.push({
            id: req.id,
@@ -151,7 +158,8 @@ const OwnerApprovals: React.FC = () => {
            farmerName: name,
            farmerEmail: 'Validated User Account',
            facilityName: siteName,
-           roomName
+           roomName,
+           requestedProducts
          });
       }
 
@@ -164,182 +172,12 @@ const OwnerApprovals: React.FC = () => {
     }
   };
 
-  const loadInvestmentRequests = async () => {
-    if (!user?.id) return;
-    try {
-      const profile = await resolveProfile(user.id);
-      if (!profile) return;
 
-      // Get sites owned by this owner
-      const { data: sites } = await supabase
-        .from('sites')
-        .select('id, facility_name')
-        .eq('owner_profile_id', profile.id);
 
-      if (!sites || sites.length === 0) {
-        setInvestmentRequests([]);
-        return;
-      }
 
-      const siteIds = sites.map(f => f.id);
-      const siteMap = new Map(sites.map(f => [f.id, f.facility_name]));
-
-      // Get ALL pending investment requests
-      // NOTE: We now fetch directly from stakeholder_investments with status='Pending'
-      // (We removed stakeholder_interest table usage since we only use stakeholder_investments)
-      const { data: interests, error: interestErr } = await supabase
-        .from('stakeholder_investments')
-        .select('id, stakeholder_id, site_id, investment_amount_inr, investment_date, status')
-        .in('site_id', siteIds)
-        .eq('status', 'Pending');
-
-      console.log('Investment requests query result:', { interests, interestErr });
-
-      if (interestErr) {
-        console.error('Error fetching interests:', interestErr);
-        setInvestmentRequests([]);
-        return;
-      }
-
-      if (!interests || interests.length === 0) {
-        setInvestmentRequests([]);
-        return;
-      }
-
-      // Now we have the investment records directly, but still need stakeholder details
-      // Since interests now contains investment records, we can skip the second query
-      const stakeholderIds = [...new Set(interests.map(i => i.stakeholder_id))];
-
-      const { data: stakeholders } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', stakeholderIds);
-
-      const stakeholderMap = new Map(stakeholders?.map(s => [s.id, s.full_name]) || []);
-
-      // Format the data (interests now contains investment records directly)
-      const formatted = interests.map((investment: any) => {
-        return {
-          id: investment.id, // Use investment ID
-          stakeholder_id: investment.stakeholder_id,
-          stakeholder_name: stakeholderMap.get(investment.stakeholder_id) || 'Unknown Stakeholder',
-          facility_id: investment.site_id,
-          facility_name: siteMap.get(investment.site_id) || 'Unknown Site',
-          created_at: investment.investment_date,
-          investment_amount: Number(investment.investment_amount_inr) || 0,
-          interest_id: investment.id // Store investment ID
-        };
-      });
-
-      console.log('Formatted investment requests:', formatted);
-      setInvestmentRequests(formatted);
-    } catch (err) {
-      console.error('Error loading investment requests:', err);
-      setInvestmentRequests([]);
-    }
-  };
-
-  const loadPaymentRequests = async () => {
-    if (!user?.id) return;
-    try {
-      const profile = await resolveProfile(user.id);
-      if (!profile) return;
-
-      // Get all approved investments for this owner's sites
-      const { data: sites } = await supabase
-        .from('sites')
-        .select('id')
-        .eq('owner_profile_id', profile.id);
-
-      if (!sites || sites.length === 0) {
-        setPaymentRequests([]);
-        return;
-      }
-
-      const siteIds = sites.map(f => f.id);
-
-      // Get investments for these sites
-      const { data: investments } = await supabase
-        .from('stakeholder_investments')
-        .select('id, stakeholder_id, site_id')
-        .in('site_id', siteIds);
-
-      if (!investments || investments.length === 0) {
-        setPaymentRequests([]);
-        return;
-      }
-
-      const investmentIds = investments.map(i => i.id);
-
-      // Get pending payments for these investments
-      const { data: payments } = await supabase
-        .from('stakeholder_payments')
-        .select(`
-          id,
-          investment_id,
-          stakeholder_id,
-          amount_inr,
-          payment_status,
-          created_at,
-          remarks
-        `)
-        .in('investment_id', investmentIds)
-        .in('payment_status', ['Pending', 'Received']);
-
-      if (!payments) {
-        setPaymentRequests([]);
-        return;
-      }
-
-      // Get stakeholder and facility names
-      const stakeholderIds = [...new Set(payments.map(p => p.stakeholder_id))];
-      const { data: stakeholders } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', stakeholderIds);
-
-      const stakeholderMap = new Map((stakeholders || []).map(s => [
-        s.id,
-        s.full_name || 'Unknown'
-      ]));
-
-      const siteMap = new Map(sites.map(f => [f.id, `Site ${siteIds.indexOf(f.id) + 1}`]));
-
-      // Get site names
-      const { data: sitesData } = await supabase
-        .from('sites')
-        .select('id, facility_name')
-        .in('id', siteIds);
-
-      if (sitesData) {
-        sitesData.forEach(f => siteMap.set(f.id, f.facility_name));
-      }
-
-      const formatted = payments.map((p: any) => {
-        const investment = investments.find(i => i.id === p.investment_id);
-        return {
-          id: p.id,
-          investment_id: p.investment_id,
-          stakeholder_id: p.stakeholder_id,
-          stakeholder_name: stakeholderMap.get(p.stakeholder_id) || 'Unknown',
-          facility_name: investment ? siteMap.get(investment.site_id) || 'Unknown Site' : 'Unknown Site',
-          amount_inr: p.amount_inr,
-          payment_status: p.payment_status,
-          created_at: p.created_at,
-          remarks: p.remarks
-        };
-      });
-
-      setPaymentRequests(formatted);
-    } catch (err) {
-      console.error('Error loading payment requests:', err);
-    }
-  };
 
   useEffect(() => {
     loadRequests();
-    loadInvestmentRequests();
-    loadPaymentRequests();
   }, [user?.id]);
 
   const handleAction = async (requestId: string, action: 'Approved' | 'Rejected') => {
@@ -469,148 +307,9 @@ const OwnerApprovals: React.FC = () => {
     }
   };
 
-  const handleInvestmentAction = async (interestId: string, stakeholderId: string, facilityId: string, action: 'Approved' | 'Rejected') => {
-    if (!user?.id) return;
-    try {
-      setActionLoading(interestId);
-      console.log('Starting investment action:', { interestId, stakeholderId, facilityId, action });
-      
-      const profile = await resolveProfile(user.id);
-      console.log('Resolved profile:', profile);
-      
-      const req = investmentRequests.find(r => r.id === interestId);
-      console.log('Found investment request:', req);
 
-      if (action === 'Approved') {
-        // Get owner company ID from the owner's profile
-        console.log('Owner profile:', profile);
 
-        // Update existing stakeholder_investments record to active
-        // First, find the existing investment record (regardless of current status)
-        const { data: existingInvestment, error: findErr } = await supabase
-          .from('stakeholder_investments')
-          .select('*')
-          .eq('stakeholder_id', stakeholderId)
-          .eq('site_id', facilityId)
-          .maybeSingle();
 
-        console.log('Looking for existing investment:', { existingInvestment, findErr });
-
-        if (!existingInvestment) {
-          throw new Error('No investment found for this stakeholder and site');
-        }
-
-        // Update the existing record to active and set owner_company_id
-        const { data: investData, error: investError } = await supabase
-          .from('stakeholder_investments')
-          .update({
-            status: 'active'  // Set to active (the default/allowed value)
-          })
-          .eq('id', existingInvestment.id)
-          .select();
-
-        console.log('Update response:', { data: investData, error: investError });
-        if (investError) throw investError;
-
-        // Delete the stakeholder_interest record now that investment is approved
-        if (req?.interest_id) {
-          console.log('Deleting stakeholder_interest record:', req.interest_id);
-          const { error: deleteErr } = await supabase
-            .from('stakeholder_interest')
-            .delete()
-            .eq('id', req.interest_id);
-
-          if (deleteErr) {
-            console.error('Error deleting interest record:', deleteErr);
-            throw new Error(`Failed to remove interest record: ${deleteErr.message}`);
-          }
-          console.log('✓ Stakeholder interest record deleted successfully');
-        }
-
-        // Log stakeholder approval
-        if (profile && req) {
-          console.log('Logging stakeholder approval...');
-          try {
-            await logStakeholderApproved(
-              profile.id,
-              profile.full_name || 'Owner',
-              stakeholderId,
-              req.stakeholder_name,
-              facilityId,
-              req.facility_name,
-              req.investment_amount || 0
-            );
-            console.log('Stakeholder approval logged successfully');
-          } catch (logErr) {
-            console.error('Failed to log stakeholder approval:', logErr);
-          }
-        }
-      } else if (action === 'Rejected') {
-        // On rejection, also delete the interest record
-        if (req?.interest_id) {
-          console.log('Deleting stakeholder_interest record (rejection):', req.interest_id);
-          const { error: deleteErr } = await supabase
-            .from('stakeholder_interest')
-            .delete()
-            .eq('id', req.interest_id);
-
-          if (deleteErr) {
-            console.error('Error deleting interest record:', deleteErr);
-            throw new Error(`Failed to remove interest record: ${deleteErr.message}`);
-          }
-          console.log('✓ Stakeholder interest record deleted successfully');
-        }
-      }
-
-      console.log('Action successful, filtering requests');
-      setInvestmentRequests((prev) => prev.filter(r => r.id !== interestId));
-    } catch (err) {
-      console.error(`Failed to ${action} investment request:`, err);
-      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error occurred'}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleMarkPaymentAsReceived = async (paymentId: string) => {
-    if (!user?.id) return;
-    try {
-      setActionLoading(paymentId);
-      const profile = await resolveProfile(user.id);
-      const payment = paymentRequests.find(p => p.id === paymentId);
-
-      const { error } = await supabase
-        .from('stakeholder_payments')
-        .update({
-          payment_status: 'Received',
-          received_by_owner_at: new Date().toISOString(),
-          received_by_owner_id: profile?.id
-        })
-        .eq('id', paymentId);
-
-      if (error) throw error;
-
-      // Log payment received
-      if (profile && payment) {
-        await logPaymentReceived(
-          profile.id,
-          profile.full_name || 'Owner',
-          payment.stakeholder_id,
-          payment.stakeholder_name,
-          '', // We don't have facilityId directly, but it's in the investment
-          payment.facility_name,
-          payment.amount_inr,
-          paymentId
-        );
-      }
-
-      setPaymentRequests((prev) => prev.filter(r => r.id !== paymentId));
-    } catch (err) {
-      console.error('Failed to mark payment as received:', err);
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -689,6 +388,23 @@ const OwnerApprovals: React.FC = () => {
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{req.roomName}</p>
                     </div>
                   </div>
+
+                  {/* Requested Products */}
+                  {req.requestedProducts && req.requestedProducts.length > 0 && (
+                    <div className="pt-2">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Requested Products</p>
+                      <div className="space-y-1">
+                        {req.requestedProducts.map((prod, idx) => (
+                          <div key={idx} className="text-sm bg-gray-50 dark:bg-gray-800/50 p-2 rounded">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">{prod.name}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              {prod.shelf_life_days && `Shelf life: ${prod.shelf_life_days} days`}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
@@ -712,179 +428,6 @@ const OwnerApprovals: React.FC = () => {
           ))}
         </div>
       )}
-
-      {/* Investment Requests Section */}
-      <div className="mt-10 pt-10 border-t border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Investment Requests</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Review and approve investment requests from stakeholders for your facilities.
-          </p>
-        </div>
-
-        {investmentRequests.length === 0 ? (
-          <Card className="mt-6">
-            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
-              <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>No pending investment requests at this time.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-            {investmentRequests.map(req => (
-              <Card key={req.id} className="border-t-4 border-t-blue-500">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
-                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
-                      <Briefcase className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{req.stakeholder_name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Investment Interest</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
-                        <Clock className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Requested</p>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {new Date(req.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
-                        <Building2 className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Site</p>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{req.facility_name}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-8 flex justify-center text-gray-400">
-                        <IndianRupee className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Investment Amount</p>
-                        <p className="text-sm font-bold text-blue-600 dark:text-blue-400">₹{req.investment_amount?.toLocaleString('en-IN') || '0'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                    <button
-                      onClick={() => handleInvestmentAction(req.id, req.stakeholder_id, req.facility_id, 'Approved')}
-                      disabled={actionLoading !== null}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white hover:bg-blue-600 rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      {actionLoading === req.id ? 'Accepting...' : <><Check className="h-4 w-4" /> Accept</>}
-                    </button>
-                    <button
-                      onClick={() => handleInvestmentAction(req.id, req.stakeholder_id, req.facility_id, 'Rejected')}
-                      disabled={actionLoading !== null}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      <X className="h-4 w-4" /> Reject
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Payment Requests Section */}
-      <div className="mt-10 pt-10 border-t border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Pending Payments</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Review and confirm payments received from stakeholders for their investments.
-          </p>
-        </div>
-
-        {paymentRequests.length === 0 ? (
-          <Card className="mt-6">
-            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
-              <Check className="h-12 w-12 mx-auto mb-4 text-green-500" />
-              <p>No pending payments at this time.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-            {paymentRequests.map(payment => (
-              <Card key={payment.id} className="border-t-4 border-t-emerald-500">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
-                    <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/20 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                      <Check className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{payment.stakeholder_name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Payment Received</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 mb-6">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Amount:</span>
-                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">₹{payment.amount_inr.toLocaleString()}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Facility:</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{payment.facility_name}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Submitted:</span>
-                      <span className="text-sm text-gray-500">{new Date(payment.created_at).toLocaleDateString()}</span>
-                    </div>
-
-                    {payment.remarks && (
-                      <div>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Remarks:</span>
-                        <p className="text-sm text-gray-500 mt-1 bg-gray-50 dark:bg-slate-800/50 p-2 rounded">
-                          {payment.remarks}
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                      <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">
-                        Status: {payment.payment_status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {payment.payment_status === 'Pending' && (
-                    <button
-                      onClick={() => handleMarkPaymentAsReceived(payment.id)}
-                      disabled={actionLoading !== null}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      {actionLoading === payment.id ? 'Confirming...' : <><Check className="h-4 w-4" /> Mark as Received</>}
-                    </button>
-                  )}
-                  {payment.payment_status === 'Received' && (
-                    <div className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg font-medium">
-                      <CheckCircle className="h-4 w-4" /> Confirmed
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 };

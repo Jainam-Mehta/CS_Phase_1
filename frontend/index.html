@@ -4,13 +4,13 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SystemII - Smart Cold Storage Management</title>
+    <title>SystmII - Cold Chain Supply Management Platform</title>
     
     <!-- Apply theme BEFORE React loads to prevent flash -->
     <script>
       (function() {
         try {
-          const stored = localStorage.getItem('coldsense-settings');
+          const stored = localStorage.getItem('systmii-settings') || localStorage.getItem('coldsense-settings');
           if (stored) {
             const parsed = JSON.parse(stored);
             const appearance = parsed.state?.appearance || 'system';

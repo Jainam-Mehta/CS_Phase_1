@@ -1,0 +1,118 @@
+id,category_id,name,scientific_name,storage_temp_min,storage_temp_max,storage_humidity_min,storage_humidity_max,ideal_co2_min,ideal_co2_max,ideal_o2_min,ideal_o2_max,shelf_life_days,respiration_rate,ethylene_producer,ethylene_sensitive,ammonia_sensitive,icon,image_url,is_active
+550e8400-e29b-41d4-a716-446655440001,,Apple,Malus domestica,-1,4,90,95,1,3,1,3,180,Low,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440002,,Pear,Pyrus communis,-1,4,90,95,0.5,2,1,3,240,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440003,,Grape,Vitis vinifera,-0.5,0,90,95,2,5,1,3,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440004,,Cherry,Prunus avium,-1,0,90,95,3,6,2,5,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440005,,Plum,Prunus domestica,-0.5,0,90,95,1,3,1,3,42,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440006,,Peach,Prunus persica,-0.5,0,90,95,1,3,1,3,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440007,,Nectarine,Prunus persica,-0.5,0,90,95,1,3,1,3,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440008,,Apricot,Prunus armeniaca,-0.5,0,90,95,1,3,1,3,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440009,,Strawberry,Fragaria ananassa,0,2,90,95,5,10,5,10,14,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440010,,Raspberry,Rubus species,-0.5,0,90,95,5,10,5,10,7,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440011,,Blueberry,Vaccinium corymbosum,-0.5,0,90,95,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440012,,Blackberry,Rubus species,-0.5,0,90,95,5,10,5,10,7,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440013,,Kiwi,Actinidia deliciosa,-0.5,1,90,95,2,5,2,5,180,Medium,0,1,0,,,1
+550e8400-e29b-41d4-a716-446655440014,,Persimmon,Diospyros kaki,-1,0,90,95,3,6,2,5,90,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440015,,Banana,Musa acuminata,13,15,90,95,3,5,3,5,14,Very High,1,1,0,,,1
+550e8400-e29b-41d4-a716-446655440016,,Mango,Mangifera indica,12,15,85,90,3,5,3,5,21,High,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440017,,Papaya,Carica papaya,10,13,85,90,5,8,5,8,21,High,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440018,,Pineapple,Ananas comosus,10,13,85,90,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440019,,Avocado,Persea americana,5,7,85,90,2,5,5,8,28,Low,0,1,0,,,1
+550e8400-e29b-41d4-a716-446655440020,,Orange,Citrus sinensis,5,8,85,90,3,5,5,10,84,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440021,,Lemon,Citrus limon,10,13,85,90,5,8,5,10,120,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440022,,Mandarin,Citrus reticulata,4,6,90,95,3,5,5,10,56,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440023,,Grapefruit,Citrus paradisi,10,15,85,90,3,5,5,10,56,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440024,,Pomegranate,Punica granatum,5,7,90,95,3,6,3,8,90,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440025,,Watermelon,Citrullus lanatus,10,15,80,90,5,8,5,8,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440026,,Muskmelon,Cucumis melo,2,5,90,95,5,10,5,10,21,Very High,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440027,,Carrot,Daucus carota,0,2,95,100,3,5,5,10,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440028,,Beetroot,Beta vulgaris,0,2,95,100,3,5,5,10,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440029,,Potato,Solanum tuberosum,8,10,90,95,0,0,20,21,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440030,,Onion,Allium cepa,0,2,65,70,3,5,5,10,270,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440031,,Garlic,Allium sativum,0,2,65,70,3,5,5,10,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440032,,Cabbage,Brassica oleracea,0,2,95,100,3,5,5,10,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440033,,Broccoli,Brassica oleracea,0,2,95,100,5,10,5,10,14,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440034,,Cauliflower,Brassica oleracea,0,2,95,100,5,10,5,10,28,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440035,,Lettuce,Lactuca sativa,0,2,95,100,5,10,5,10,21,High,0,1,0,,,1
+550e8400-e29b-41d4-a716-446655440036,,Spinach,Spinacia oleracea,0,2,95,100,5,10,5,10,14,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440037,,Celery,Apium graveolens,0,2,95,100,5,10,5,10,120,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440038,,Cucumber,Cucumis sativus,10,13,90,95,5,10,5,10,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440039,,Tomato Green,Solanum lycopersicum,12,15,90,95,8,12,5,10,21,Medium,0,1,0,,,1
+550e8400-e29b-41d4-a716-446655440040,,Tomato Ripe,Solanum lycopersicum,8,10,90,95,5,8,5,10,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440041,,Bell Pepper,Capsicum annuum,7,10,90,95,3,5,5,10,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440042,,Green Chilli,Capsicum annuum,7,10,90,95,3,5,5,10,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440043,,Eggplant,Solanum melongena,8,12,90,95,5,8,5,10,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440044,,Okra,Abelmoschus esculentus,7,10,90,95,5,8,5,10,10,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440045,,Green Beans,Phaseolus vulgaris,5,7,95,100,5,10,5,10,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440046,,Peas,Pisum sativum,0,1,95,100,5,10,5,10,14,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440047,,Ginger,Zingiber officinale,13,15,65,75,0,0,20,21,300,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440048,,Turmeric,Curcuma longa,15,18,65,75,0,0,20,21,365,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440049,,Sweet Potato,Ipomoea batatas,13,16,85,90,3,5,5,10,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440050,,Turnip,Brassica rapa,0,2,95,100,3,5,5,10,150,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440051,,Radish,Raphanus sativus,0,2,95,100,3,5,5,10,30,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440052,,Parsnip,Pastinaca sativa,0,2,95,100,3,5,5,10,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440053,,Celeriac,Apium graveolens,0,2,95,100,3,5,5,10,240,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440054,,Brussels Sprouts,Brassica oleracea,0,2,95,100,5,10,5,10,35,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440055,,Mushroom Button,Agaricus bisporus,0,2,90,95,10,15,5,10,7,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440056,,Asparagus,Asparagus officinalis,2,4,95,100,5,10,5,10,21,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440057,,Kohlrabi,Brassica oleracea,0,2,95,100,3,5,5,10,90,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440058,,Leek,Allium porrum,0,2,95,100,5,8,5,10,90,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440059,,Bok Choy,Brassica rapa,0,2,95,100,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440060,,Durian,Durio zibethinus,10,12,85,90,5,8,5,8,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440061,,Rambutan,Nephelium lappaceum,10,12,90,95,5,8,5,8,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440062,,Litchi,Litchi chinensis,1,2,90,95,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440063,,Guava,Psidium guajava,8,10,85,90,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440064,,Dragon Fruit,Hylocereus undatus,7,10,85,90,5,8,5,8,28,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440065,,Passion Fruit,Passiflora edulis,7,10,85,90,5,8,5,8,35,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440066,,Jackfruit,Artocarpus heterophyllus,11,13,85,90,5,8,5,8,42,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440067,,Coconut,Cocos nucifera,12,15,65,75,0,0,20,21,60,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440068,,Cucumber Bitter Gourd,Momordica charantia,10,12,85,90,5,8,5,8,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440069,,Pumpkin,Cucurbita moschata,10,12,70,80,3,5,5,10,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440070,,Lauki Gourd,Lagenaria siceraria,10,12,85,90,3,5,5,10,21,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440071,,Tindora Ivy Gourd,Coccinia grandis,10,12,85,90,5,8,5,8,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440072,,Parwal Pointed Gourd,Trichosanthes dioica,10,12,85,90,5,8,5,8,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440073,,Ridge Gourd,Luffa acutangula,10,12,85,90,5,8,5,8,14,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440074,,Bottle Gourd,Lagenaria siceraria,10,12,85,90,3,5,5,10,42,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440075,,Taro Root,Colocasia esculenta,11,13,85,90,3,5,5,10,60,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440076,,Yam,Dioscorea alata,12,15,70,80,0,0,20,21,180,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440077,,Cassava,Manihot esculenta,3,5,85,90,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440078,,Sapota,Manilkara zapota,15,20,85,90,5,8,5,8,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440079,,Carambola Starfruit,Averrhoa carambola,9,11,85,90,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440080,,Custard Apple,Annona squamosa,13,15,85,90,5,8,5,8,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440081,,Soursop,Annona muricata,13,15,85,90,5,8,5,8,14,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440082,,Mangosteen,Garcinia mangostana,12,14,85,90,5,8,5,8,28,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440083,,Longan,Dimocarpus longan,2,4,90,95,5,8,5,8,35,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440084,,Lychee,Litchi chinensis,1,2,90,95,5,8,5,8,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440085,,Breadfruit,Artocarpus altilis,12,14,85,90,5,8,5,8,14,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440086,,Mulberry,Morus alba,0,2,90,95,5,10,5,10,7,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440087,,Pomelo,Citrus grandis,10,15,85,90,3,5,5,10,90,Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440088,,Tamarind,Tamarindus indica,15,20,65,75,0,0,20,21,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440089,,Mint,Mentha species,0,2,95,100,10,15,5,10,21,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440090,,Coriander,Coriandrum sativum,0,2,95,100,10,15,5,10,14,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440091,,Basil,Ocimum basilicum,8,10,95,100,10,15,5,10,7,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440092,,Parsley,Petroselinum crispum,0,2,95,100,10,15,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440093,,Dill,Anethum graveolens,0,2,95,100,10,15,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440094,,Oregano,Origanum vulgare,0,2,95,100,10,15,5,10,30,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440095,,Thyme,Thymus vulgaris,0,2,95,100,10,15,5,10,30,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440096,,Rosemary,Rosmarinus officinalis,0,2,90,95,10,15,5,10,30,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440097,,Green Onion Scallion,Allium fistulosum,0,2,95,100,5,10,5,10,28,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440098,,Watercress,Nasturtium officinale,0,2,95,100,10,15,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440099,,Arugula Rocket,Eruca sativa,0,2,95,100,10,15,5,10,14,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440100,,Swiss Chard,Beta vulgaris,0,2,95,100,10,15,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440101,,Kale,Brassica oleracea,0,2,95,100,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440102,,Collard Greens,Brassica oleracea,0,2,95,100,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440103,,Mustard Greens,Brassica juncea,0,2,95,100,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440104,,Endive Escarole,Cichorium endivia,0,2,95,100,10,15,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440105,,Radicchio,Cichorium intybus,0,2,95,100,5,10,5,10,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440106,,Bamboo Shoot,Bambusa species,0,2,95,100,5,8,5,10,28,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440107,,Artichoke Globe,Cynara cardunculus,0,2,95,100,5,10,5,10,21,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440108,,Rhubarb,Rheum rhabarbarum,0,2,95,100,5,10,5,10,28,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440109,,Horseradish,Armoracia rusticana,-1,0,95,100,3,5,5,10,300,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440110,,Shallot,Allium cepa,0,2,65,75,3,5,5,10,240,Very Low,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440111,,Edamame,Glycine max,3,5,95,100,8,12,5,10,14,High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440112,,Broccolini Baby Broccoli,Brassica oleracea,0,2,95,100,5,10,5,10,14,Very High,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440113,,Lemongrass,Cymbopogon citratus,5,8,85,90,5,8,5,10,21,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440114,,Cantaloupe Muskmelon,Cucumis melo,2,5,90,95,5,10,5,10,21,Very High,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440115,,Honeydew,Cucumis melo,2,5,90,95,5,10,5,10,21,High,1,0,0,,,1
+550e8400-e29b-41d4-a716-446655440116,,French Beans Cluster Beans,Vigna unguiculata,7,10,90,95,5,10,5,10,14,Medium,0,0,0,,,1
+550e8400-e29b-41d4-a716-446655440117,,Cranberry,Vaccinium oxycoccos,2,4,90,95,5,10,5,10,120,Low,0,0,0,,,1

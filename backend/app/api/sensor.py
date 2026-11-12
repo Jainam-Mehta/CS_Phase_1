@@ -192,3 +192,30 @@ async def get_sensor_readings(sensor_id: str, limit: int = Query(50, le=500)):
         return resp.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch readings for sensor {sensor_id}: {e}")
+
+
+@router.get("/last-reading-time/{room_id}")
+async def get_last_reading_time(room_id: str):
+    """Fetch the most recent sensor reading timestamp for a room."""
+    try:
+        resp = (
+            supabase.table("sensor_readings")
+            .select("recorded_at")
+            .eq("room_id", room_id)
+            .order("recorded_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if resp.data and len(resp.data) > 0:
+            return {
+                "room_id": room_id,
+                "last_reading_time": resp.data[0]["recorded_at"]
+            }
+        else:
+            return {
+                "room_id": room_id,
+                "last_reading_time": None
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch last reading time for room {room_id}: {e}")

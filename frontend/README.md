@@ -1,6 +1,6 @@
-# ColdSense AI
+# SystmII
 
-A production-quality enterprise Cold Storage Monitoring Platform built with modern web technologies.
+A production-quality enterprise Cold Storage Monitoring and Supply Chain Management Platform built with modern web technologies.
 
 ## Tech Stack
 

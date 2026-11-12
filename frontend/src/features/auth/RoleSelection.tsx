@@ -1,161 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { Card, CardContent } from '../../components/ui/Card';
-import { supabase } from '../../lib/supabase';
-
-const FarmerIllustration: React.FC = () => (
-  <svg viewBox="0 0 200 200" className="w-full h-full">
-    <defs>
-      <linearGradient id="farmerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#22c55e" />
-        <stop offset="100%" stopColor="#16a34a" />
-      </linearGradient>
-    </defs>
-    {/* Background circle */}
-    <circle cx="100" cy="100" r="95" fill="#f0fdf4" />
-    
-    {/* Sun */}
-    <circle cx="160" cy="40" r="20" fill="#fbbf24" />
-    <g stroke="#fbbf24" strokeWidth="2">
-      <line x1="160" y1="10" x2="160" y2="0" />
-      <line x1="160" y1="70" x2="160" y2="80" />
-      <line x1="130" y1="40" x2="120" y2="40" />
-      <line x1="190" y1="40" x2="200" y2="40" />
-      <line x1="140" y1="20" x2="133" y2="13" />
-      <line x1="180" y1="60" x2="187" y2="67" />
-      <line x1="140" y1="60" x2="133" y2="67" />
-      <line x1="180" y1="20" x2="187" y2="13" />
-    </g>
-    
-    {/* Ground */}
-    <ellipse cx="100" cy="160" rx="80" ry="20" fill="#86efac" />
-    
-    {/* Plants */}
-    <g fill="url(#farmerGradient)">
-      <path d="M50 160 Q50 120 60 100 Q70 120 70 160 Z" />
-      <path d="M60 160 Q60 110 75 90 Q90 110 90 160 Z" />
-      <path d="M80 160 Q80 115 95 95 Q110 115 110 160 Z" />
-      <path d="M100 160 Q100 120 115 100 Q130 120 130 160 Z" />
-      <path d="M120 160 Q120 125 135 105 Q150 125 150 160 Z" />
-    </g>
-    
-    {/* Farmer figure */}
-    <g fill="#16a34a">
-      <ellipse cx="100" cy="130" rx="15" ry="18" />
-      <rect x="85" y="145" width="30" height="25" rx="5" />
-    </g>
-    <g fill="#dcfce7">
-      <path d="M85 145 Q100 140 115 145 L115 155 Q100 150 85 155 Z" />
-    </g>
-    
-    {/* Wheat/crops */}
-    <g fill="#fbbf24">
-      <ellipse cx="45" cy="85" rx="8" ry="4" />
-      <ellipse cx="45" cy="95" rx="8" ry="4" />
-      <ellipse cx="45" cy="105" rx="8" ry="4" />
-      <line x1="45" y1="80" x2="45" y2="160" stroke="#16a34a" strokeWidth="2" />
-    </g>
-  </svg>
-);
-
-const OwnerIllustration: React.FC = () => (
-  <svg viewBox="0 0 200 200" className="w-full h-full">
-    <defs>
-      <linearGradient id="ownerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#a855f7" />
-        <stop offset="100%" stopColor="#ec4899" />
-      </linearGradient>
-    </defs>
-    {/* Background circle */}
-    <circle cx="100" cy="100" r="95" fill="#faf5ff" />
-    
-    {/* Warehouse building */}
-    <rect x="40" y="80" width="120" height="80" fill="url(#ownerGradient)" rx="5" />
-    <rect x="45" y="85" width="110" height="70" fill="#faf5ff" rx="3" />
-    
-    {/* Doors */}
-    <rect x="60" y="110" width="30" height="40" fill="#a855f7" rx="2" />
-    <rect x="110" y="110" width="30" height="40" fill="#a855f7" rx="2" />
-    
-    {/* Door handles */}
-    <circle cx="85" cy="130" r="3" fill="#faf5ff" />
-    <circle cx="115" cy="130" r="3" fill="#faf5ff" />
-    
-    {/* Roof */}
-    <path d="M30 80 L100 40 L170 80 Z" fill="#a855f7" />
-    
-    {/* Snowflakes (cold indication) */}
-    <g fill="#a855f7" opacity="0.6">
-      <circle cx="50" cy="60" r="3" />
-      <circle cx="150" cy="60" r="3" />
-      <circle cx="100" cy="50" r="3" />
-      <circle cx="70" cy="55" r="2" />
-      <circle cx="130" cy="55" r="2" />
-    </g>
-    
-    {/* Temperature gauge */}
-    <circle cx="160" cy="150" r="20" fill="#faf5ff" stroke="#a855f7" strokeWidth="2" />
-    <path d="M160 135 L160 145" stroke="#a855f7" strokeWidth="2" />
-    <path d="M160 155 L160 165" stroke="#a855f7" strokeWidth="2" />
-    <path d="M150 150 L160 150" stroke="#a855f7" strokeWidth="2" />
-    <circle cx="160" cy="150" r="5" fill="#a855f7" />
-    
-    {/* Gear icon */}
-    <g fill="none" stroke="#a855f7" strokeWidth="2">
-      <circle cx="40" cy="150" r="12" />
-      <circle cx="40" cy="150" r="5" />
-      <line x1="40" y1="135" x2="40" y2="138" />
-      <line x1="40" y1="162" x2="40" y2="165" />
-      <line x1="25" y1="150" x2="28" y2="150" />
-      <line x1="52" y1="150" x2="55" y2="150" />
-    </g>
-  </svg>
-);
-
-const StakeholderIllustration: React.FC = () => (
-  <svg viewBox="0 0 200 200" className="w-full h-full">
-    <defs>
-      <linearGradient id="stakeholderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#3b82f6" />
-        <stop offset="100%" stopColor="#6366f1" />
-      </linearGradient>
-    </defs>
-    {/* Background circle */}
-    <circle cx="100" cy="100" r="95" fill="#eff6ff" />
-    
-    {/* Chart/graph */}
-    <rect x="30" y="60" width="140" height="90" fill="#eff6ff" stroke="#3b82f6" strokeWidth="2" rx="5" />
-    
-    {/* Bar chart */}
-    <rect x="45" y="100" width="20" height="40" fill="#3b82f6" rx="2" />
-    <rect x="75" y="80" width="20" height="60" fill="#6366f1" rx="2" />
-    <rect x="105" y="90" width="20" height="50" fill="#3b82f6" rx="2" />
-    <rect x="135" y="70" width="20" height="70" fill="#6366f1" rx="2" />
-    
-    {/* Rupee symbol */}
-    <circle cx="100" cy="35" r="18" fill="url(#stakeholderGradient)" />
-    <text x="100" y="42" textAnchor="middle" fill="white" fontSize="20" fontWeight="bold">₹</text>
-    
-    {/* Trend line */}
-    <polyline points="45,120 75,90 105,100 135,65" fill="none" stroke="#22c55e" strokeWidth="3" />
-    <circle cx="135" cy="65" r="4" fill="#22c55e" />
-    
-    {/* Investment bag */}
-    <g fill="url(#stakeholderGradient)">
-      <path d="M150 140 Q150 120 160 115 Q170 120 170 140 L170 160 L150 160 Z" />
-      <rect x="145" y="115" width="30" height="8" rx="2" />
-    </g>
-    
-    {/* Dollar/coins */}
-    <circle cx="30" cy="160" r="12" fill="#fbbf24" />
-    <text x="30" y="165" textAnchor="middle" fill="#92400e" fontSize="12" fontWeight="bold">$</text>
-  </svg>
-);
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+import { Sprout, Building2, TrendingUp } from 'lucide-react';
 
 const RoleSelection: React.FC = () => {
   const navigate = useNavigate();
-  const { setSelectedRole, setUser, isAuthenticated } = useAuthStore();
+  const { setSelectedRole, isAuthenticated } = useAuthStore();
+  const [activeRole, setActiveRole] = useState<'farmer' | 'owner' | 'stakeholder'>('owner');
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -165,83 +18,154 @@ const RoleSelection: React.FC = () => {
 
   const roles = [
     {
-      id: 'farmer',
+      id: 'farmer' as const,
       name: 'Farmer',
-      description: 'Manage inventory, track produce, and monitor storage conditions',
-      illustration: <FarmerIllustration />,
-      color: 'from-green-500 to-emerald-600',
-      accent: 'green',
+      badge: 'Inventory & Batch Intake',
+      description: 'Manage inventory, track fresh produce conditions, request room access, and monitor shelf-life optimization in real-time.',
+      icon: Sprout,
+      stripeColor: 'bg-[#15803d]',
+      iconColor: 'text-[#15803d]',
+      iconBg: 'bg-emerald-50',
+      badgeColor: 'bg-[#ecfdf5] text-[#15803d] border-[#d1fae5]',
     },
     {
-      id: 'owner',
+      id: 'owner' as const,
       name: 'Owner',
-      description: 'Full system access, manage users, and configure settings',
-      illustration: <OwnerIllustration />,
-      color: 'from-purple-500 to-pink-600',
-      accent: 'purple',
+      badge: 'Facility Command & Control',
+      description: 'Complete operational visibility over HVAC, multi-room sensors, capacity metrics, and approval queues.',
+      icon: Building2,
+      stripeColor: 'bg-[#0284c7]',
+      iconColor: 'text-[#0284c7]',
+      iconBg: 'bg-sky-50',
+      badgeColor: 'bg-[#f0f9ff] text-[#0284c7] border-[#e0f2fe]',
     },
     {
-      id: 'stakeholder',
+      id: 'stakeholder' as const,
       name: 'Stakeholder',
-      description: 'View reports, analytics, and business insights',
-      illustration: <StakeholderIllustration />,
-      color: 'from-blue-500 to-indigo-600',
-      accent: 'blue',
+      badge: 'Capital & ROI Analytics',
+      description: 'Macro portfolio monitoring, facility utilization economics, and cold chain return-on-investment insights.',
+      icon: TrendingUp,
+      stripeColor: 'bg-[#4338ca]',
+      iconColor: 'text-[#4338ca]',
+      iconBg: 'bg-indigo-50',
+      badgeColor: 'bg-[#eef2ff] text-[#4338ca] border-[#e0e7ff]',
     },
   ];
 
-  const handleRoleSelect = (roleId: 'farmer' | 'owner' | 'stakeholder') => {
-    setSelectedRole(roleId);
+  const handleSelectRole = (roleId: 'farmer' | 'owner' | 'stakeholder') => {
+    setActiveRole(roleId);
+  };
+
+  const handleContinue = (roleId?: 'farmer' | 'owner' | 'stakeholder') => {
+    const target = roleId || activeRole;
+    setSelectedRole(target);
     navigate('/login');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      {/* Company Branding - Top Left */}
-      <div className="absolute top-6 left-6">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-2xl font-bold bg-gradient-to-r from-green-500 to-blue-500 bg-clip-text text-transparent">1</span>
-          </div>
-          <div>
-            <p className="text-white font-bold text-lg leading-tight">1ACCORD</p>
-            <p className="text-white/80 text-xs">Cold Chain Solutions</p>
-          </div>
-        </div>
-      </div>
+    <div className="relative min-h-screen flex flex-col justify-between text-gray-900 selection:bg-blue-500 selection:text-white bg-[#f4f5f7]">
+      {/* Background Subtle Gradient & Grid */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-[#f4f5f7] to-[#e9ecf0] pointer-events-none" />
+      <div
+        className="absolute inset-0 opacity-[0.3] pointer-events-none"
+        style={{
+          backgroundImage: 'radial-gradient(#94a3b8 0.75px, transparent 0.75px)',
+          backgroundSize: '24px 24px',
+        }}
+      />
 
-      <div className="w-full max-w-5xl">
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl">
-            <span className="text-4xl font-bold bg-gradient-to-r from-green-500 to-blue-500 bg-clip-text text-transparent">C</span>
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-3">Select Your Role</h1>
-          <p className="text-white/90 text-lg">Choose your role to customize your experience</p>
+      {/* Clean Header Bar */}
+      <header className="relative w-full h-[68px] px-6 lg:px-12 flex items-center justify-between z-30 bg-white border-b border-gray-200/80 shadow-sm shrink-0">
+        {/* Left: New Finalized Logo */}
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={44} showCompanyLogo={true} />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {roles.map((role) => (
-            <Card
-              key={role.id}
-              variant="default"
-              className="cursor-pointer hover:shadow-2xl transition-all duration-300 hover:scale-105 border-2 border-transparent hover:border-white/30"
-              onClick={() => handleRoleSelect(role.id as any)}
-            >
-              <CardContent className="p-8">
-                <div className="w-32 h-32 mx-auto mb-6">
-                  {role.illustration}
+        {/* Right: Partners */}
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12 z-20 max-w-6xl mx-auto w-full">
+        {/* Heading & Subtitle */}
+        <div className="text-center mb-8 sm:mb-10 max-w-2xl">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mb-2.5">
+            Select Your Role
+          </h1>
+          <p className="text-gray-500 text-sm sm:text-base font-normal">
+            Choose your role to customize your <span className="font-semibold text-gray-800">SystmII</span> cold chain operations platform
+          </p>
+        </div>
+
+        {/* Three Role Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 w-full max-w-5xl mb-8">
+          {roles.map((role) => {
+            const Icon = role.icon;
+            const isSelected = activeRole === role.id;
+
+            return (
+              <div
+                key={role.id}
+                onClick={() => handleSelectRole(role.id)}
+                onDoubleClick={() => handleContinue(role.id)}
+                className={`group relative rounded-2xl bg-white border transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between ${
+                  isSelected
+                    ? 'border-gray-400 shadow-lg ring-2 ring-blue-500/30'
+                    : 'border-gray-200/90 shadow-sm hover:shadow-md hover:border-gray-300'
+                }`}
+              >
+                {/* Top Role Stripe */}
+                <div className={`h-2.5 w-full ${role.stripeColor}`} />
+
+                {/* Card Body */}
+                <div className="p-7 sm:p-8 flex flex-col items-center text-center flex-1">
+                  {/* Icon */}
+                  <div className={`w-16 h-16 rounded-2xl ${role.iconBg} flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-105`}>
+                    <Icon className={`w-8 h-8 ${role.iconColor}`} />
+                  </div>
+
+                  {/* Role Title */}
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    {role.name}
+                  </h3>
+
+                  {/* Pill Badge */}
+                  <span className={`inline-block text-[11px] font-semibold tracking-wide uppercase px-3 py-1 rounded-full border mb-4 ${role.badgeColor}`}>
+                    {role.badge}
+                  </span>
+
+                  {/* Description */}
+                  <p className="text-xs sm:text-sm text-gray-500 leading-relaxed font-normal mb-2">
+                    {role.description}
+                  </p>
                 </div>
-                <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 text-center mb-3">
-                  {role.name}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 text-center leading-relaxed">
-                  {role.description}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
-      </div>
+
+        {/* Bottom Continue Button & Support */}
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={() => handleContinue()}
+            className="w-56 py-2.5 px-6 bg-white border border-gray-300 rounded-xl text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500/20 active:scale-[0.99]"
+          >
+            Continue
+          </button>
+          <p className="text-xs text-gray-500">
+            Need help? <a href="#" className="underline hover:text-gray-800 transition-colors">Contact support</a>
+          </p>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-500 border-t border-gray-200/80 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Secured with Enterprise IoT Sensor Telemetry
+        </p>
+      </footer>
     </div>
   );
 };

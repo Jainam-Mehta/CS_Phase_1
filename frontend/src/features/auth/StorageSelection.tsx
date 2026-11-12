@@ -7,7 +7,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import SearchableSelect from '../../components/ui/SearchableSelect';
 import { Snowflake, Apple, Carrot, Star, ChevronRight, Check, AlertCircle, Warehouse } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { RoleBackground } from '../../components/common/RoleBackground';
+import { SystmLogo } from '../../components/common/SystmLogo';
+import { PartnerLogos } from '../../components/common/PartnerLogos';
+
 import type { State, District, Locality, Facility } from '../../lib/supabase';
+
 
 const StorageSelection: React.FC = () => {
   const navigate = useNavigate();
@@ -268,14 +273,30 @@ const StorageSelection: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 via-blue-400 to-purple-400 p-4">
-      <div className="w-full max-w-4xl">
+    <div className="relative min-h-screen flex flex-col justify-between text-white selection:bg-emerald-500 selection:text-white overflow-hidden">
+      {/* Consistent Role-Specific 3D Background Animation */}
+      <RoleBackground role="farmer" />
+
+      {/* White Header Bar - 68px, Perfectly Contained */}
+      <header className="relative w-full h-[68px] px-6 lg:px-10 flex items-center justify-between z-30 bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+        <div className="flex items-center h-full">
+          <SystmLogo variant="prominent-header" iconSize={52} showCompanyLogo={true} />
+        </div>
+        <div className="flex items-center h-full">
+          <PartnerLogos theme="light" prominent={true} />
+        </div>
+      </header>
+
+      {/* Main Center Stage */}
+      <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-8 z-20 w-full overflow-y-auto">
+
+      <div className="w-full max-w-xl">
         <Card variant="default" className="w-full">
           <CardHeader className="text-center relative">
             {/* Step Indicator */}
             <div className="absolute top-4 right-4">
               <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium rounded-full">
-                Step 1/4
+                Step 1/3
               </span>
             </div>
             
@@ -342,6 +363,15 @@ const StorageSelection: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+    
+      </main>
+
+      {/* Footer info bar */}
+      <footer className="relative w-full py-3.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-white z-30 shadow-sm shrink-0">
+        <p className="font-medium tracking-wide">
+          SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core
+        </p>
+      </footer>
     </div>
   );
 };

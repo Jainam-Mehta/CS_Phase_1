@@ -20,6 +20,44 @@ async def lifespan(app: FastAPI):
         logger.info("MQTT subscriber background thread started.")
     except Exception as e:
         logger.warning("MQTT subscriber could not start (non-fatal): %s", e)
+    
+    # Start APScheduler for daily jobs
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.daily_storage_costs import run_daily_cost_calculation
+        from datetime import datetime, timezone
+        import pytz
+        
+        scheduler = BackgroundScheduler()
+        
+        # Calculate next run time: today at 23:59 UTC (or tomorrow if past that time)
+        utc = pytz.UTC
+        now = datetime.now(utc)
+        next_run = now.replace(hour=23, minute=59, second=0, microsecond=0)
+        if next_run <= now:
+            # If we're already past 23:59 today, schedule for tomorrow
+            next_run = next_run.replace(day=next_run.day + 1) if next_run.month < 12 else next_run.replace(month=next_run.month + 1, day=1)
+        
+        logger.info(f"Scheduling daily storage cost calculation for 23:59 UTC (next run: {next_run})")
+        
+        scheduler.add_job(
+            run_daily_cost_calculation,
+            'cron',
+            hour=23,
+            minute=59,
+            timezone='UTC',
+            id='daily_storage_costs',
+            name='Daily Storage Cost Calculation'
+        )
+        
+        scheduler.start()
+        logger.info("✅ APScheduler started - daily storage cost job scheduled")
+        
+    except ImportError:
+        logger.warning("APScheduler not installed - daily jobs will need manual triggering via API")
+    except Exception as e:
+        logger.warning("APScheduler could not start (non-fatal): %s", e)
+    
     yield
 
 

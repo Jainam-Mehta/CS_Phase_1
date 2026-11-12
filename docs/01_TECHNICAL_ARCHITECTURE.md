@@ -1,4 +1,4 @@
-# SystemII - Final Technical Architecture
+# SystmII - Final Technical Architecture
 
 **Document Version:** 1.0  
 **Last Updated:** October 26, 2026  
@@ -8,7 +8,7 @@
 
 ## Executive Overview
 
-SystemII is a real-time cold chain monitoring platform designed for distributed temperature/humidity sensing across agricultural cold storage facilities in India. The system ingests sensor data via MQTT, processes it in real-time, stores it, and provides dashboards for multiple stakeholder types (farmers, owners, investors).
+SystmII is a real-time cold chain monitoring platform designed for distributed temperature/humidity sensing across agricultural cold storage facilities in India. The system ingests sensor data via MQTT, processes it in real-time, stores it, and provides dashboards for multiple stakeholder types (farmers, owners, investors).
 
 **Core Characteristics:**
 - Real-time IoT data ingestion (MQTT)
@@ -758,7 +758,7 @@ Potential monthly savings: $10-15/month (if all optimizations applied)
 
 ```
 Week 1-2:
-└─ Frontend branding update (ColdSense → SystemII) ✓
+└─ Frontend branding update (ColdSense → SystmII) ✓
 └─ Docker frontend deployment
 └─ Technical documentation completion
 
