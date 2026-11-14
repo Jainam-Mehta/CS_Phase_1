@@ -57,7 +57,7 @@ const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed, onToggleSidebar }) =>
     <header
       className={cn(
         'fixed top-0 right-0 h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 transition-all duration-300 z-40',
-        sidebarCollapsed ? 'left-20' : 'left-72'
+        'left-0', sidebarCollapsed ? 'md:left-20' : 'md:left-72'
       )}
     >
       <div className="flex items-center justify-between h-full px-6">

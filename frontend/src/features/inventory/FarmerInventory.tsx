@@ -666,18 +666,20 @@ const FarmerInventory: React.FC = () => {
     <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-screen">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
          <div className="flex items-center gap-3">
-             <PackageOpen className="w-8 h-8 text-primary-500" />
+             <PackageOpen className="w-8 h-8 text-primary-500 shrink-0" />
              <div>
-               <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Inventory Management</h1>
+               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Inventory Management</h1>
              </div>
          </div>
-         <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 shadow-xl shadow-primary-500/20 transform hover:-translate-y-0.5 transition-all">
-             <Plus className="w-5 h-5"/> Add Inventory
-         </button>
-         
-         <button onClick={() => setIsQRScannerOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-xl shadow-purple-500/20 transform hover:-translate-y-0.5 transition-all">
-             <Package className="w-5 h-5"/> Scan Products
-         </button>
+         <div className="grid grid-cols-2 sm:flex sm:items-center gap-3 w-full sm:w-auto">
+           <button onClick={() => setIsModalOpen(true)} className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 shadow-xl shadow-primary-500/20 transform hover:-translate-y-0.5 transition-all">
+               <Plus className="w-4 h-4 sm:w-5 sm:h-5"/> Add Inventory
+           </button>
+           
+           <button onClick={() => setIsQRScannerOpen(true)} className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-xl shadow-purple-500/20 transform hover:-translate-y-0.5 transition-all">
+               <Package className="w-4 h-4 sm:w-5 sm:h-5"/> Scan Products
+           </button>
+         </div>
       </div>
       
       {/* LIVE INVENTORY TRACKING TABLE */}
@@ -690,8 +692,69 @@ const FarmerInventory: React.FC = () => {
          </div>
          <CardContent className="p-0">
             {batches.length > 0 ? (
-                <div className="overflow-x-auto">
-                   <table className="w-full text-left border-collapse">
+              <>
+                {/* ── MOBILE CARD VIEW (< md) ── */}
+                <div className="block md:hidden p-4 space-y-3">
+                  {batches.filter(b => (b.remaining_quantity_kg || 0) > 0).map((b, idx) => {
+                    const crates = convertKgToCrates(b.initial_quantity_kg);
+                    const storedDate = new Date(b.harvest_date || b.assigned_at || b.created_at);
+                    const expiryDate = new Date(b.expiry_date);
+                    const now = new Date();
+                    const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    const isExpired = daysLeft < 0;
+
+                    return (
+                      <div
+                        key={b.id || idx}
+                        className="p-4 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-sm space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                              {b.product || 'Unknown Product'}
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                              {roomNameMap[b.room_id] || 'Storage Facility'}
+                            </p>
+                          </div>
+                          <span className="font-mono text-sm font-bold px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 shrink-0">
+                            {b.alphanumeric_code || 'N/A'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <div>
+                            <span className="text-xs text-slate-400 block font-medium">Available</span>
+                            <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
+                              {crates} <span className="text-xs font-normal text-slate-400">Crates</span>
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-slate-400 block font-medium">Expiry</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${
+                              isExpired 
+                                ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                                : daysLeft <= 7 
+                                ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            }`}>
+                              {isExpired ? 'Expired' : `${daysLeft}d left`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 flex justify-between pt-1">
+                          <span>Stored: {storedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          <span>Expires: {expiryDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* ── DESKTOP TABLE VIEW (>= md) ── */}
+                <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
                       <thead>
                          <tr className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                             <th className="py-4 px-6">Product</th>
@@ -733,6 +796,7 @@ const FarmerInventory: React.FC = () => {
                       </tbody>
                    </table>
                 </div>
+              </>
             ) : (
                 <div className="p-12 text-center text-slate-400 font-semibold flex flex-col items-center gap-2">
                    <Package className="w-10 h-10 text-slate-200" />

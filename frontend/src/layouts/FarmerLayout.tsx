@@ -1,8 +1,10 @@
 import { SystmIcon } from '../components/common/SystmLogo';
+import { AppFooter } from '../components/common/AppFooter';
 import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useSidebarStore } from '../stores/useSidebarStore';
 import {
   LayoutDashboard,
   Package,
@@ -17,6 +19,7 @@ import {
   Search,
   X,
   LogOut,
+  Menu,
 } from 'lucide-react';
 import RupeeIcon from '../components/icons/RupeeIcon';
 import { FEATURE_FLAGS } from '../config/features.config';
@@ -58,7 +61,12 @@ const settingsNavigation = [
 
 const FarmerLayout: React.FC = () => {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+
+  React.useEffect(() => {
+    closeMobileSidebar();
+  }, [location.pathname]);
+  const { collapsed, toggleSidebar, isMobileOpen, toggleMobileSidebar, closeMobileSidebar } = useSidebarStore();
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuthStore();
 
@@ -76,15 +84,25 @@ const FarmerLayout: React.FC = () => {
   const handleSearchResultClick = (href: string) => {
     navigate(href);
     setSearchQuery('');
+    closeMobileSidebar();
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-slate-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-slate-900 overflow-hidden">
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div
+          onClick={closeMobileSidebar}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
+        />
+      )}
       {/* Sidebar */}
       <div
         className={cn(
           'fixed left-0 top-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 z-50',
-          collapsed ? 'w-20' : 'w-72'
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
+          'w-72 md:translate-x-0',
+          collapsed ? 'md:w-20' : 'md:w-72'
         )}
       >
         {/* Logo */}
@@ -103,9 +121,15 @@ const FarmerLayout: React.FC = () => {
             </div>
           )}
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto"
+            onClick={closeMobileSidebar}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto text-gray-600 dark:text-gray-400"
+            aria-label="Close navigation menu"
           >
+            <X className="h-5 w-5" />
+          </button>
+          <button
+            onClick={toggleSidebar}
+            className="hidden md:block p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto">
             {collapsed ? (
               <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             ) : (
@@ -189,8 +213,37 @@ const FarmerLayout: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className={cn('flex-1 transition-all duration-300', collapsed ? 'ml-20' : 'ml-72')}>
-        <Outlet />
+      <div className={cn('flex flex-col flex-1 h-screen overflow-y-auto transition-all duration-300 ml-0', collapsed ? 'md:ml-20' : 'md:ml-72')}>
+        {/* Mobile Header Bar */}
+        <header className="md:hidden sticky top-0 z-30 h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleMobileSidebar}
+              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-700 dark:text-gray-300"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+            <div className="flex items-center gap-2">
+              <SystmIcon size={28} />
+              <span className="font-extrabold text-lg tracking-tight text-gray-900 dark:text-white leading-tight">
+                Systm<span className="text-sky-500 dark:text-sky-400">II</span>
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center text-xs font-semibold text-primary-600 dark:text-primary-400">
+              {user?.email?.[0].toUpperCase() || 'F'}
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 flex flex-col justify-between">
+          <div>
+            <Outlet />
+          </div>
+          <AppFooter />
+        </div>
       </div>
     </div>
   );

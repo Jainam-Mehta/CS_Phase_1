@@ -126,7 +126,7 @@ const FarmerAlertsAndInsights: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pt-6 px-4 pb-12">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2.5 sm:gap-3">
           <Bell className="w-8 h-8" />
           Alerts & Insights
         </h1>
@@ -156,12 +156,12 @@ const FarmerAlertsAndInsights: React.FC = () => {
                   key={log.id}
                   className={`border rounded-lg p-4 ${getSeverityColor(log.severity)}`}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <div className="flex-shrink-0 mt-1">
                       {getSeverityIcon(log.severity)}
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 mb-2">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white">
                             {log.title}
@@ -173,9 +173,9 @@ const FarmerAlertsAndInsights: React.FC = () => {
                       </div>
 
                       {/* Site and Room info */}
-                      <div className="flex flex-wrap gap-3 mt-3 text-xs">
+                      <div className="flex flex-wrap gap-2 sm:gap-3 mt-3 text-xs">
                         {log.site_name && (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
                             <span className="text-gray-500 dark:text-gray-400">Site:</span>
                             <span className="font-medium text-gray-900 dark:text-white">
                               {log.site_name}
@@ -183,14 +183,14 @@ const FarmerAlertsAndInsights: React.FC = () => {
                           </div>
                         )}
                         {log.room_code && (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
                             <span className="text-gray-500 dark:text-gray-400">Room:</span>
                             <span className="font-mono font-semibold text-gray-900 dark:text-white">
                               {log.room_code}
                             </span>
                           </div>
                         )}
-                        <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs bg-white dark:bg-slate-700/50 rounded-full border border-gray-200 dark:border-slate-600">
                           <span className="text-gray-500 dark:text-gray-400">
                             {formatDate(log.created_at)}
                           </span>

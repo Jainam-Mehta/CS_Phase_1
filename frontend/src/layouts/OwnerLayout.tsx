@@ -1,4 +1,5 @@
 import { SystmIcon } from '../components/common/SystmLogo';
+import { AppFooter } from '../components/common/AppFooter';
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -27,10 +28,12 @@ import {
   Plus,
   CheckSquare,
   IndianRupee,
+  Menu,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { resolveProfile } from '../lib/profileUtils';
 import { useSiteStore } from '../stores/useSiteStore';
+import { useSidebarStore } from '../stores/useSidebarStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
@@ -58,7 +61,11 @@ const settingsNavigation = [
 const OwnerLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggleSidebar, isMobileOpen, toggleMobileSidebar, closeMobileSidebar } = useSidebarStore();
+
+  React.useEffect(() => {
+    closeMobileSidebar();
+  }, [location.pathname]);
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuthStore();
   const { selectedFacilityId, setSelectedFacilityId } = useSiteStore();
@@ -189,12 +196,21 @@ const OwnerLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-slate-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-slate-900 overflow-hidden">
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div
+          onClick={closeMobileSidebar}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
+        />
+      )}
       {/* Sidebar */}
       <div
         className={cn(
           'fixed left-0 top-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 z-50',
-          collapsed ? 'w-20' : 'w-72'
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
+          'w-72 md:translate-x-0',
+          collapsed ? 'md:w-20' : 'md:w-72'
         )}
       >
         {/* Logo */}
@@ -213,9 +229,15 @@ const OwnerLayout: React.FC = () => {
             </div>
           )}
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto"
+            onClick={closeMobileSidebar}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto text-gray-600 dark:text-gray-400"
+            aria-label="Close navigation menu"
           >
+            <X className="h-5 w-5" />
+          </button>
+          <button
+            onClick={toggleSidebar}
+            className="hidden md:block p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ml-auto">
             {collapsed ? (
               <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             ) : (
@@ -256,7 +278,7 @@ const OwnerLayout: React.FC = () => {
               return (
                 <button
                   key={item.name}
-                  onClick={() => handleSearchResultClick(item.href)}
+                  onClick={() => { handleSearchResultClick(item.href); closeMobileSidebar(); }}
                   className={cn(
                     'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200',
                     'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800',
@@ -299,9 +321,77 @@ const OwnerLayout: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className={cn('flex flex-col flex-1 transition-all duration-300 h-screen', collapsed ? 'ml-20' : 'ml-72')}>
+      <div className={cn('flex flex-col flex-1 transition-all duration-300 h-screen overflow-y-auto ml-0', collapsed ? 'md:ml-20' : 'md:ml-72')}>
         {/* Unified Top Header */}
-        <header className="h-auto px-8 py-4 flex flex-col gap-3 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 z-40">
+        {/* Mobile Header Bar (Matches Farmer side exactly) */}
+        <header className="md:hidden sticky top-0 z-30 h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleMobileSidebar}
+              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-gray-700 dark:text-gray-300"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+            <div className="flex items-center gap-2">
+              <SystmIcon size={28} />
+              <span className="font-extrabold text-lg tracking-tight text-gray-900 dark:text-white leading-tight">
+                Systm<span className="text-sky-500 dark:text-sky-400">II</span>
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              title="Toggle theme"
+            >
+              {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
+            <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center text-xs font-semibold text-primary-600 dark:text-primary-400">
+              {user?.email?.[0].toUpperCase() || 'O'}
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile Sub-Header: Site & Room Selector (only shown when site selector is applicable) */}
+        {!hideSiteSelector && facilities.length > 0 && (
+          <div className="md:hidden px-4 py-2 bg-slate-50 dark:bg-slate-800/60 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+              <select
+                value={selectedFacilityId || ''}
+                onChange={(e) => {
+                  setSelectedFacilityId(e.target.value);
+                  setSelectedRoomId(null);
+                }}
+                className="w-full bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 border-none p-0 focus:ring-0 truncate"
+              >
+                {facilities.map((f) => (
+                  <option key={f.id} value={f.id} className="dark:bg-slate-800">
+                    {f.facility_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!hideSelector && selectedFacilityId && rooms.length > 0 && (
+              <select
+                value={selectedRoomId || (rooms[0] ? rooms[0].id : '')}
+                onChange={(e) => setSelectedRoomId(e.target.value)}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-300 shrink-0"
+              >
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id} className="dark:bg-slate-800">
+                    {room.room_name || `Room ${room.room_code}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        {/* Unified Top Header (Desktop >= md) */}
+        <header className="hidden md:flex h-auto px-8 py-4 flex-col gap-3 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 z-40">
           {/* First Row: Site Selector */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -442,8 +532,11 @@ const OwnerLayout: React.FC = () => {
           )}
         </header>
 
-        <main className="relative flex-1 overflow-auto bg-gray-50 dark:bg-slate-900">
-          <Outlet />
+        <main className="relative flex-1 flex flex-col justify-between overflow-auto bg-gray-50 dark:bg-slate-900">
+          <div>
+            <Outlet />
+          </div>
+          <AppFooter />
         </main>
       </div>
     </div>

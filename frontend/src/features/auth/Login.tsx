@@ -131,7 +131,7 @@ const Login: React.FC = () => {
       <RoleBackground role={selectedRole} />
 
       {/* Clean White Header Bar */}
-      <header className="relative w-full h-[68px] px-6 lg:px-12 flex items-center justify-between z-30 bg-white border-b border-gray-200/80 shadow-sm shrink-0">
+      <header className="relative w-full h-[68px] px-3 sm:px-6 lg:px-12 flex items-center justify-between z-30 bg-white border-b border-gray-200/80 shadow-sm shrink-0">
         <div className="flex items-center h-full">
           <SystmLogo variant="prominent-header" iconSize={44} showCompanyLogo={true} />
         </div>
@@ -253,9 +253,9 @@ const Login: React.FC = () => {
         </div>
       </main>
 
-      {/* Footer info bar */}
-      <footer className="relative w-full py-3.5 text-center text-xs text-gray-500 border-t border-gray-200/80 bg-white z-30 shadow-sm shrink-0">
-        <p className="font-medium tracking-wide">SystmII Cold Chain Supply Management Platform &bull; Active Logistics Core</p>
+            {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-slate-800 py-4 px-6 text-center text-xs text-gray-500 dark:text-gray-400 mt-12 bg-white dark:bg-slate-900 shrink-0 z-30">
+        &copy; 2026 Systm II | Powered by 1Accord Technologies | v1.0
       </footer>
     </div>
   );

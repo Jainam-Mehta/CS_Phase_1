@@ -725,10 +725,10 @@ const StakeholderMap: React.FC = () => {
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)] flex-col md:flex-row bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col md:flex-row h-auto md:h-[calc(100vh-64px)] min-h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900 overflow-y-auto md:overflow-hidden">
       
       {/* Map Section */}
-      <div className="flex-1 relative" onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}>
+      <div className="w-full md:flex-1 h-[360px] sm:h-[420px] md:h-full relative shrink-0" onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}>
         
         {/* Search & Header overlay */}
         <div className="absolute top-6 left-6 right-6 z-10"></div>
@@ -835,22 +835,42 @@ const StakeholderMap: React.FC = () => {
                   <span className="flex items-center gap-1.5 text-emerald-500"><Zap className="w-3.5 h-3.5"/> Carbon Credits</span>
                   <span className="font-medium text-emerald-600">{hoveredState?.carbonCredits?.toLocaleString() || '0'}</span>
                 </div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 mt-3 pt-2 border-t border-slate-100 dark:border-slate-700 italic">
-                  Color intensity: Darker blue = More invested sites in this state
-                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Legend - Bottom Left */}
+        <div className="absolute bottom-6 left-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700 shadow-xl rounded-2xl p-4 z-20 w-64">
+          <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-widest mb-3">Investment Intensity</h4>
+          <div className="space-y-3">
+            {/* Smooth continuous gradient bar - matches map colors */}
+            <div 
+              className="h-8 rounded-lg border border-slate-300 dark:border-slate-600 shadow-inner"
+              style={{
+                background: 'linear-gradient(90deg, #f8fafc 0%, #c7d2e0 25%, #93c5fd 50%, #3b82f6 75%, #1e40af 100%)'
+              }}
+            />
+            {/* Labels */}
+            <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+              <span>No Investment</span>
+              <span>High Investment</span>
+            </div>
+            {/* Mobile note */}
+            <div className="text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
+              💡 Tap any state to view details
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Portfolio Sidebar */}
-      <div className="w-full md:w-96 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 p-5 flex flex-col">
+      <div className="w-full md:w-96 bg-white dark:bg-slate-800 border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-700 p-4 sm:p-5 flex flex-col shrink-0">
         <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mb-5 flex items-center gap-2">
            Portfolio Summary
         </h2>
         
-        <div className="space-y-4 flex-1 overflow-hidden">
+        <div className="space-y-4 flex-1 overflow-visible md:overflow-y-auto pb-10 md:pb-0">
           {/* ROW 1: 2-Box Layout - Total Sites & Your Invested */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-700">

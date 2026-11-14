@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useSiteStore } from '../../stores/useSiteStore';
 import { supabase } from '../../lib/supabase';
 import { HVACDiagram } from './components/HVACDiagram';
+import { DesktopOnlyWrapper } from '../../components/common/DesktopOnlyWrapper';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import OwnerReport from '../reports/OwnerReport';
 import { convertKgToCrates } from '../../utils/units';
@@ -425,6 +426,7 @@ const OwnerDashboard: React.FC = () => {
   const hasAmmoniaSensor = dbSensors.some(s => s.sensor_type === 'Ammonia');
   const hasCompressorSensor = dbSensors.some(s => s.sensor_type === 'Compressor' || s.sensor_type === 'CompressorHealth' || s.sensor_type === 'Motor');
   const hasBatterySensor = dbSensors.some(s => s.sensor_type === 'Battery' || s.sensor_name?.toLowerCase().includes('battery'));
+  const hasRoomSolarSensor = dbSensors.some(s => s.sensor_type === 'Solar');
   const batterySensor = dbSensors.find(s => s.sensor_type === 'Battery' || s.sensor_name?.toLowerCase().includes('battery') || s.battery_percentage != null);
   const dbBatteryPercentage = 
     latestSiteEnergy && latestSiteEnergy.battery_charge_kwh != null && latestSiteEnergy.battery_discharge_kwh != null
@@ -660,7 +662,7 @@ const OwnerDashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-8 max-w-[1400px] mx-auto overflow-hidden">
+    <div className="p-4 md:p-8 max-w-[1400px] mx-auto overflow-hidden">
       {/* 1. Page Title */}
       <div className="mb-8 flex items-start justify-between">
         <div>
@@ -676,23 +678,28 @@ const OwnerDashboard: React.FC = () => {
       
       {/* 2. HVAC System Map on Top */}
       <div className="w-full mb-10">
-        <HVACDiagram 
-          sensors={hvacSensors as any} 
-          inverterData={{
-            solarPercentage,
-            gridPercentage,
-            totalKwh: totalEnergyKwh,
-            solarKw,
-            status: siteSolarKwh > 0 ? 'optimal' : 'offline',
-          }}
-          compressorHealth={compressorHealthInfo}
-          batteryData={{
-            percentage: dbBatteryPercentage,
-            status: isBatteryInstalled ? (solarPercentage > 0 ? 'charging' : 'charged') : 'standby',
-            powerKw: isBatteryInstalled && solarKw > 0 ? Number((solarKw * 0.4).toFixed(1)) : null,
-          }}
-          systemLive={isSystemLive}
-        />
+        <DesktopOnlyWrapper
+          title="Industrial HVAC & Power Infrastructure"
+          description="High-precision industrial cooling schematics, sensor node mapping, and circuit animations are formatted for desktop screens."
+        >
+          <HVACDiagram 
+            sensors={hvacSensors as any} 
+            inverterData={{
+              solarPercentage,
+              gridPercentage,
+              totalKwh: totalEnergyKwh,
+              solarKw,
+              status: siteSolarKwh > 0 ? 'optimal' : 'offline',
+            }}
+            compressorHealth={compressorHealthInfo}
+            batteryData={{
+              percentage: dbBatteryPercentage,
+              status: isBatteryInstalled ? (solarPercentage > 0 ? 'charging' : 'charged') : 'standby',
+              powerKw: isBatteryInstalled && solarKw > 0 ? Number((solarKw * 0.4).toFixed(1)) : null,
+            }}
+            systemLive={isSystemLive}
+          />
+        </DesktopOnlyWrapper>
       </div>
 
       {/* 2. 3 Dashboard KPI Cards below HVAC */}

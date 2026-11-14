@@ -417,14 +417,14 @@ const FarmerOrders: React.FC = () => {
     <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-screen">
        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
            <div className="flex items-center gap-3">
-             <ShoppingCart className="w-8 h-8 text-indigo-500" />
+             <ShoppingCart className="w-8 h-8 text-indigo-500 shrink-0" />
              <div>
-               <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Orders</h1>
-               <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your product orders and dispatches</p>
+               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Orders</h1>
+               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Manage your product orders and dispatches</p>
              </div>
            </div>
            
-           <button onClick={() => { console.log('🔵 CREATE ORDER BUTTON CLICKED'); setIsModalOpen(true); setStep('inventory'); setCartItems([]); }} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 transform hover:-translate-y-0.5 transition-all">
+           <button onClick={() => { console.log('🔵 CREATE ORDER BUTTON CLICKED'); setIsModalOpen(true); setStep('inventory'); setCartItems([]); }} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 transform hover:-translate-y-0.5 transition-all">
                <Plus className="w-5 h-5"/> Create Order
            </button>
       </div>
@@ -442,41 +442,84 @@ const FarmerOrders: React.FC = () => {
                    <Truck className="w-4 h-4" /> Order History
                  </h2>
              </div>
-             <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                   <thead>
-                      <tr className="border-b border-slate-100 dark:border-slate-800">
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Crate Code</th>
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Product</th>
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Quantity</th>
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Buyer</th>
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Dispatch Date</th>
-                          <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs text-right">Total Amount</th>
-                      </tr>
-                   </thead>
-                   <tbody>
-                       {orders.map((order, idx) => (
-                           <tr key={idx} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                               <td className="px-6 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white">{order.alphanumeric_code || order.batch_code}</td>
-                               <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{order.product_name}</td>
-                               <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.quantity_crates} Crates</td>
-                               <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.buyer_name}</td>
-                               <td className="px-6 py-4 text-slate-500">{new Date(order.dispatch_date).toLocaleDateString()}</td>
-                               <td className="px-6 py-4 text-right font-bold text-emerald-600">₹{order.total_amount.toLocaleString('en-IN')}</td>
-                           </tr>
-                       ))}
-                   </tbody>
-                </table>
-             </div>
+             <div className="block md:hidden p-4 space-y-3">
+                 {orders.map((order, idx) => (
+                   <div
+                     key={idx}
+                     className="p-4 bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-sm space-y-3"
+                   >
+                     <div className="flex items-start justify-between gap-2">
+                       <div>
+                         <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                           {order.product_name}
+                         </h3>
+                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                           Buyer: <span className="font-medium text-slate-700 dark:text-slate-300">{order.buyer_name}</span>
+                         </p>
+                       </div>
+                       <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 shrink-0">
+                         {order.alphanumeric_code || order.batch_code}
+                       </span>
+                     </div>
+
+                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                       <div>
+                         <span className="text-xs text-slate-400 block font-medium">Quantity</span>
+                         <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                           {order.quantity_crates} Crates
+                         </span>
+                       </div>
+                       <div className="text-right">
+                         <span className="text-xs text-slate-400 block font-medium">Total Amount</span>
+                         <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                           ₹{order.total_amount.toLocaleString('en-IN')}
+                         </span>
+                       </div>
+                     </div>
+
+                     <div className="text-[11px] text-slate-400 dark:text-slate-500 pt-1">
+                       Dispatched: {new Date(order.dispatch_date).toLocaleDateString()}
+                     </div>
+                   </div>
+                 ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b border-slate-100 dark:border-slate-800">
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Crate Code</th>
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Product</th>
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Quantity</th>
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Buyer</th>
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs">Dispatch Date</th>
+                           <th className="px-6 py-4 text-slate-400 font-semibold uppercase tracking-wider text-xs text-right">Total Amount</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                        {orders.map((order, idx) => (
+                            <tr key={idx} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                <td className="px-6 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white">{order.alphanumeric_code || order.batch_code}</td>
+                                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{order.product_name}</td>
+                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.quantity_crates} Crates</td>
+                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{order.buyer_name}</td>
+                                <td className="px-6 py-4 text-slate-500">{new Date(order.dispatch_date).toLocaleDateString()}</td>
+                                <td className="px-6 py-4 text-right font-bold text-emerald-600">₹{order.total_amount.toLocaleString('en-IN')}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                 </table>
+              </div>
           </Card>
       )}
 
       {/* TWO-STEP CREATE ORDER MODAL */}
       {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !submitting && setIsModalOpen(false)}></div>
               
-              <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+              <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[94vh] sm:max-h-[90vh] flex flex-col">
                   <div className="sticky top-0 flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 z-10 shrink-0">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2 bg-indigo-600 rounded-lg flex-shrink-0">
@@ -539,7 +582,7 @@ const FarmerOrders: React.FC = () => {
                               </div>
 
                               {/* SORT OPTIONS */}
-                              <div className="flex gap-2">
+                              <div className="flex flex-col sm:flex-row gap-2">
                                   <button
                                       type="button"
                                       onClick={() => setSortBy('expiry')}

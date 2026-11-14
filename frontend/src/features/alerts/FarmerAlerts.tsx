@@ -103,7 +103,7 @@ const FarmerAlerts: React.FC = () => {
        <div className="flex items-center gap-3 mb-8">
          <Bell className="w-8 h-8 text-blue-500" />
          <div>
-           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Active Alerts Tracking</h1>
+           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Active Alerts Tracking</h1>
          </div>
       </div>
       
@@ -149,13 +149,13 @@ const FarmerAlerts: React.FC = () => {
 
                return (
                    <Card key={al.id} className={`${borderCls} ${bgCls} shadow-sm`}>
-                      <CardContent className="p-6 flex items-start gap-4">
+                      <CardContent className="p-4 sm:p-6 flex items-start gap-3 sm:gap-4">
                           <div className={`p-3 rounded-full bg-white dark:bg-slate-800 shadow-sm shrink-0 ${iconCls}`}>
                               <Icon className="w-6 h-6" />
                           </div>
                           <div className="flex-1">
-                              <div className="flex justify-between items-start mb-1">
-                                  <h3 className={`text-lg font-bold ${textCls}`}>{al.title}</h3>
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 mb-1">
+                                  <h3 className={`text-base sm:text-lg font-bold ${textCls}`}>{al.title}</h3>
                                   <div className="flex items-center gap-2">
                                     {al.is_acknowledged && (
                                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">

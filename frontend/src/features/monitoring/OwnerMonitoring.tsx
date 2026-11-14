@@ -447,10 +447,10 @@ const OwnerMonitoring: React.FC = () => {
   }
 
   return (
-    <div className="p-8 max-w-[1400px] mx-auto min-h-screen">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-screen">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
             {siteName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">

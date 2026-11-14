@@ -14,11 +14,22 @@ export const SystmIcon: React.FC<{ size?: number; className?: string }> = ({ siz
       style={{ width: size, height: size }}
       className={`relative inline-flex items-center justify-center flex-shrink-0 group ${className}`}
     >
-      <img
-        src="/systm-logo-mark.png"
-        alt="SystmII Logo"
-        className="w-full h-full object-contain filter drop-shadow-[0_1px_1px_rgba(0,0,0,0.06)] dark:brightness-200 dark:invert transition-transform duration-200 group-hover:scale-105"
-      />
+      <svg
+        viewBox="0 0 264 336"
+        className="w-full h-full object-contain filter drop-shadow-[0_1px_1px_rgba(0,0,0,0.06)] text-[#2a170f] dark:text-white transition-transform duration-200 group-hover:scale-105"
+        fill="currentColor"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-label="SystmII Logo"
+      >
+        {/* Top Hook */}
+        <path d="M 72 0 L 264 0 L 210 72 L 88 72 L 80 80 L 80 220 L 72 228 L 0 156 L 0 72 Z" />
+        
+        {/* Center Capsule */}
+        <rect x="104" y="96" width="56" height="144" rx="16" ry="16" />
+        
+        {/* Bottom Hook */}
+        <path d="M 192 336 L 0 336 L 54 264 L 176 264 L 184 256 L 184 116 L 192 108 L 264 180 L 264 264 Z" />
+      </svg>
     </div>
   );
 };
@@ -41,20 +52,21 @@ export const SystmLogo: React.FC<SystmLogoProps> = ({
   // PROMINENT HEADER variant: Perfectly aligned logo, title, and enlarged 1ACCORD partner mark
   if (variant === 'prominent-header') {
     return (
-      <div className={`flex items-center gap-3.5 my-auto ${className}`}>
-        <SystmIcon size={iconSize || 42} className="hover:scale-105 transition-transform duration-200" />
+      <div className={`flex items-center gap-2 sm:gap-3.5 my-auto ${className}`}>
+        <SystmIcon size={iconSize ? Math.min(iconSize, 30) : 30} className="sm:hidden hover:scale-105 transition-transform duration-200" />
+        <SystmIcon size={iconSize || 42} className="hidden sm:inline-flex hover:scale-105 transition-transform duration-200" />
 
-        <div className="flex items-center gap-3">
-          <span className="font-extrabold text-2xl sm:text-[26px] tracking-tight text-gray-900 dark:text-white leading-none select-none">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="font-extrabold text-lg sm:text-[26px] tracking-tight text-gray-900 dark:text-white leading-none select-none">
             SystmII
           </span>
 
           {showCompanyLogo && (
-            <span className="inline-flex items-center pl-3 border-l-2 border-gray-200 dark:border-slate-700">
+            <span className="inline-flex items-center pl-2 sm:pl-3 border-l-2 border-gray-200 dark:border-slate-700">
               <img
                 src="/company-logo.png"
                 alt="1ACCORD"
-                className="h-8 sm:h-9 w-auto object-contain"
+                className="h-6 sm:h-9 w-auto object-contain"
               />
             </span>
           )}
