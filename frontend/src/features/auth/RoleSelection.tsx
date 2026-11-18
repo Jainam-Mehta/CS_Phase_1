@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { SystmLogo } from '../../components/common/SystmLogo';
+import { SystmLogo, SystmIcon } from '../../components/common/SystmLogo';
 import { PartnerLogos } from '../../components/common/PartnerLogos';
 import { Sprout, Building2, TrendingUp } from 'lucide-react';
 
@@ -71,15 +71,63 @@ const RoleSelection: React.FC = () => {
       />
 
       {/* Clean Header Bar */}
-      <header className="relative w-full h-[64px] sm:h-[68px] px-3 sm:px-6 lg:px-12 flex items-center justify-between z-30 bg-white border-b border-gray-200/80 shadow-sm shrink-0">
-        {/* Left: New Finalized Logo */}
-        <div className="flex items-center h-full">
-          <SystmLogo variant="prominent-header" iconSize={44} showCompanyLogo={true} />
+      <header className="relative w-full h-[64px] sm:h-[68px] md:h-[76px] px-3 sm:px-6 lg:px-12 flex items-center justify-between z-30 bg-white border-b border-gray-200/80 shadow-sm shrink-0">
+        {/* Mobile View: Standard Compact Header */}
+        <div className="flex md:hidden items-center justify-between w-full h-full">
+          <SystmLogo variant="prominent-header" iconSize={38} showCompanyLogo={true} />
+          <PartnerLogos theme="light" prominent={true} />
         </div>
 
-        {/* Right: Partners */}
-        <div className="flex items-center h-full">
-          <PartnerLogos theme="light" prominent={true} />
+        {/* Desktop View (Role Selection Only): Prominently Scaled Logos (+1.5cm) */}
+        <div className="hidden md:flex items-center justify-between w-full h-full">
+          {/* Left: Enlarged SystmII + 1ACCORD */}
+          <div className="flex items-center gap-4 my-auto">
+            <SystmIcon size={48} className="hover:scale-105 transition-transform duration-200" />
+            <div className="flex items-center gap-3.5">
+              <span className="font-extrabold text-[28px] tracking-tight text-gray-900 leading-none select-none">
+                SystmII
+              </span>
+              <span className="inline-flex items-center pl-3.5 border-l-2 border-gray-200">
+                <img
+                  src="/company-logo.png"
+                  alt="1ACCORD"
+                  className="h-11 w-auto object-contain hover:scale-105 transition-transform duration-200"
+                />
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Enlarged CoolCrop + GIZ + PARTNERS */}
+          <div className="inline-flex items-center gap-4 my-auto" title="Strategic Technology Partners: CoolCrop & GIZ">
+            {/* CoolCrop Logo */}
+            <div className="flex items-center justify-center flex-shrink-0 group">
+              <img
+                src="/coolcrop-logo.png"
+                alt="CoolCrop"
+                className="h-[48px] w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+              />
+            </div>
+
+            {/* Divider */}
+            <span className="h-7 w-px bg-gray-200 select-none" />
+
+            {/* GIZ Logo */}
+            <div className="flex items-center justify-center flex-shrink-0 group">
+              <img
+                src="/giz-logo.png"
+                alt="GIZ"
+                className="h-[46px] w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+              />
+            </div>
+
+            {/* Divider */}
+            <span className="h-7 w-px bg-gray-200 select-none" />
+
+            {/* PARTNERS in Black */}
+            <span className="text-xs font-extrabold uppercase tracking-widest text-black select-none">
+              PARTNERS
+            </span>
+          </div>
         </div>
       </header>
 
@@ -136,22 +184,17 @@ const RoleSelection: React.FC = () => {
           })}
         </div>
 
-        {/* Support Link & Powered by 1Accord Brand Badge */}
-        <div className="flex flex-col items-center gap-2 sm:gap-2.5">
+        {/* Support Link */}
+        <div className="flex flex-col items-center">
           <p className="text-xs text-gray-500">
-            Need help? <a href="#" className="underline hover:text-gray-800 transition-colors">Contact support</a>
+            Need help? Contact support:{' '}
+            <a
+              href="mailto:contact@1accord.in"
+              className="font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 underline transition-colors"
+            >
+              contact@1accord.in
+            </a>
           </p>
-
-          <div className="inline-flex items-center gap-2.5 px-4 py-1 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-gray-200/90 dark:border-slate-700 shadow-sm transition-all hover:shadow hover:border-gray-300">
-            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 select-none">
-              Powered by
-            </span>
-            <img
-              src="/company-logo.png"
-              alt="1Accord Technologies"
-              className="h-5 sm:h-6 w-auto object-contain"
-            />
-          </div>
         </div>
       </main>
 
