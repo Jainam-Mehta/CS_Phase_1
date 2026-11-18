@@ -34,6 +34,8 @@ def _int_env(key: str, default: int) -> int:
 MQTT_BROKER: str = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT: int = _int_env("MQTT_PORT", 1883)        # safe — no crash on missing/bad value
 MQTT_TOPIC: str = os.getenv("MQTT_TOPIC", "coldsense/sensors")
+MQTT_USER: str = os.getenv("MQTT_USER", "")
+MQTT_PASSWORD: str = os.getenv("MQTT_PASSWORD", "")
 
 # ── Supabase Configuration ────────────────────────────────────────────────────
 SUPABASE_URL: str = _require("SUPABASE_URL")

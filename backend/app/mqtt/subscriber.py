@@ -1,16 +1,14 @@
 """
-ColdSense MQTT Subscriber - NEW ARCHITECTURE
-Topic Formats Supported:
-1. General: coldsense/{gateway}/{location_code}/{site_code}/{room_code}
-   Example: coldsense/gw1/MHNKIGP01/S01/R01
-   
-2. Gateway-Specific with Details: cdsense/{gateway}/{location_code}/{site_code}/{room_code}
-   Example: cdsense/gw1/MHNKIGP01/S01/R01
-   (Uses 'cdsense' prefix for this specific gateway)
-
-3. Gateway-Specific Simplified: cdsense/{site_code}/{room_code}
-   Example: cdsense/S01/R01
-   (Uses 'gw-default' as gateway_id when specific gateway not in topic)
+ColdSense MQTT Subscriber - UNIVERSAL TOPIC FORMAT
+Topic Format Supported:
+CS/{gateway}/{pincode}/{site_code}/{room_code}
+  Example: CS/gw1/110001/s001/r001
+  
+Flow:
+1. Parse topic components
+2. Look up locality by pincode to get location_code
+3. Resolve s001 → site_uuid, r001 → room_uuid using sensor_location_mapping
+4. Process aggregated device array
 
 Payload: Aggregated message with ALL room sensors:
 {
@@ -27,12 +25,12 @@ Payload: Aggregated message with ALL room sensors:
 }
 
 KEY CHANGES:
-1. Parse codes (S01, R01) from topic and resolve to UUIDs
-2. Process aggregated device array (not separate topics per sensor)
-3. Track slave_id for each reading to prevent consolidation
-4. Update sensor_devices with slave_id filter (not blanket updates)
-5. Support gateway-specific topic names (coldsense, cdsense, or both)
-6. Flexible parsing: supports both full and simplified gateway topic formats
+1. New universal topic format: CS/{gateway}/{pincode}/{site_code}/{room_code}
+2. Site codes now lowercase with 3-digit padding: s001, s002, s003, etc.
+3. Room codes now lowercase with 3-digit padding: r001, r002, r003, etc.
+4. Pincode lookup from localities table for geographic reference
+5. Flexible gateway assignment per site
+6. Aggregated device processing with slave_id tracking
 """
 
 import json
@@ -60,20 +58,20 @@ class Color:
     END = '\033[0m'
 
 
-SUBSCRIBE_TOPICS = ["coldsense/#", "cdsense/#"]
+SUBSCRIBE_TOPICS = ["CS/#", "cs/#"]
 
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        msg = f"✓ MQTT connected to {MQTT_BROKER}:{MQTT_PORT}"
+        msg = f"MQTT connected to {MQTT_BROKER}:{MQTT_PORT}"
         logger.info(msg)
         print(f"\n{Color.GREEN}{msg}{Color.END}")
         for topic in SUBSCRIBE_TOPICS:
             client.subscribe(topic)
-        print(f"{Color.GREEN}✓ Subscribed to: {', '.join(SUBSCRIBE_TOPICS)}{Color.END}\n")
+        print(f"{Color.GREEN}Subscribed to: {', '.join(SUBSCRIBE_TOPICS)}{Color.END}\n")
     else:
-        logger.error("✗ MQTT connection failed: rc=%s", rc)
-        print(f"{Color.RED}✗ Connection failed: {rc}{Color.END}")
+        logger.error("MQTT connection failed: rc=%s", rc)
+        print(f"{Color.RED}Connection failed: {rc}{Color.END}")
 
 
 def on_disconnect(client, userdata, rc):
@@ -98,8 +96,7 @@ def on_message(client, userdata, msg):
         payload_raw = msg.payload.decode()
         timestamp_received = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         
-        print(f"\n{Color.BOLD}{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}")
-        print(f"{Color.GREEN}📨 MQTT MESSAGE RECEIVED{Color.END} [{timestamp_received}]")
+        print(f"\n{Color.BOLD}{Color.CYAN}MQTT MESSAGE RECEIVED{Color.END} [{timestamp_received}]")
         print(f"{Color.CYAN}Topic: {topic}{Color.END}")
         
         # Parse JSON payload
@@ -111,54 +108,63 @@ def on_message(client, userdata, msg):
             return
         
         print(f"{Color.BLUE}Payload structure:{Color.END}")
-        print(f"  - Timestamp: {payload.get('TS')}")
-        print(f"  - Firmware: {payload.get('fver')}")
-        print(f"  - Signal: {payload.get('SS')} dBm")
-        print(f"  - Devices: {len(payload.get('device', []))} found")
+        print(f"Timestamp: {payload.get('TS')}")
+        print(f"Firmware: {payload.get('fver')}")
+        print(f"Signal: {payload.get('SS')} dBm")
+        print(f"Devices: {len(payload.get('device', []))} found")
         
         # ─── STEP 1: PARSE TOPIC FORMAT ──────────────────────────────────
-        # Supports THREE formats:
-        # 1. coldsense/{gateway}/{location_code}/{site_code}/{room_code}
-        #    Example: coldsense/gw1/MHNKIGP01/S01/R01
-        # 2. cdsense/{gateway}/{location_code}/{site_code}/{room_code}
-        #    Example: cdsense/gw1/MHNKIGP01/S01/R01 (gateway-specific prefix)
-        # 3. cdsense/{site_code}/{room_code}
-        #    Example: cdsense/S01/R01 (uses 'gw-default' as gateway_id)
+        # Universal format: CS/{gateway}/{pincode}/{site_code}/{room_code}
+        # Example: CS/gw1/110001/s001/r001
+        # Parts: [CS, gw1, 110001, s001, r001]
         
         parts = topic.split("/")
         topic_prefix = parts[0] if parts else ""
         
-        # Determine topic format
-        if (topic_prefix == "coldsense" or topic_prefix == "cdsense") and len(parts) == 5:
-            # Format 1 or 2: Full topic with gateway and location_code
-            gateway_id = parts[1]           # gw1
-            location_code = parts[2]        # MHNKIGP01
-            site_code = parts[3]            # S01
-            room_code = parts[4]            # R01
-            logger.info("✓ Parsed %s topic (full): gw=%s, location=%s, site_code=%s, room_code=%s",
-                       topic_prefix, gateway_id, location_code, site_code, room_code)
-        elif topic_prefix == "cdsense" and len(parts) == 3:
-            # Format 3: Gateway-specific topic (simplified, no gateway/location in topic)
-            site_code = parts[1]            # S01
-            room_code = parts[2]            # R01
-            gateway_id = "gw-default"       # Default gateway identifier
-            location_code = "DEFAULT"       # Generic location code
-            logger.info("✓ Parsed cdsense topic (gateway-specific simplified): site_code=%s, room_code=%s",
-                       site_code, room_code)
+        # Validate topic format
+        if (topic_prefix.upper() == "CS") and len(parts) == 5:
+            # Valid format: CS/gw1/110001/s001/r001
+            gateway_id = parts[1].lower()           # gw1
+            pincode = parts[2]                      # 110001
+            site_code = parts[3].lower()            # s001
+            room_code = parts[4].lower()            # r001
+            logger.info("✓ Parsed universal topic: gw=%s, pincode=%s, site_code=%s, room_code=%s",
+                       gateway_id, pincode, site_code, room_code)
         else:
-            logger.warning("Invalid topic format: %s (expected: [coldsense|cdsense]/gw/loc/site/room or cdsense/site/room)", topic)
-            print(f"{Color.RED}✗ Invalid topic format: {topic}{Color.END}")
+            logger.warning("Invalid topic format: %s (expected: CS/{gw}/{pincode}/{site_code}/{room_code})", topic)
+            print(f"{Color.RED}Invalid topic format: {topic}{Color.END}")
+            print(f"{Color.YELLOW}Expected: CS/gw1/110001/s001/r001{Color.END}")
             return
         
-        print(f"{Color.GREEN}✓ Parsed topic components (Gateway: {gateway_id}){Color.END}")
-        print(f"  - Prefix: {topic_prefix}")
-        print(f"  - Site Code: {site_code}")
-        print(f"  - Room Code: {room_code}")
+        print(f"{Color.GREEN}Parsed topic components (Gateway: {gateway_id}){Color.END}")
+        print(f"Pincode: {pincode}")
+        print(f"Site Code: {site_code}")
+        print(f"Room Code: {room_code}")
         
         # ─── STEP 2: RESOLVE CODES TO UUIDs ──────────────────────────────
-        # Use sensor_location_mapping table to convert S01→uuid, R01→uuid
+        # Step 2a: Look up locality by pincode to get location reference
+        # Step 2b: Use sensor_location_mapping to convert site_code→site_uuid, room_code→room_uuid
         
-        # Resolve site_code to site_id
+        # Step 2a: Get location_code from pincode lookup (for reference)
+        try:
+            locality_lookup = supabase.table("localities") \
+                .select("id, name") \
+                .eq("pincode", pincode) \
+                .limit(1) \
+                .execute()
+            
+            if locality_lookup.data:
+                location_name = locality_lookup.data[0]["name"]
+                logger.info("Pincode %s resolved to locality: %s", pincode, location_name)
+                print(f"{Color.GREEN}Pincode to Location: {location_name}{Color.END}")
+            else:
+                logger.warning("Pincode %s not found in localities table", pincode)
+                location_name = "UNKNOWN"
+        except Exception as e:
+            logger.warning("Could not lookup pincode %s: %s", pincode, e)
+            location_name = "UNKNOWN"
+        
+        # Step 2b: Resolve site_code to site_id using sensor_location_mapping
         site_mapping = supabase.table("sensor_location_mapping") \
             .select("mapped_entity_id") \
             .eq("location_code", site_code) \
@@ -167,14 +173,14 @@ def on_message(client, userdata, msg):
             .execute()
         
         if not site_mapping.data:
-            logger.error("❌ Site code '%s' not found in sensor_location_mapping", site_code)
-            print(f"{Color.RED}✗ Site code {site_code} not mapped{Color.END}")
-            print(f"{Color.YELLOW}  Run setup script to add mapping{Color.END}")
+            logger.error("Site code '%s' not found in sensor_location_mapping", site_code)
+            print(f"{Color.RED}Site code {site_code} not mapped{Color.END}")
+            print(f"{Color.YELLOW}Please create site in the app or run setup script{Color.END}")
             return
         
         site_id = site_mapping.data[0]["mapped_entity_id"]
         
-        # Resolve room_code to room_id
+        # Step 2c: Resolve room_code to room_id
         room_mapping = supabase.table("sensor_location_mapping") \
             .select("mapped_entity_id") \
             .eq("site_id", site_id) \
@@ -184,31 +190,31 @@ def on_message(client, userdata, msg):
             .execute()
         
         if not room_mapping.data:
-            logger.error("❌ Room code '%s' not found for site '%s'", room_code, site_id)
-            print(f"{Color.RED}✗ Room code {room_code} not mapped for site{Color.END}")
+            logger.error("Room code '%s' not found for site '%s'", room_code, site_id)
+            print(f"{Color.RED}Room code {room_code} not mapped for site{Color.END}")
             return
         
         room_id = room_mapping.data[0]["mapped_entity_id"]
         
-        logger.info("✓ Resolved: site_id=%s (from %s), room_id=%s (from %s)",
+        logger.info("Resolved: site_id=%s (from %s), room_id=%s (from %s)",
                    site_id, site_code, room_id, room_code)
-        print(f"{Color.GREEN}✓ Resolved codes to UUIDs{Color.END}")
-        print(f"  - {site_code} → {site_id}")
-        print(f"  - {room_code} → {room_id}")
+        print(f"{Color.GREEN}Resolved codes to UUIDs{Color.END}")
+        print(f"{site_code} to {site_id}")
+        print(f"{room_code} to {room_id}")
         
         # ─── STEP 3: PROCESS AGGREGATED PAYLOAD ──────────────────────────
         # Payload structure: {"device": [{"id": 1, "slave_id": 1, "data": {...}}, ...]}
         
         if "device" not in payload or not isinstance(payload["device"], list):
             logger.warning("Invalid payload: missing 'device' array")
-            print(f"{Color.RED}✗ Payload missing 'device' array{Color.END}")
+            print(f"{Color.RED}Payload missing 'device' array{Color.END}")
             return
         
         timestamp = datetime.now(timezone.utc).isoformat()
         devices = payload["device"]
         total_sensors = 0
         
-        print(f"\n{Color.BLUE}Processing {len(devices)} device(s):{Color.END}")
+        print(f"\nProcessing {len(devices)} device(s):")
         
         # Process each device in the aggregated array
         for device_obj in devices:
@@ -221,7 +227,7 @@ def on_message(client, userdata, msg):
                 continue
             
             logger.debug("Processing device_id=%s, slave_id=%s", device_id, slave_id)
-            print(f"  • Device {device_id} (Slave {slave_id}): {len(data)} sensors")
+            print(f"Device {device_id} (Slave {slave_id}): {len(data)} sensors")
             
             # ─── STEP 4: PROCESS EACH SENSOR IN THIS DEVICE ───────────────
             # data = {"Temp1": "25.5", "Humidity1": "65.0"} OR 
@@ -339,13 +345,12 @@ def on_message(client, userdata, msg):
         except Exception as e:
             logger.warning("Failed to update gateway: %s", e)
         
-        logger.info("✓ Processed %d total sensors from aggregated payload", total_sensors)
-        print(f"\n{Color.GREEN}✓ Successfully processed {total_sensors} sensors{Color.END}")
-        print(f"{Color.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Color.END}\n")
+        logger.info("Processed %d total sensors from aggregated payload", total_sensors)
+        print(f"\nSuccessfully processed {total_sensors} sensors\n")
         
     except Exception as e:
-        logger.exception("✗ Unhandled error in on_message: %s", e)
-        print(f"{Color.RED}✗ Error: {e}{Color.END}")
+        logger.exception("Unhandled error in on_message: %s", e)
+        print(f"{Color.RED}Error: {e}{Color.END}")
 
 
 def _map_mqtt_key_to_sensor(mqtt_key: str) -> tuple:
@@ -494,14 +499,12 @@ def _process_single_sensor(
             now = datetime.now(timezone.utc).isoformat()
             try:
                 supabase.table("sensor_devices").update({
-                    "last_reading": now,
-                    "last_seen": now,
                     "last_reading_value": value,
                     "last_reading_unit": unit,
-                    "status": "Online",
+                    "last_seen": now,
                 }).eq("id", sensor_device_id).execute()
                 
-                logger.debug("✓ Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
+                logger.debug("Updated sensor_device %s: %s%s", sensor_device_id, value, unit)
             except Exception as e:
                 logger.warning("Error updating sensor_device: %s", e)
         
@@ -509,8 +512,8 @@ def _process_single_sensor(
         if sensor_device_id:
             try:
                 supabase.table("sensor_readings").insert({
-                    "room_sensor_id": sensor_device_id,
                     "sensor_id": sensor_device_id,
+                    "room_id": room_id,
                     "reading_value": value,
                     "unit": unit,
                     "recorded_at": timestamp,
@@ -528,30 +531,29 @@ def _process_single_sensor(
             condition_data = {
                 "room_id": room_id,
                 "site_id": site_id,
-                "gateway_id": gateway_id,
-                "sensor_id": sensor_device_id,
-                "slave_id": slave_id,
-                "reading_source": f"{sensor_type}_{sensor_number}" if sensor_number else sensor_type,
-                "sensor_type": sensor_type,
                 "recorded_at": timestamp,
             }
             
-            # Map value to appropriate column based on type
-            if sensor_type.lower() == 'temperature':
-                condition_data["temperature"] = value
-            elif sensor_type.lower() == 'humidity':
-                condition_data["humidity"] = value
-            elif sensor_type.lower() == 'door':
-                condition_data["door_status"] = str(value)
-            elif sensor_type.lower() == 'suctionpressure':
-                condition_data["pressure_suction"] = value
-            elif sensor_type.lower() == 'dischargepressure':
-                condition_data["pressure_discharge"] = value
+            # Map value to appropriate column based on type and sensor number
+            # Only insert columns that exist in schema, skip unknown sensors
+            if sensor_type.lower() == 'temperature' and sensor_number:
+                condition_data[f"temperature_{sensor_number}"] = value
+            elif sensor_type.lower() == 'humidity' and sensor_number:
+                condition_data[f"humidity_{sensor_number}"] = value
+            elif sensor_type.lower() == 'door_status' or (sensor_type.lower() == 'door' and sensor_number):
+                condition_data[f"door_status_{sensor_number}"] = str(value)
+            elif sensor_type.lower() == 'suction_pressure':
+                condition_data["suction_pressure"] = value
+            elif sensor_type.lower() == 'discharge_pressure':
+                condition_data["discharge_pressure"] = value
+            else:
+                # Skip unmapped sensor types (oxygen, co2, etc. if not in schema)
+                logger.debug("Skipping unmapped sensor type for cold_storage_conditions: %s", sensor_type)
+                return
             
             supabase.table("cold_storage_conditions").insert(condition_data).execute()
             
-            logger.info("✓ Stored in cold_storage_conditions: %s=%s%s (slave_id=%s)",
-                       sensor_type, value, unit, slave_id)
+            logger.info("Stored in cold_storage_conditions: %s=%s%s", sensor_type, value, unit)
         except Exception as e:
             logger.warning("Error storing cold_storage_conditions: %s", e)
         
@@ -560,6 +562,8 @@ def _process_single_sensor(
 
 
 def _build_client() -> mqtt.Client:
+    from app.config import MQTT_USER, MQTT_PASSWORD
+    
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
         client_id="ColdSense_Subscriber"
@@ -568,6 +572,11 @@ def _build_client() -> mqtt.Client:
     client.on_disconnect = on_disconnect
     client.on_message = on_message
     client.reconnect_delay_set(min_delay=5, max_delay=30)
+    
+    # Set username and password if provided
+    if MQTT_USER and MQTT_PASSWORD:
+        client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+    
     return client
 
 
@@ -595,19 +604,19 @@ if __name__ == "__main__":
     )
     print(f"\n{Color.BOLD}{Color.CYAN}")
     print("=" * 60)
-    print("ColdSense MQTT Subscriber (NEW ARCHITECTURE)")
+    print("ColdSense MQTT Subscriber")
     print("=" * 60)
     print(f"{Color.END}")
     print(f"{Color.BLUE}Broker: {MQTT_BROKER}:{MQTT_PORT}{Color.END}")
-    print(f"{Color.BLUE}Topic:  {SUBSCRIBE_TOPIC}{Color.END}\n")
+    print(f"{Color.BLUE}Topics: {', '.join(SUBSCRIBE_TOPICS)}{Color.END}\n")
     
     client = _build_client()
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
-        print(f"{Color.GREEN}✓ Connected. Listening...{Color.END}\n")
+        print(f"{Color.GREEN}Connected. Listening...{Color.END}\n")
         client.loop_forever()
     except KeyboardInterrupt:
-        print(f"\n{Color.YELLOW}🛑 Stopped by user{Color.END}")
+        print(f"\nStopped by user")
     except Exception as e:
-        print(f"{Color.RED}❌ Error: {e}{Color.END}")
+        print(f"{Color.RED}Error: {e}{Color.END}")
         sys.exit(1)
