@@ -96,24 +96,24 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         print(f"📅 [AVERAGING ENDPOINT] Cutoff time (last {minutes}min): {cutoff_time}")
         
         # Query cold_storage_conditions for temperature readings in the last N minutes
+        # Note: Schema uses sparse columns: temperature_1, temperature_2, temperature_3, temperature_4
         print(f"🌡️  [AVERAGING ENDPOINT] Querying temperature readings...")
         temp_resp = (
             supabase.table("cold_storage_conditions")
-            .select("temperature, slave_id, recorded_at")
+            .select("temperature_1, temperature_2, temperature_3, temperature_4, recorded_at")
             .eq("room_id", room_id)
-            .not_("temperature", "is", None)
             .gte("recorded_at", cutoff_time)
             .order("recorded_at", descending=True)
             .execute()
         )
         
         # Query humidity readings
+        # Note: Schema uses sparse columns: humidity_1, humidity_2, humidity_3, humidity_4
         print(f"💧 [AVERAGING ENDPOINT] Querying humidity readings...")
         humidity_resp = (
             supabase.table("cold_storage_conditions")
-            .select("humidity, slave_id, recorded_at")
+            .select("humidity_1, humidity_2, humidity_3, humidity_4, recorded_at")
             .eq("room_id", room_id)
-            .not_("humidity", "is", None)
             .gte("recorded_at", cutoff_time)
             .order("recorded_at", descending=True)
             .execute()
@@ -136,20 +136,20 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         
         if temp_data:
             temps = []
-            for i, t in enumerate(temp_data):
-                if t["temperature"] is not None:
-                    raw_val = float(t["temperature"])
-                    # Normalize sensor readings: convert to 2 decimal places
-                    # 4-digit (1206) -> 12.06, 3-digit (206) -> 2.06
-                    if raw_val > 100:
-                        # 4-digit format: divide by 100
-                        normalized = raw_val / 100.0
-                    else:
-                        # 3-digit or less format: divide by 100
-                        normalized = raw_val / 100.0
-                    temps.append(normalized)
-                    if i < 3:
-                        print(f"   Temp[{i}]: raw={raw_val} -> normalized={normalized} (slave_id={t.get('slave_id')})")
+            for record in temp_data:
+                # Extract all temperature columns and average them
+                temp_values = [
+                    float(record["temperature_1"]) 
+                    for col in ["temperature_1", "temperature_2", "temperature_3", "temperature_4"]
+                    if record.get(col) is not None
+                ]
+                # Get individual temp sensors from this record
+                for col in ["temperature_1", "temperature_2", "temperature_3", "temperature_4"]:
+                    if record.get(col) is not None:
+                        raw_val = float(record[col])
+                        # Values already scaled by MQTT subscriber (multiplied by 0.01)
+                        # so they should already be in correct range (e.g., 12.3°C not 1230)
+                        temps.append(raw_val)
             
             if temps:
                 avg_temperature = sum(temps) / len(temps)
@@ -160,20 +160,14 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
         
         if humidity_data:
             humidities = []
-            for i, h in enumerate(humidity_data):
-                if h["humidity"] is not None:
-                    raw_val = float(h["humidity"])
-                    # Normalize sensor readings: convert to 2 decimal places
-                    # 4-digit (6000) -> 60.00, 3-digit (600) -> 6.00
-                    if raw_val > 100:
-                        # 4-digit format: divide by 100
-                        normalized = raw_val / 100.0
-                    else:
-                        # 3-digit or less format: divide by 100
-                        normalized = raw_val / 100.0
-                    humidities.append(normalized)
-                    if i < 3:
-                        print(f"   Hum[{i}]: raw={raw_val} -> normalized={normalized} (slave_id={h.get('slave_id')})")
+            for record in humidity_data:
+                # Extract all humidity columns
+                for col in ["humidity_1", "humidity_2", "humidity_3", "humidity_4"]:
+                    if record.get(col) is not None:
+                        raw_val = float(record[col])
+                        # Values already scaled by MQTT subscriber (multiplied by 0.01)
+                        # so they should already be in correct range (e.g., 56.7% not 5670)
+                        humidities.append(raw_val)
             
             if humidities:
                 avg_humidity = sum(humidities) / len(humidities)
@@ -184,10 +178,18 @@ async def get_room_sensor_averages(room_id: str, minutes: int = Query(5, ge=1, l
                 print(f"⚠️  [AVERAGING ENDPOINT] No valid humidity readings found")
         
         # Count unique sensors
-        unique_temp_sensors = len(set(t["slave_id"] for t in temp_data if t["slave_id"] is not None))
-        unique_humidity_sensors = len(set(h["slave_id"] for h in humidity_data if h["slave_id"] is not None))
+        temp_sensor_count = 0
+        humidity_sensor_count = 0
+        for record in temp_data:
+            for col in ["temperature_1", "temperature_2", "temperature_3", "temperature_4"]:
+                if record.get(col) is not None:
+                    temp_sensor_count += 1
+        for record in humidity_data:
+            for col in ["humidity_1", "humidity_2", "humidity_3", "humidity_4"]:
+                if record.get(col) is not None:
+                    humidity_sensor_count += 1
         
-        print(f"📡 [AVERAGING ENDPOINT] Unique sensors: {unique_temp_sensors} temp, {unique_humidity_sensors} humidity")
+        print(f"📡 [AVERAGING ENDPOINT] Unique sensors: {temp_sensor_count} temp, {humidity_sensor_count} humidity")
         
         # Helper function to trim trailing zeros and unnecessary decimals
         def trim_float(value):

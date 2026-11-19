@@ -336,10 +336,13 @@ function FarmerDashboardCore() {
         }
 
         // Fetch temperature history for chart - get ALL temperature sensors
+        // Query only the last hour to ensure we get properly scaled recent data
+        const oneHourAgo = new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
         const { data: tempHistory, error: tempHistError } = await supabase
           .from('cold_storage_conditions')
-          .select('temperature_1, temperature_2, temperature_3, temperature_4, recorded_at')
+          .select('temperature_1, temperature_2, temperature_3, temperature_4, humidity_1, humidity_2, humidity_3, humidity_4, recorded_at')
           .eq('room_id', activeRoomId)
+          .gte('recorded_at', oneHourAgo)  // Only last hour - ensures scaled data
           .order('recorded_at', { ascending: true })
           .limit(100);
 
@@ -422,69 +425,38 @@ function FarmerDashboardCore() {
           }
         }
 
-        // Fetch humidity history for chart - get ALL humidity sensors
-        const { data: humHistory, error: humHistError } = await supabase
-          .from('cold_storage_conditions')
-          .select('humidity_1, humidity_2, humidity_3, humidity_4, recorded_at')
-          .eq('room_id', activeRoomId)
-          .order('recorded_at', { ascending: true })
-          .limit(100);
+        // Humidity data is now in the same query as temperature, so no need for separate query
+        // The merge above handles both temperature AND humidity averaging
 
-        console.log('[FarmerDashboard] Humidity history query:', { humHistError, count: humHistory?.length });
-
-        // Merge temperature and humidity data into timeline
+        // Merge temperature and humidity data into single chart dataset
+        // Use same data we just fetched instead of querying twice
         const mergedHistory: any[] = [];
         const timeMap = new Map();
 
         if (tempHistory) {
-          tempHistory.forEach((t: any) => {
-            const utcDate = new Date(t.recorded_at);
-            // Don't manually add timezone offset - timestamp is already correct
+          tempHistory.forEach((record: any) => {
+            const utcDate = new Date(record.recorded_at);
             const time = utcDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             
-            // Average all temperature sensors
-            const temps = [t.temperature_1, t.temperature_2, t.temperature_3, t.temperature_4]
+            // Average all temperature sensors (same logic as gauges)
+            const temps = [record.temperature_1, record.temperature_2, record.temperature_3, record.temperature_4]
               .filter((v: any) => v != null)
               .map((v: any) => parseFloat((v).toFixed(2)));
             const formattedTemp = temps.length > 0 ? (temps.reduce((a: number, b: number) => a + b, 0) / temps.length) : 0;
             
-            const timestamp = utcDate.getTime(); // Use milliseconds for proper sorting
-            timeMap.set(time, { 
-              time, 
-              value: formattedTemp, 
-              humidity: 0,
-              timestamp
-            });
-          });
-        }
-
-        if (humHistory) {
-          humHistory.forEach((h: any) => {
-            const utcDate = new Date(h.recorded_at);
-            // Don't manually add timezone offset - timestamp is already correct
-            const time = utcDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-            
-            // Average all humidity sensors
-            const hums = [h.humidity_1, h.humidity_2, h.humidity_3, h.humidity_4]
+            // Average all humidity sensors (same logic as gauges)
+            const hums = [record.humidity_1, record.humidity_2, record.humidity_3, record.humidity_4]
               .filter((v: any) => v != null)
               .map((v: any) => parseFloat((v).toFixed(2)));
             const formattedHum = hums.length > 0 ? (hums.reduce((a: number, b: number) => a + b, 0) / hums.length) : 0;
             
             const timestamp = utcDate.getTime();
-            if (timeMap.has(time)) {
-              timeMap.get(time).humidity = formattedHum;
-              // Update timestamp if this humidity reading is newer
-              if (timestamp > timeMap.get(time).timestamp) {
-                timeMap.get(time).timestamp = timestamp;
-              }
-            } else {
-              timeMap.set(time, { 
-                time, 
-                value: 0, 
-                humidity: formattedHum,
-                timestamp
-              });
-            }
+            timeMap.set(time, { 
+              time, 
+              value: formattedTemp,
+              humidity: formattedHum,
+              timestamp
+            });
           });
         }
 
@@ -496,6 +468,14 @@ function FarmerDashboardCore() {
 
         if (finalHistory.length > 0) {
           setTemperatureHistory(finalHistory);
+          console.log('[FarmerDashboard] Chart data sample (first 3 points):', finalHistory.slice(0, 3));
+          console.log('[FarmerDashboard] Chart data sample (last 3 points):', finalHistory.slice(-3));
+          console.log('[FarmerDashboard] Temperature min/max:', {
+            tempMin: Math.min(...finalHistory.map(h => h.value || 0)),
+            tempMax: Math.max(...finalHistory.map(h => h.value || 0)),
+            humMin: Math.min(...finalHistory.map(h => h.humidity || 0)),
+            humMax: Math.max(...finalHistory.map(h => h.humidity || 0))
+          });
         }
       } catch (err) {
         console.error('Error loading conditions:', err);
@@ -827,7 +807,7 @@ function FarmerDashboardCore() {
                              <AreaChart data={displayTemperatureHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                                <XAxis dataKey="time" tickFormatter={(t) => t} stroke="#94a3b8" fontSize={11} axisLine={false} tickLine={false} />
-                               <YAxis stroke="#94a3b8" fontSize={11} axisLine={false} tickLine={false} />
+                               <YAxis type="number" stroke="#94a3b8" fontSize={11} axisLine={false} tickLine={false} domain={[0, 35]} />
                                <RechartsTooltip
                                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                />
@@ -847,7 +827,7 @@ function FarmerDashboardCore() {
                              <AreaChart data={displayHumidityHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                                <XAxis dataKey="time" tick={{fontSize: 10}} />
-                               <YAxis tick={{fontSize: 10}} />
+                               <YAxis type="number" tick={{fontSize: 10}} domain={[0, 100]} />
                                <RechartsTooltip />
                                <Area type="monotone" dataKey="value" stroke="#3b82f6" fillOpacity={0.15} fill="#3b82f6" strokeWidth={3} />
                              </AreaChart>

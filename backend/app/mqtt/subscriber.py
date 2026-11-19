@@ -145,42 +145,108 @@ def on_message(client, userdata, msg):
         # Step 2a: Look up locality by pincode to get location reference
         # Step 2b: Use sensor_location_mapping to convert site_code→site_uuid, room_code→room_uuid
         
-        # Step 2a: Get location_code from pincode lookup (for reference)
-        try:
-            locality_lookup = supabase.table("localities") \
-                .select("id, name") \
-                .eq("pincode", pincode) \
-                .limit(1) \
-                .execute()
-            
-            if locality_lookup.data:
-                location_name = locality_lookup.data[0]["name"]
-                logger.info("Pincode %s resolved to locality: %s", pincode, location_name)
-                print(f"{Color.GREEN}Pincode to Location: {location_name}{Color.END}")
-            else:
-                logger.warning("Pincode %s not found in localities table", pincode)
-                location_name = "UNKNOWN"
-        except Exception as e:
-            logger.warning("Could not lookup pincode %s: %s", pincode, e)
-            location_name = "UNKNOWN"
+        # Step 2a: Skip pincode lookup - not needed, just for reference
+        logger.info("Topic parsed: Gateway=%s, Pincode=%s, Site=%s, Room=%s", 
+                   gateway_id, pincode, site_code, room_code)
+        print(f"{Color.GREEN}Parsed topic components (Gateway: {gateway_id}){Color.END}")
+        print(f"Pincode: {pincode}")
+        print(f"Site Code: {site_code}")
+        print(f"Room Code: {room_code}")
         
-        # Step 2b: Resolve site_code to site_id using sensor_location_mapping
+        # Step 2b: Resolve site_code to site_id
+        # Strategy: 
+        # 1. Try sensor_location_mapping first (new format: location_code=s001)
+        # 2. If not found, query all sites for this pincode and match by counter (s001=1st site, s002=2nd, etc.)
+        # 3. Auto-create mapping for next time
+        
+        site_id = None
+        
+        # Try 1: Direct lookup in sensor_location_mapping (new format: s001)
         site_mapping = supabase.table("sensor_location_mapping") \
-            .select("mapped_entity_id") \
+            .select("mapped_entity_id, site_id") \
             .eq("location_code", site_code) \
             .eq("code_type", "site") \
             .limit(1) \
             .execute()
         
-        if not site_mapping.data:
-            logger.error("Site code '%s' not found in sensor_location_mapping", site_code)
-            print(f"{Color.RED}Site code {site_code} not mapped{Color.END}")
-            print(f"{Color.YELLOW}Please create site in the app or run setup script{Color.END}")
+        if site_mapping.data:
+            site_id = site_mapping.data[0]["mapped_entity_id"]
+            logger.info("Found site via sensor_location_mapping: %s", site_id)
+        else:
+            # Try 2: Query sites by pincode, then match by site counter (s001 = 1st site, s002 = 2nd site, etc.)
+            # Extract numeric counter from site_code (e.g., s001 → 1)
+            site_counter = None
+            match = re.search(r'(\d+)', site_code)
+            if match:
+                site_counter = int(match.group(1))  # s001 → 1
+            
+            if site_counter:
+                logger.debug("Extracted site counter from %s: %d", site_code, site_counter)
+                
+                # Query all sites for this pincode, ordered by creation time
+                sites_response = supabase.table("sites") \
+                    .select("id, site_code") \
+                    .ilike("site_code", f"%{pincode}%") \
+                    .order("created_at", desc=False) \
+                    .execute()
+                
+                logger.debug("Found %d sites for pincode %s", len(sites_response.data or []), pincode)
+                
+                if sites_response.data and len(sites_response.data) >= site_counter:
+                    # Get the Nth site (1-indexed)
+                    site_id = sites_response.data[site_counter - 1]["id"]
+                    site_code_in_db = sites_response.data[site_counter - 1]["site_code"]
+                    logger.info("Found site via counter match (position %d): %s (site_code=%s)", 
+                               site_counter, site_id, site_code_in_db)
+                    
+                    # Auto-create the mapping for next time
+                    try:
+                        supabase.table("sensor_location_mapping").insert({
+                            "site_id": site_id,
+                            "location_code": site_code,
+                            "code_type": "site",
+                            "mapped_entity_id": site_id
+                        }).execute()
+                        logger.info("Created sensor_location_mapping entry for site %s", site_code)
+                    except Exception as e:
+                        logger.debug("Mapping already exists or error: %s", e)
+        
+        if not site_id:
+            logger.error("Site code '%s' not found for pincode '%s'", site_code, pincode)
+            print(f"{Color.RED}Site code {site_code} not found for pincode {pincode}{Color.END}")
+            print(f"{Color.YELLOW}Check database: sites with pincode {pincode}{Color.END}")
             return
         
-        site_id = site_mapping.data[0]["mapped_entity_id"]
+        # Verify the site belongs to this pincode (safety check)
+        site_check = supabase.table("sites") \
+            .select("id, locality_id") \
+            .eq("id", site_id) \
+            .limit(1) \
+            .execute()
         
-        # Step 2c: Resolve room_code to room_id
+        if site_check.data:
+            locality_id = site_check.data[0]["locality_id"]
+            # Verify pincode matches
+            locality_check = supabase.table("localities") \
+                .select("pincode") \
+                .eq("id", locality_id) \
+                .limit(1) \
+                .execute()
+            
+            if locality_check.data and locality_check.data[0]["pincode"] != pincode:
+                logger.error("Site %s pincode mismatch: expected %s, got %s", site_id, pincode, locality_check.data[0]["pincode"])
+                print(f"{Color.RED}Pincode mismatch! Site belongs to different pincode{Color.END}")
+                return
+        
+        # Step 2c: Resolve room_code to room_id using the site_id we just got
+        # Strategy:
+        # 1. Try sensor_location_mapping first (new format: location_code=r001)
+        # 2. If not found, query rooms for this site and match by counter (r001=1st room, r002=2nd, etc.)
+        # 3. Auto-create mapping for next time
+        
+        room_id = None
+        
+        # Try 1: Direct lookup in sensor_location_mapping (new format: r001)
         room_mapping = supabase.table("sensor_location_mapping") \
             .select("mapped_entity_id") \
             .eq("site_id", site_id) \
@@ -189,12 +255,52 @@ def on_message(client, userdata, msg):
             .limit(1) \
             .execute()
         
-        if not room_mapping.data:
+        if room_mapping.data:
+            room_id = room_mapping.data[0]["mapped_entity_id"]
+            logger.info("Found room via sensor_location_mapping: %s", room_id)
+        else:
+            # Try 2: Query rooms for this site, then match by counter (r001 = 1st room, r002 = 2nd room, etc.)
+            # Extract numeric counter from room_code (e.g., r001 → 1)
+            room_counter = None
+            match = re.search(r'(\d+)', room_code)
+            if match:
+                room_counter = int(match.group(1))  # r001 → 1, r002 → 2
+            
+            if room_counter:
+                logger.debug("Extracted room counter from %s: %d", room_code, room_counter)
+                
+                # Query all rooms for this site, ordered by creation time
+                rooms_response = supabase.table("cold_storage_rooms") \
+                    .select("id, room_code") \
+                    .eq("site_id", site_id) \
+                    .order("created_at", desc=False) \
+                    .execute()
+                
+                logger.debug("Found %d rooms for site %s", len(rooms_response.data or []), site_id)
+                
+                if rooms_response.data and len(rooms_response.data) >= room_counter:
+                    # Get the Nth room (1-indexed)
+                    room_id = rooms_response.data[room_counter - 1]["id"]
+                    room_code_in_db = rooms_response.data[room_counter - 1]["room_code"]
+                    logger.info("Found room via counter match (position %d): %s (room_code=%s)", 
+                               room_counter, room_id, room_code_in_db)
+                    
+                    # Auto-create the mapping for next time
+                    try:
+                        supabase.table("sensor_location_mapping").insert({
+                            "site_id": site_id,
+                            "location_code": room_code,
+                            "code_type": "room",
+                            "mapped_entity_id": room_id
+                        }).execute()
+                        logger.info("Created sensor_location_mapping entry for room %s", room_code)
+                    except Exception as e:
+                        logger.debug("Mapping already exists or error: %s", e)
+        
+        if not room_id:
             logger.error("Room code '%s' not found for site '%s'", room_code, site_id)
             print(f"{Color.RED}Room code {room_code} not mapped for site{Color.END}")
             return
-        
-        room_id = room_mapping.data[0]["mapped_entity_id"]
         
         logger.info("Resolved: site_id=%s (from %s), room_id=%s (from %s)",
                    site_id, site_code, room_id, room_code)
@@ -202,8 +308,9 @@ def on_message(client, userdata, msg):
         print(f"{site_code} to {site_id}")
         print(f"{room_code} to {room_id}")
         
-        # ─── STEP 3: PROCESS AGGREGATED PAYLOAD ──────────────────────────
-        # Payload structure: {"device": [{"id": 1, "slave_id": 1, "data": {...}}, ...]}
+        # ─── STEP 3: AGGREGATED PAYLOAD PROCESSING ──────────────────────
+        # Collect ALL sensor data from this MQTT message, then insert ONE row into cold_storage_conditions
+        # This ensures sparse columns are properly populated in a single database row per room per timestamp
         
         if "device" not in payload or not isinstance(payload["device"], list):
             logger.warning("Invalid payload: missing 'device' array")
@@ -214,9 +321,18 @@ def on_message(client, userdata, msg):
         devices = payload["device"]
         total_sensors = 0
         
+        # Dictionary to collect all sensor data for this room/timestamp
+        cold_storage_row = {
+            "room_id": room_id,
+            "site_id": site_id,
+            "gateway_id": gateway_id,
+            "recorded_at": timestamp,
+        }
+        
         print(f"\nProcessing {len(devices)} device(s):")
         
-        # Process each device in the aggregated array
+        # ─── STEP 4: COLLECT ALL SENSOR DATA ──────────────────────────────
+        # Pass 1: Process all device sensor data
         for device_obj in devices:
             device_id = device_obj.get("id")
             slave_id = device_obj.get("slave_id")
@@ -229,10 +345,6 @@ def on_message(client, userdata, msg):
             logger.debug("Processing device_id=%s, slave_id=%s", device_id, slave_id)
             print(f"Device {device_id} (Slave {slave_id}): {len(data)} sensors")
             
-            # ─── STEP 4: PROCESS EACH SENSOR IN THIS DEVICE ───────────────
-            # data = {"Temp1": "25.5", "Humidity1": "65.0"} OR 
-            #        {"Temp2": "24.8", "Hum2": "61.0"}
-            
             for mqtt_key, raw_value in data.items():
                 try:
                     # Convert value to float
@@ -240,7 +352,7 @@ def on_message(client, userdata, msg):
                         value = float(raw_value) if isinstance(raw_value, (int, float, str)) else raw_value
                     except (ValueError, TypeError):
                         logger.warning("Cannot convert %s to float for key %s", raw_value, mqtt_key)
-                        value = raw_value
+                        continue
                     
                     # Map MQTT key to sensor type
                     sensor_type, unit = _map_mqtt_key_to_sensor(mqtt_key)
@@ -251,22 +363,29 @@ def on_message(client, userdata, msg):
                     # Extract sensor number (Temp1→1, Humidity2→2, etc.)
                     sensor_number = _extract_sensor_number(mqtt_key)
                     
-                    logger.debug("  → %s: %s=%s%s (sensor #%s)",
-                               mqtt_key, sensor_type, value, unit, sensor_number)
-                    
-                    # Skip if sensor_type is not supported (e.g., Voltage, Current)
-                    if not sensor_type:
-                        logger.debug("Skipping unsupported MQTT key: %s (no database mapping)", mqtt_key)
-                        continue
-                    
-                    # ✅ APPLY SITE-SPECIFIC SCALING (e.g., Nashik site needs 0.01 factor, Slave 3 needs 0.001)
+                    # Apply scaling - CRITICAL: This must happen BEFORE storing in cold_storage_conditions
                     value = _apply_site_specific_scaling(site_id, sensor_type, value, slave_id)
                     
-                    logger.debug("  → %s: %s=%s%s (sensor #%s, after scaling)",
-                               mqtt_key, sensor_type, value, unit, sensor_number)
+                    logger.debug("  → %s: %s=%s (sensor #%s)", mqtt_key, sensor_type, value, sensor_number)
                     
-                    # ─── STEP 5: CRITICAL UPDATE WITH SLAVE_ID FILTER ────
-                    # This is the FIX: Update ONLY this specific slave, not all sensors
+                    # Add to cold_storage_row based on sensor type and number
+                    # IMPORTANT: Store scaled values in cold_storage_conditions (used by dashboards)
+                    if sensor_type.lower() == 'temperature' and sensor_number:
+                        scaled_value = float(value) if isinstance(value, (int, float, str)) else value
+                        cold_storage_row[f"temperature_{sensor_number}"] = round(scaled_value, 2)
+                    elif sensor_type.lower() == 'humidity' and sensor_number:
+                        scaled_value = float(value) if isinstance(value, (int, float, str)) else value
+                        cold_storage_row[f"humidity_{sensor_number}"] = round(scaled_value, 2)
+                    elif sensor_type.lower() in ('door', 'door_status') and sensor_number:
+                        cold_storage_row[f"door_status_{sensor_number}"] = str(value)
+                    elif sensor_type.lower() == 'suction_pressure':
+                        cold_storage_row["suction_pressure"] = value
+                    elif sensor_type.lower() == 'discharge_pressure':
+                        cold_storage_row["discharge_pressure"] = value
+                    
+                    total_sensors += 1
+                    
+                    # Still process individual sensor records for sensor_readings table
                     _process_single_sensor(
                         room_id=room_id,
                         site_id=site_id,
@@ -281,69 +400,95 @@ def on_message(client, userdata, msg):
                         timestamp=timestamp
                     )
                     
-                    total_sensors += 1
-                    
                 except Exception as e:
                     logger.error("Error processing sensor %s: %s", mqtt_key, e)
                     continue
         
-        # ─── STEP 6: PROCESS TOP-LEVEL DIGI FIELD (DOOR SENSOR) ──────────
-        # Some gateways send door status at top level: "DIGI": "On" or "Off"
-        if "DIGI" in payload:
+        # ─── STEP 5: PROCESS DOOR STATUS (DIGI or DOOR FIELD) ─────────────────────
+        # Handle both DIGI (legacy) and door (current) fields
+        door_value = payload.get("DIGI") or payload.get("door")
+        
+        if door_value:
             try:
-                digi_value = payload.get("DIGI")
-                digi_status = "open" if digi_value and digi_value.lower() in ("on", "1", "true") else "closed"
+                door_status_text = "open" if door_value and str(door_value).lower() in ("on", "1", "true") else "closed"
+                door_status_numeric = 1.0 if door_status_text == "open" else 0.0
                 
-                # Find the Door sensor in this room with the last slave_id (or a default)
+                logger.info("Processing door sensor: status=%s", door_status_text)
+                
+                # Find door sensor in this room and update it
                 door_sensors = supabase.table("sensor_devices") \
-                    .select("id, slave_id") \
+                    .select("id") \
                     .eq("room_id", room_id) \
                     .ilike("sensor_type", "Door") \
-                    .order("created_at", {"ascending": False}) \
+                    .order("created_at", desc=False) \
                     .limit(1) \
                     .execute()
                 
                 if door_sensors.data:
-                    door_sensor = door_sensors.data[0]
-                    door_slave_id = door_sensor.get("slave_id")
+                    door_device_id = door_sensors.data[0]["id"]
                     
-                    # Use a high slave_id if not set (e.g., 100 for DIGI)
-                    if not door_slave_id:
-                        door_slave_id = 100
+                    # Update sensor_devices with door status (text)
+                    supabase.table("sensor_devices").update({
+                        "last_reading_value": door_status_numeric,  # Store as numeric for consistency
+                        "last_reading_unit": "Status",
+                        "last_seen": timestamp,
+                        "status": "Online"
+                    }).eq("id", door_device_id).execute()
                     
-                    logger.info("Processing DIGI door sensor: status=%s, slave_id=%s", digi_status, door_slave_id)
+                    # Insert into sensor_readings (use numeric 0/1)
+                    supabase.table("sensor_readings").insert({
+                        "sensor_id": door_device_id,
+                        "room_id": room_id,
+                        "reading_value": door_status_numeric,  # 1.0 = open, 0.0 = closed
+                        "unit": "Status",
+                        "recorded_at": timestamp,
+                        "gateway_id": gateway_id,
+                        "mqtt_payload_key": "door",
+                    }).execute()
                     
-                    _process_single_sensor(
-                        room_id=room_id,
-                        site_id=site_id,
-                        gateway_id=gateway_id,
-                        slave_id=door_slave_id,
-                        device_id=999,  # Special ID for DIGI
-                        sensor_type="Door",
-                        sensor_number=None,
-                        mqtt_key="DIGI",
-                        value=digi_status,
-                        unit="Status",
-                        timestamp=timestamp
-                    )
+                    # Add to cold_storage_row for analytics (text format)
+                    cold_storage_row["door_status_1"] = door_status_text
+                    
+                    logger.info("Updated door sensor: %s (numeric: %s)", door_status_text, door_status_numeric)
+                    print(f"Door Sensor: {door_status_text}")
                     total_sensors += 1
-                    print(f"  • DIGI (Door Sensor): {digi_status}")
                 else:
-                    logger.debug("No door sensor found in room for DIGI processing")
+                    logger.debug("No door sensor found in room for door processing")
+                    
             except Exception as e:
-                logger.warning("Error processing DIGI field: %s", e)
+                logger.warning("Error processing door field: %s", e)
+                print(f"Error processing door: {e}")
         
-        # Update gateway status
+        # ─── STEP 6: INSERT ONE ROW INTO COLD_STORAGE_CONDITIONS ─────────
+        # All sensor data from this MQTT message is now in cold_storage_row
+        # Insert it as a single sparse row
+        if total_sensors > 0:
+            try:
+                supabase.table("cold_storage_conditions").insert(cold_storage_row).execute()
+                logger.info("Stored cold_storage_conditions row with %d sensors", total_sensors)
+                print(f"{Color.GREEN}Stored 1 row in cold_storage_conditions with {total_sensors} sensors{Color.END}")
+            except Exception as e:
+                logger.error("Error storing cold_storage_conditions: %s", e)
+                print(f"{Color.RED}Error storing cold_storage_conditions: {e}{Color.END}")
+        
+        print(f"{Color.GREEN}Successfully processed {total_sensors} sensors{Color.END}")
+        
+        # Update gateway status (optional heartbeat tracking)
         try:
-            supabase.table("gateways").upsert({
+            # Insert without upsert to avoid constraint issues
+            supabase.table("gateways").insert({
                 "site_id": site_id,
                 "gateway_id": gateway_id,
                 "status": "online",
                 "last_heartbeat": timestamp
-            }, on_conflict="site_id,gateway_id").execute()
-            logger.debug("✓ Updated gateway heartbeat")
+            }).execute()
+            logger.debug("Updated gateway heartbeat")
         except Exception as e:
-            logger.warning("Failed to update gateway: %s", e)
+            # Ignore duplicate key errors (gateway already exists)
+            if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                logger.debug("Gateway already tracked")
+            else:
+                logger.warning("Gateway tracking error: %s", e)
         
         logger.info("Processed %d total sensors from aggregated payload", total_sensors)
         print(f"\nSuccessfully processed {total_sensors} sensors\n")
@@ -384,27 +529,26 @@ def _apply_site_specific_scaling(site_id: str, sensor_type: str, value: float, s
     """
     Apply site-specific and slave-specific scaling factors.
     
-    Some gateways send raw values that need scaling:
-    - Nashik site (796b7749-d427-4563-b90a-aa0170afd835):
-      - Slaves 1, 2: Multiply by 0.01 for Temperature/Humidity (raw values 100x scaled)
-      - Slave 3: No scaling (raw values already correct, different sensor model)
-    - Other sites: Use values as-is
+    Standard scaling for all sites:
+    - Temperature/Humidity: Multiply by 0.01 (raw values sent as 100x, e.g., 2550 = 25.50°C)
+    - Slave 3: Often uses different sensor, apply 0.1 multiplier instead
+    - Other sensor types: Use as-is
     """
-    # Nashik site ID
-    NASHIK_SITE_ID = "796b7749-d427-4563-b90a-aa0170afd835"
     
-    if site_id == NASHIK_SITE_ID:
-        if sensor_type in ('Temperature', 'Humidity'):
-            # Slave 3: Different sensor model, 10x scaled (needs 0.1 multiplier)
-            if slave_id == 3:
-                return value * 0.1
-            # Slaves 1, 2: Standard 0.01 scaling (100x scaled raw values)
-            elif slave_id in (1, 2):
-                return value * 0.01
-            # Default: Use 0.01 if slave_id not specified
-            else:
-                return value * 0.01
+    # Apply scaling for Temperature and Humidity (most common case)
+    if sensor_type in ('Temperature', 'Humidity', 'AmbientTemperature', 'AmbientHumidity'):
+        # Slave 3 often has different sensor model (10x scaled)
+        if slave_id == 3:
+            return value * 0.1
+        # Default: Standard 0.01 scaling for slaves 1, 2, 4, etc.
+        else:
+            return value * 0.01
     
+    # Pressure values: often sent as 10x, needs 0.1 scaling
+    if sensor_type in ('SuctionPressure', 'DischargePressure'):
+        return value * 0.1
+    
+    # Other sensor types: use as-is
     return value
 
 
@@ -522,40 +666,9 @@ def _process_single_sensor(
                     "mqtt_payload_key": mqtt_key,
                 }).execute()
                 
-                logger.debug("✓ Recorded in sensor_readings")
+                logger.debug("Recorded in sensor_readings")
             except Exception as e:
                 logger.warning("Error recording sensor_readings: %s", e)
-        
-        # ─── INSERT INTO COLD_STORAGE_CONDITIONS (always succeeds) ───────────
-        try:
-            condition_data = {
-                "room_id": room_id,
-                "site_id": site_id,
-                "recorded_at": timestamp,
-            }
-            
-            # Map value to appropriate column based on type and sensor number
-            # Only insert columns that exist in schema, skip unknown sensors
-            if sensor_type.lower() == 'temperature' and sensor_number:
-                condition_data[f"temperature_{sensor_number}"] = value
-            elif sensor_type.lower() == 'humidity' and sensor_number:
-                condition_data[f"humidity_{sensor_number}"] = value
-            elif sensor_type.lower() == 'door_status' or (sensor_type.lower() == 'door' and sensor_number):
-                condition_data[f"door_status_{sensor_number}"] = str(value)
-            elif sensor_type.lower() == 'suction_pressure':
-                condition_data["suction_pressure"] = value
-            elif sensor_type.lower() == 'discharge_pressure':
-                condition_data["discharge_pressure"] = value
-            else:
-                # Skip unmapped sensor types (oxygen, co2, etc. if not in schema)
-                logger.debug("Skipping unmapped sensor type for cold_storage_conditions: %s", sensor_type)
-                return
-            
-            supabase.table("cold_storage_conditions").insert(condition_data).execute()
-            
-            logger.info("Stored in cold_storage_conditions: %s=%s%s", sensor_type, value, unit)
-        except Exception as e:
-            logger.warning("Error storing cold_storage_conditions: %s", e)
         
     except Exception as e:
         logger.warning("Error processing sensor (non-fatal): %s", e)
