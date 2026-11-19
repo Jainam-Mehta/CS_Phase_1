@@ -442,13 +442,13 @@ function FarmerDashboardCore() {
             const temps = [record.temperature_1, record.temperature_2, record.temperature_3, record.temperature_4]
               .filter((v: any) => v != null)
               .map((v: any) => parseFloat((v).toFixed(2)));
-            const formattedTemp = temps.length > 0 ? (temps.reduce((a: number, b: number) => a + b, 0) / temps.length) : 0;
+            const formattedTemp = temps.length > 0 ? parseFloat((temps.reduce((a: number, b: number) => a + b, 0) / temps.length).toFixed(2)) : 0;
             
             // Average all humidity sensors (same logic as gauges)
             const hums = [record.humidity_1, record.humidity_2, record.humidity_3, record.humidity_4]
               .filter((v: any) => v != null)
               .map((v: any) => parseFloat((v).toFixed(2)));
-            const formattedHum = hums.length > 0 ? (hums.reduce((a: number, b: number) => a + b, 0) / hums.length) : 0;
+            const formattedHum = hums.length > 0 ? parseFloat((hums.reduce((a: number, b: number) => a + b, 0) / hums.length).toFixed(2)) : 0;
             
             const timestamp = utcDate.getTime();
             timeMap.set(time, { 
