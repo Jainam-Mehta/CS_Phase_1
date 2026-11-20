@@ -410,8 +410,9 @@ def on_message(client, userdata, msg):
         
         if door_value:
             try:
-                door_status_text = "open" if door_value and str(door_value).lower() in ("on", "1", "true") else "closed"
-                door_status_numeric = 1.0 if door_status_text == "open" else 0.0
+                # INVERTED LOGIC: "On" means door is CLOSED (off/secure)
+                door_status_text = "closed" if door_value and str(door_value).lower() in ("on", "1", "true") else "open"
+                door_status_numeric = 0.0 if door_status_text == "closed" else 1.0
                 
                 logger.info("Processing door sensor: status=%s", door_status_text)
                 
