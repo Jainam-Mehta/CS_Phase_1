@@ -149,32 +149,27 @@ async def get_unread_alerts(room_id: str, farmer_id: Optional[str] = None):
 @router.get("/farmer/{farmer_id}", response_model=List[AlertResponse])
 async def get_farmer_alerts(farmer_id: str):
     """
-    FEATURE 4: Get all alerts for farmer's rooms.
-    Combines permission check with multi-room query.
+    FEATURE 4: Get all alerts for farmer (visible to both farmer and owner).
+    Returns alerts where:
+    1. farmer_id matches (farmer stored product)
+    2. owner_id matches (owner owns the facility)
     """
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"[ALERTS] GET /farmer/{farmer_id} called")
     
     try:
-        logger.info(f"[ALERTS] Getting rooms for farmer: {farmer_id}")
-        farmer_rooms = _get_farmer_rooms(farmer_id)
-        logger.info(f"[ALERTS] Found {len(farmer_rooms)} rooms for farmer: {farmer_rooms}")
+        logger.info(f"[ALERTS] Querying alerts for farmer_id={farmer_id}")
         
-        if not farmer_rooms:
-            logger.info(f"[ALERTS] Farmer {farmer_id} has no rooms, returning empty list")
-            return []
-        
-        # Get alerts for all farmer's rooms
-        logger.info(f"[ALERTS] Querying sensor_alerts for rooms: {farmer_rooms}")
+        # Get alerts where farmer_id or owner_id matches
         resp = (
             supabase.table("sensor_alerts")
             .select("*")
-            .in_("room_id", farmer_rooms)
+            .or_(f"farmer_id.eq.{farmer_id},owner_id.eq.{farmer_id}")
             .order("created_at", desc=True)
             .execute()
         )
-        logger.info(f"[ALERTS] Query returned {len(resp.data or [])} alerts")
+        logger.info(f"[ALERTS] Query returned {len(resp.data or [])} alerts for farmer/owner {farmer_id}")
         return resp.data or []
     except Exception as e:
         import traceback

@@ -760,6 +760,40 @@ def _process_single_sensor(
                                 
                                 # Only create new alert if no similar unacknowledged alert exists
                                 if not existing_alert.data:
+                                    # Get farmer_id and owner_id for visibility
+                                    farmer_id = None
+                                    owner_id = None
+                                    
+                                    try:
+                                        # Get farmer who has access to this room
+                                        farmer_access = supabase.table("farmer_room_access") \
+                                            .select("farmer_id") \
+                                            .eq("room_id", room_id) \
+                                            .eq("status", "Approved") \
+                                            .limit(1) \
+                                            .execute()
+                                        if farmer_access.data:
+                                            farmer_id = farmer_access.data[0].get("farmer_id")
+                                        
+                                        # Get owner of the site (which owns this room)
+                                        room_data = supabase.table("cold_storage_rooms") \
+                                            .select("site_id") \
+                                            .eq("id", room_id) \
+                                            .maybeSingle() \
+                                            .execute()
+                                        
+                                        if room_data.data:
+                                            site_id = room_data.data.get("site_id")
+                                            site_data = supabase.table("sites") \
+                                                .select("owner_profile_id") \
+                                                .eq("id", site_id) \
+                                                .maybeSingle() \
+                                                .execute()
+                                            if site_data.data:
+                                                owner_id = site_data.data.get("owner_profile_id")
+                                    except Exception as e:
+                                        logger.debug(f"Could not fetch farmer/owner IDs: {e}")
+                                    
                                     alert_data = {
                                         "room_id": room_id,
                                         "alert_type": "sensor_threshold_violation",
@@ -773,12 +807,14 @@ def _process_single_sensor(
                                         "max_value": max_val,
                                         "status": "active",
                                         "acknowledged": False,
+                                        "farmer_id": farmer_id,
+                                        "owner_id": owner_id,
                                         "created_at": timestamp,
                                         "updated_at": timestamp,
                                     }
                                     
                                     supabase.table("sensor_alerts").insert(alert_data).execute()
-                                    logger.info(f"🚨 ALERT GENERATED: {alert_msg}")
+                                    logger.info(f"🚨 ALERT GENERATED: {alert_msg} (farmer: {farmer_id}, owner: {owner_id})")
                             except Exception as alert_err:
                                 logger.warning(f"Error generating alert: {alert_err}")
         except Exception as e:
