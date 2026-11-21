@@ -16,8 +16,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
+import logging
+import traceback
 
 from app.database.supabase import supabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -154,8 +158,6 @@ async def get_farmer_alerts(farmer_id: str):
     1. farmer_id matches (farmer stored product)
     2. owner_id matches (owner owns the facility)
     """
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info(f"[ALERTS] GET /farmer/{farmer_id} called")
     
     try:
@@ -199,10 +201,9 @@ async def get_farmer_alerts(farmer_id: str):
         logger.info(f"[ALERTS] Total {len(combined)} unique alerts for farmer/owner {farmer_id}")
         return combined
     except Exception as e:
-        import traceback
         logger.error(f"[ALERTS] Exception in get_farmer_alerts: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to fetch farmer alerts: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch farmer alerts: {str(e)}")
 
 
 @router.post("/", response_model=AlertResponse)
