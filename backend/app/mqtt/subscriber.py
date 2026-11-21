@@ -708,19 +708,30 @@ def _process_single_sensor(
         # Feature 1: Auto-generate sensor alerts when reading violates thresholds
         try:
             if sensor_type and sensor_number:
-                # Query sensor_alert_thresholds for this room, sensor type, and number
+                # Query sensor_alert_thresholds for this room and sensor type
                 thresholds_query = supabase.table("sensor_alert_thresholds") \
-                    .select("id, min_value, max_value, alert_when_below, alert_when_above") \
+                    .select("id, product_id, min_value, max_value, alert_when_below, alert_when_above") \
                     .eq("room_id", room_id) \
                     .eq("sensor_type", sensor_type) \
                     .execute()
                 
                 if thresholds_query.data:
                     for threshold in thresholds_query.data:
+                        product_id = threshold.get("product_id")
                         min_val = threshold.get("min_value")
                         max_val = threshold.get("max_value")
                         alert_when_below = threshold.get("alert_when_below", True)
                         alert_when_above = threshold.get("alert_when_above", True)
+                        
+                        # Get product name for alert description
+                        product_name = "Unknown Product"
+                        if product_id:
+                            try:
+                                prod_query = supabase.table("products").select("name").eq("id", product_id).maybeSingle().execute()
+                                if prod_query.data:
+                                    product_name = prod_query.data.get("name", "Unknown Product")
+                            except Exception as e:
+                                logger.debug(f"Could not fetch product name: {e}")
                         
                         # Check if reading violates thresholds
                         alert_triggered = False
@@ -728,10 +739,10 @@ def _process_single_sensor(
                         
                         if alert_when_below and min_val is not None and value < min_val:
                             alert_triggered = True
-                            alert_msg = f"{sensor_type} {sensor_number} below minimum: {value} < {min_val}"
+                            alert_msg = f"{product_name}: {sensor_type} {sensor_number} below minimum: {value} < {min_val}"
                         elif alert_when_above and max_val is not None and value > max_val:
                             alert_triggered = True
-                            alert_msg = f"{sensor_type} {sensor_number} above maximum: {value} > {max_val}"
+                            alert_msg = f"{product_name}: {sensor_type} {sensor_number} above maximum: {value} > {max_val}"
                         
                         # Generate alert if triggered
                         if alert_triggered:
@@ -753,7 +764,7 @@ def _process_single_sensor(
                                         "room_id": room_id,
                                         "alert_type": "sensor_threshold_violation",
                                         "severity": "warning",
-                                        "title": f"{sensor_type} Threshold Violated",
+                                        "title": f"{product_name}: {sensor_type} Threshold Violated",
                                         "description": alert_msg,
                                         "sensor_type": sensor_type,
                                         "sensor_number": sensor_number,
