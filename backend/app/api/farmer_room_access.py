@@ -344,22 +344,38 @@ async def initialize_room_alerts(room_id: str, farmer_id: Optional[str] = None):
                 "alerts_initialized": 0
             }
         
-        # Get all products selected for this room via farmer_batch_products
-        access_ids = [r["id"] for r in access_records.data]
-        batch_products = supabase.table("farmer_batch_products") \
-            .select("product_id") \
-            .in_("farmer_room_access_id", access_ids) \
+        # Get all products that are currently allocated to this room (via batch_room_allocations)
+        # This is more accurate than farmer_batch_products
+        batch_allocations = supabase.table("batch_room_allocations") \
+            .select("batches(product_id)") \
+            .eq("room_id", room_id) \
+            .is_("removed_at", "null") \
             .execute()
         
-        if not batch_products.data:
+        if not batch_allocations.data:
             return {
                 "message": "No products in room",
                 "room_id": room_id,
                 "alerts_initialized": 0
             }
         
+        # Extract unique product IDs
+        product_ids = []
+        for alloc in batch_allocations.data:
+            batch_obj = alloc.get("batches")
+            if batch_obj and isinstance(batch_obj, dict) and batch_obj.get("product_id"):
+                product_ids.append(batch_obj["product_id"])
+        
+        product_ids = list(set(product_ids))  # Remove duplicates
+        
+        if not product_ids:
+            return {
+                "message": "No products found in batches",
+                "room_id": room_id,
+                "alerts_initialized": 0
+            }
+        
         # Initialize thresholds for each product (this enables alerts)
-        product_ids = [p["product_id"] for p in batch_products.data]
         initialized_count = 0
         
         for product_id in product_ids:
@@ -475,18 +491,14 @@ async def get_compatible_products(room_id: str, farmer_id: Optional[str] = None)
             if not access_resp.data:
                 raise HTTPException(status_code=403, detail="Access denied: Not your room")
         
-        # Get products currently in this room
-        access_records = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).execute()
-        if not access_records.data:
-            raise HTTPException(status_code=404, detail="No access records for this room")
-        
-        access_ids = [r["id"] for r in access_records.data]
-        room_products = supabase.table("farmer_batch_products") \
-            .select("product_id") \
-            .in_("farmer_room_access_id", access_ids) \
+        # Get products currently in this room (from active batch allocations)
+        batch_allocations = supabase.table("batch_room_allocations") \
+            .select("batches(product_id)") \
+            .eq("room_id", room_id) \
+            .is_("removed_at", "null") \
             .execute()
         
-        if not room_products.data:
+        if not batch_allocations.data:
             return {
                 "room_id": room_id,
                 "products_in_room": [],
@@ -494,7 +506,22 @@ async def get_compatible_products(room_id: str, farmer_id: Optional[str] = None)
                 "note": "No products in room yet"
             }
         
-        room_product_ids = [p["product_id"] for p in room_products.data]
+        # Extract unique product IDs from batches
+        room_product_ids = []
+        for alloc in batch_allocations.data:
+            batch_obj = alloc.get("batches")
+            if batch_obj and isinstance(batch_obj, dict) and batch_obj.get("product_id"):
+                room_product_ids.append(batch_obj["product_id"])
+        
+        room_product_ids = list(set(room_product_ids))  # Remove duplicates
+        
+        if not room_product_ids:
+            return {
+                "room_id": room_id,
+                "products_in_room": [],
+                "compatible_suggestions": [],
+                "note": "No products found in batches"
+            }
         
         # Get full product details (with temp/humidity ranges) for room products
         room_prods = supabase.table("products") \
