@@ -747,18 +747,24 @@ def _process_single_sensor(
                         # Generate alert if triggered
                         if alert_triggered:
                             try:
-                                # Check if similar alert already exists (within last 5 minutes)
-                                five_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+                                # Check if similar UNACKNOWLEDGED alert already exists (within last 15 minutes)
+                                # This prevents alert flooding - only one alert per 15 min interval per sensor
+                                fifteen_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
                                 existing_alert = supabase.table("sensor_alerts") \
-                                    .select("id") \
+                                    .select("id, created_at") \
                                     .eq("room_id", room_id) \
                                     .eq("sensor_type", sensor_type) \
-                                    .gte("created_at", five_min_ago) \
+                                    .eq("sensor_number", sensor_number) \
                                     .eq("acknowledged", False) \
+                                    .gte("created_at", fifteen_min_ago) \
+                                    .order("created_at", desc=True) \
                                     .limit(1) \
                                     .execute()
                                 
-                                # Only create new alert if no similar unacknowledged alert exists
+                                # Only create new alert if no recent unacknowledged alert exists
+                                # This means:
+                                # - If alert acknowledged, new alert can be created immediately
+                                # - If alert NOT acknowledged, wait 15 min before creating another one
                                 if not existing_alert.data:
                                     # Get farmer_id and owner_id for visibility
                                     farmer_id = None
@@ -815,6 +821,8 @@ def _process_single_sensor(
                                     
                                     supabase.table("sensor_alerts").insert(alert_data).execute()
                                     logger.info(f"🚨 ALERT GENERATED: {alert_msg} (farmer: {farmer_id}, owner: {owner_id})")
+                                else:
+                                    logger.debug(f"Alert suppressed: Recent unacknowledged alert exists for {sensor_type} {sensor_number} (last: {existing_alert.data[0].get('created_at')})")
                             except Exception as alert_err:
                                 logger.warning(f"Error generating alert: {alert_err}")
         except Exception as e:
