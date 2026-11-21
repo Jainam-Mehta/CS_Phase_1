@@ -38,7 +38,7 @@ import logging
 import threading
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import paho.mqtt.client as mqtt
 
@@ -474,6 +474,39 @@ def on_message(client, userdata, msg):
         
         print(f"{Color.GREEN}Successfully processed {total_sensors} sensors{Color.END}")
         
+        # ─── STEP 7: CHECK SENSOR THRESHOLDS FOR AUTO-ALERTS (NEW) ──────────────
+        # Non-blocking: Exceptions caught, won't crash MQTT processing
+        try:
+            from app.services.sensor_service import check_sensor_thresholds
+            
+            # Check temperature sensors
+            for i in range(1, 5):
+                temp_key = f'temperature_{i}'
+                if temp_key in cold_storage_row and cold_storage_row[temp_key] is not None:
+                    check_sensor_thresholds(
+                        room_id=room_id,
+                        sensor_type='Temperature',
+                        current_value=cold_storage_row[temp_key],
+                        sensor_number=i
+                    )
+            
+            # Check humidity sensors
+            for i in range(1, 5):
+                humidity_key = f'humidity_{i}'
+                if humidity_key in cold_storage_row and cold_storage_row[humidity_key] is not None:
+                    check_sensor_thresholds(
+                        room_id=room_id,
+                        sensor_type='Humidity',
+                        current_value=cold_storage_row[humidity_key],
+                        sensor_number=i
+                    )
+        
+        except ImportError:
+            logger.warning("sensor_service not available, skipping threshold checks")
+        except Exception as e:
+            # SAFETY: Never crash the MQTT loop due to alert processing
+            logger.warning("Error checking sensor thresholds: %s", e)
+        
         # Update gateway status (optional heartbeat tracking)
         try:
             # Insert without upsert to avoid constraint issues
@@ -670,6 +703,75 @@ def _process_single_sensor(
                 logger.debug("Recorded in sensor_readings")
             except Exception as e:
                 logger.warning("Error recording sensor_readings: %s", e)
+        
+        # ─── CHECK THRESHOLDS AND GENERATE ALERTS ────────────────────────────
+        # Feature 1: Auto-generate sensor alerts when reading violates thresholds
+        try:
+            if sensor_type and sensor_number:
+                # Query sensor_alert_thresholds for this room, sensor type, and number
+                thresholds_query = supabase.table("sensor_alert_thresholds") \
+                    .select("id, min_value, max_value, alert_when_below, alert_when_above") \
+                    .eq("room_id", room_id) \
+                    .eq("sensor_type", sensor_type) \
+                    .execute()
+                
+                if thresholds_query.data:
+                    for threshold in thresholds_query.data:
+                        min_val = threshold.get("min_value")
+                        max_val = threshold.get("max_value")
+                        alert_when_below = threshold.get("alert_when_below", True)
+                        alert_when_above = threshold.get("alert_when_above", True)
+                        
+                        # Check if reading violates thresholds
+                        alert_triggered = False
+                        alert_msg = ""
+                        
+                        if alert_when_below and min_val is not None and value < min_val:
+                            alert_triggered = True
+                            alert_msg = f"{sensor_type} {sensor_number} below minimum: {value} < {min_val}"
+                        elif alert_when_above and max_val is not None and value > max_val:
+                            alert_triggered = True
+                            alert_msg = f"{sensor_type} {sensor_number} above maximum: {value} > {max_val}"
+                        
+                        # Generate alert if triggered
+                        if alert_triggered:
+                            try:
+                                # Check if similar alert already exists (within last 5 minutes)
+                                five_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+                                existing_alert = supabase.table("sensor_alerts") \
+                                    .select("id") \
+                                    .eq("room_id", room_id) \
+                                    .eq("sensor_type", sensor_type) \
+                                    .gte("created_at", five_min_ago) \
+                                    .eq("acknowledged", False) \
+                                    .limit(1) \
+                                    .execute()
+                                
+                                # Only create new alert if no similar unacknowledged alert exists
+                                if not existing_alert.data:
+                                    alert_data = {
+                                        "room_id": room_id,
+                                        "alert_type": "sensor_threshold_violation",
+                                        "severity": "warning",
+                                        "title": f"{sensor_type} Threshold Violated",
+                                        "description": alert_msg,
+                                        "sensor_type": sensor_type,
+                                        "sensor_number": sensor_number,
+                                        "current_value": value,
+                                        "min_value": min_val,
+                                        "max_value": max_val,
+                                        "status": "active",
+                                        "acknowledged": False,
+                                        "created_at": timestamp,
+                                        "updated_at": timestamp,
+                                    }
+                                    
+                                    supabase.table("sensor_alerts").insert(alert_data).execute()
+                                    logger.info(f"🚨 ALERT GENERATED: {alert_msg}")
+                            except Exception as alert_err:
+                                logger.warning(f"Error generating alert: {alert_err}")
+        except Exception as e:
+            logger.debug(f"Threshold check skipped (non-critical): {e}")
         
     except Exception as e:
         logger.warning("Error processing sensor (non-fatal): %s", e)
