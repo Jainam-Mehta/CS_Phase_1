@@ -366,3 +366,62 @@ async def initialize_room_alerts(room_id: str, farmer_id: Optional[str] = None):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to initialize alerts: {str(e)}")
+
+
+@router.post("/room/{room_id}/add-product")
+async def add_product_to_room(room_id: str, product_id: str, quantity_kg: float, farmer_id: Optional[str] = None):
+    """
+    Add a product to a room and AUTO-INITIALIZE thresholds.
+    
+    FLOW:
+    1. Verify farmer has access to room
+    2. Add product to farmer_batch_products
+    3. AUTO-INITIALIZE sensor thresholds for this product
+    4. Return result with alert initialization status
+    
+    This ensures alerts are ready immediately after product is stored.
+    """
+    try:
+        # Verify access if farmer_id provided
+        if farmer_id:
+            access_resp = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).eq("farmer_id", farmer_id).execute()
+            if not access_resp.data:
+                raise HTTPException(status_code=403, detail="Access denied: Not your room")
+        
+        # Get farmer_room_access_id
+        access_id_resp = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).limit(1).execute()
+        if not access_id_resp.data:
+            raise HTTPException(status_code=404, detail="Room access not found")
+        
+        farmer_room_access_id = access_id_resp.data[0]["id"]
+        
+        # Add product to farmer_batch_products
+        insert_resp = supabase.table("farmer_batch_products").insert({
+            "farmer_room_access_id": farmer_room_access_id,
+            "product_id": product_id,
+            "quantity_kg": quantity_kg,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).execute()
+        
+        if not insert_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to add product to room")
+        
+        # AUTO-INITIALIZE thresholds for this product
+        from app.services.sensor_service import init_thresholds_from_product
+        threshold_success = init_thresholds_from_product(room_id, product_id)
+        
+        return {
+            "message": "Product added to room successfully",
+            "room_id": room_id,
+            "product_id": product_id,
+            "quantity_kg": quantity_kg,
+            "alerts_initialized": threshold_success,
+            "alerts_status": "ready" if threshold_success else "pending",
+            "note": "Sensor alerts are now active for this product in this room"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add product: {str(e)}")
