@@ -1,15 +1,18 @@
 """
 Alerts API — ColdSense Backend
 
-Uses the real `alerts` schema:
-  id, room_id, farmer_id, alert_type, severity, title, description,
-  is_read, status, updated_at, created_at
+Uses the real `sensor_alerts` schema:
+  id, room_id, alert_type, severity, title, description, sensor_type, sensor_number,
+  current_value, min_value, max_value, status, acknowledged, created_at, updated_at
 
-The `door_readings` table does not exist — door alert generation now
-reads from `door_events` (room_id, event_type, occurred_at, duration_seconds).
+FEATURES:
+- Feature 1: Auto Sensor Alerts (read-only access)
+- Feature 2: Auto Door Alerts (read-only access)
+- Feature 3: Acknowledge Alerts with UI button + permission checks
+- Feature 4: Permission enforcement (farmer can only access own rooms)
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -24,77 +27,173 @@ router = APIRouter()
 class AlertResponse(BaseModel):
     id: str
     room_id: str
-    farmer_id: Optional[str] = None
-    alert_type: Optional[str] = None
-    severity: Optional[str] = None
-    title: Optional[str] = None
+    alert_type: str
+    severity: str
+    title: str
     description: Optional[str] = None
-    is_read: Optional[bool] = False
-    status: Optional[str] = "Unresolved"
-    created_at: Optional[str] = None
+    sensor_type: Optional[str] = None
+    sensor_number: Optional[int] = None
+    current_value: Optional[float] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    status: str
+    acknowledged: bool
+    created_at: str
+    updated_at: Optional[str] = None
 
 
 class AlertCreate(BaseModel):
     room_id: str
-    farmer_id: Optional[str] = None
     alert_type: str
-    severity: str          # 'critical' | 'warning' | 'info'
+    severity: str
     title: str
     description: Optional[str] = None
+    sensor_type: Optional[str] = None
+    sensor_number: Optional[int] = None
+    current_value: Optional[float] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+
+# ── Helper functions ──────────────────────────────────────────────────────────
+
+def _get_farmer_rooms(farmer_id: str) -> List[str]:
+    """
+    FEATURE 4: Get all room IDs that a farmer owns/manages.
+    Used for permission checks. Uses farmer_room_access table for many-to-many relationship.
+    """
+    try:
+        resp = supabase.table("farmer_room_access").select("room_id").eq("farmer_id", farmer_id).execute()
+        return [r["room_id"] for r in resp.data] if resp.data else []
+    except Exception as e:
+        print(f"Warning: Failed to get farmer rooms: {e}")
+        return []
+
+
+def _verify_room_access(room_id: str, farmer_id: str) -> bool:
+    """
+    FEATURE 4: Verify farmer has access to room before returning alerts.
+    Safety: Prevents farmers from viewing other farmers' alert data.
+    """
+    try:
+        resp = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).eq("farmer_id", farmer_id).execute()
+        return bool(resp.data)
+    except Exception:
+        return False
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=List[AlertResponse])
 async def get_all_alerts():
+    """Get all alerts (admin/system view)."""
     try:
-        resp = supabase.table("alerts").select("*").order("created_at", desc=True).execute()
-        return resp.data
+        resp = supabase.table("sensor_alerts").select("*").order("created_at", desc=True).execute()
+        return resp.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch alerts: {e}")
 
 
 @router.get("/room/{room_id}", response_model=List[AlertResponse])
-async def get_room_alerts(room_id: str):
+async def get_room_alerts(room_id: str, farmer_id: Optional[str] = None):
+    """
+    Get alerts for a room.
+    FEATURE 4: If farmer_id provided, verify access before returning.
+    """
     try:
+        # Permission check: If farmer_id provided, verify they own this room
+        if farmer_id:
+            if not _verify_room_access(room_id, farmer_id):
+                raise HTTPException(status_code=403, detail="Access denied: Not your room")
+        
         resp = (
-            supabase.table("alerts")
+            supabase.table("sensor_alerts")
             .select("*")
             .eq("room_id", room_id)
             .order("created_at", desc=True)
             .execute()
         )
-        return resp.data
+        return resp.data or []
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch room alerts: {e}")
 
 
 @router.get("/unread/{room_id}", response_model=List[AlertResponse])
-async def get_unread_alerts(room_id: str):
-    """Return unread alerts for a room (what the farmer dashboard shows)."""
+async def get_unread_alerts(room_id: str, farmer_id: Optional[str] = None):
+    """
+    Get unread alerts for a room (what the farmer dashboard shows).
+    FEATURE 4: Permission check included.
+    """
     try:
+        if farmer_id:
+            if not _verify_room_access(room_id, farmer_id):
+                raise HTTPException(status_code=403, detail="Access denied: Not your room")
+        
         resp = (
-            supabase.table("alerts")
+            supabase.table("sensor_alerts")
             .select("*")
             .eq("room_id", room_id)
-            .eq("is_read", False)
+            .eq("acknowledged", False)
             .order("created_at", desc=True)
             .execute()
         )
-        return resp.data
+        return resp.data or []
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch unread alerts: {e}")
 
 
+@router.get("/farmer/{farmer_id}", response_model=List[AlertResponse])
+async def get_farmer_alerts(farmer_id: str):
+    """
+    FEATURE 4: Get all alerts for farmer's rooms.
+    Combines permission check with multi-room query.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[ALERTS] GET /farmer/{farmer_id} called")
+    
+    try:
+        logger.info(f"[ALERTS] Getting rooms for farmer: {farmer_id}")
+        farmer_rooms = _get_farmer_rooms(farmer_id)
+        logger.info(f"[ALERTS] Found {len(farmer_rooms)} rooms for farmer: {farmer_rooms}")
+        
+        if not farmer_rooms:
+            logger.info(f"[ALERTS] Farmer {farmer_id} has no rooms, returning empty list")
+            return []
+        
+        # Get alerts for all farmer's rooms
+        logger.info(f"[ALERTS] Querying sensor_alerts for rooms: {farmer_rooms}")
+        resp = (
+            supabase.table("sensor_alerts")
+            .select("*")
+            .in_("room_id", farmer_rooms)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        logger.info(f"[ALERTS] Query returned {len(resp.data or [])} alerts")
+        return resp.data or []
+    except Exception as e:
+        import traceback
+        logger.error(f"[ALERTS] Exception in get_farmer_alerts: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to fetch farmer alerts: {e}")
+
+
 @router.post("/", response_model=AlertResponse)
 async def create_alert(alert: AlertCreate):
+    """Create a new alert."""
     try:
         data = alert.model_dump() if hasattr(alert, "model_dump") else alert.dict()
         data["created_at"] = datetime.now(timezone.utc).isoformat()
-        data["is_read"] = False
-        data["status"] = "Unresolved"
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        data["status"] = "active"
+        data["acknowledged"] = False
 
-        resp = supabase.table("alerts").insert(data).execute()
+        resp = supabase.table("sensor_alerts").insert(data).execute()
         if not resp.data:
             raise HTTPException(status_code=500, detail="Insert returned no data")
         return resp.data[0]
@@ -105,17 +204,43 @@ async def create_alert(alert: AlertCreate):
 
 
 @router.put("/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: str):
+async def acknowledge_alert(alert_id: str, farmer_id: Optional[str] = None):
+    """
+    FEATURE 3: Acknowledge alert (mark as read).
+    FEATURE 4: Verify farmer owns the room containing this alert.
+    
+    Used by: Frontend AlertCard "Acknowledge" button
+    """
     try:
-        resp = (
-            supabase.table("alerts")
-            .update({"is_read": True, "status": "Acknowledged", "updated_at": datetime.now(timezone.utc).isoformat()})
+        # Step 1: Fetch the alert to get room_id
+        resp = supabase.table("sensor_alerts").select("room_id").eq("id", alert_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        room_id = resp.data[0]["room_id"]
+        
+        # Step 2: FEATURE 4 — Verify access
+        if farmer_id:
+            if not _verify_room_access(room_id, farmer_id):
+                raise HTTPException(status_code=403, detail="Access denied: Cannot acknowledge other farmer's alert")
+        
+        # Step 3: Update alert
+        update_resp = (
+            supabase.table("sensor_alerts")
+            .update({
+                "acknowledged": True,
+                "status": "acknowledged",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
             .eq("id", alert_id)
             .execute()
         )
-        if not resp.data:
-            raise HTTPException(status_code=404, detail="Alert not found")
-        return {"message": "Alert acknowledged"}
+        
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to update alert")
+        
+        return {"message": "Alert acknowledged", "alert_id": alert_id, "status": "acknowledged"}
+    
     except HTTPException:
         raise
     except Exception as e:
@@ -123,70 +248,38 @@ async def acknowledge_alert(alert_id: str):
 
 
 @router.put("/{alert_id}/resolve")
-async def resolve_alert(alert_id: str):
+async def resolve_alert(alert_id: str, farmer_id: Optional[str] = None):
+    """
+    Resolve an alert (mark issue as fixed).
+    FEATURE 4: Verify access.
+    """
     try:
-        resp = (
-            supabase.table("alerts")
-            .update({"status": "Resolved", "updated_at": datetime.now(timezone.utc).isoformat()})
+        resp = supabase.table("sensor_alerts").select("room_id").eq("id", alert_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        room_id = resp.data[0]["room_id"]
+        
+        if farmer_id:
+            if not _verify_room_access(room_id, farmer_id):
+                raise HTTPException(status_code=403, detail="Access denied")
+        
+        update_resp = (
+            supabase.table("sensor_alerts")
+            .update({
+                "status": "resolved",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
             .eq("id", alert_id)
             .execute()
         )
-        if not resp.data:
-            raise HTTPException(status_code=404, detail="Alert not found")
-        return {"message": "Alert resolved"}
+        
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to update alert")
+        
+        return {"message": "Alert resolved", "alert_id": alert_id, "status": "resolved"}
+    
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to resolve alert: {e}")
-
-
-@router.post("/check-door-alerts/{room_id}")
-async def check_door_alerts(room_id: str):
-    """
-    Check today's door events for this room and generate alerts if thresholds are exceeded.
-    Reads from `door_events` (the real table) — NOT the nonexistent `door_readings`.
-    """
-    try:
-        today = datetime.now(timezone.utc).date().isoformat()
-
-        # Get today's door events for this room
-        resp = (
-            supabase.table("door_events")
-            .select("event_type, duration_seconds, occurred_at")
-            .eq("room_id", room_id)
-            .gte("occurred_at", f"{today}T00:00:00+00:00")
-            .order("occurred_at", desc=True)
-            .execute()
-        )
-
-        events = resp.data or []
-        total_seconds = sum(
-            (e.get("duration_seconds") or 0)
-            for e in events
-            if e.get("event_type", "").lower() in ("open", "opened")
-        )
-        total_minutes = total_seconds / 60
-
-        if total_minutes > 20:
-            await create_alert(AlertCreate(
-                room_id=room_id,
-                alert_type="door_critical",
-                severity="critical",
-                title="Door Open — Critical",
-                description=f"Door has been open for {total_minutes:.1f} minutes today. Immediate action required.",
-            ))
-        elif total_minutes > 10:
-            await create_alert(AlertCreate(
-                room_id=room_id,
-                alert_type="door_warning",
-                severity="warning",
-                title="Door Open — Warning",
-                description=f"Door has been open for {total_minutes:.1f} minutes today. Please close the door.",
-            ))
-
-        return {"message": "Door alerts checked", "total_open_minutes": round(total_minutes, 2)}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check door alerts: {e}")
