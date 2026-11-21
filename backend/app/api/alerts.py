@@ -158,12 +158,13 @@ async def get_farmer_alerts(farmer_id: str):
     1. farmer_id matches (farmer stored product)
     2. owner_id matches (owner owns the facility)
     """
-    logger.info(f"[ALERTS] GET /farmer/{farmer_id} called")
+    print(f"[ALERTS] GET /farmer/{farmer_id} called", flush=True)
     
     try:
-        logger.info(f"[ALERTS] Querying alerts for farmer_id={farmer_id}")
+        print(f"[ALERTS] Querying alerts for farmer_id={farmer_id}", flush=True)
         
         # Get alerts where farmer_id matches
+        print(f"[ALERTS] Step 1: Query by farmer_id", flush=True)
         resp_farmer = (
             supabase.table("sensor_alerts")
             .select("*")
@@ -173,9 +174,10 @@ async def get_farmer_alerts(farmer_id: str):
         )
         
         farmer_alerts = resp_farmer.data or []
-        logger.info(f"[ALERTS] Found {len(farmer_alerts)} alerts where farmer_id={farmer_id}")
+        print(f"[ALERTS] Found {len(farmer_alerts)} alerts where farmer_id={farmer_id}", flush=True)
         
         # Get alerts where owner_id matches
+        print(f"[ALERTS] Step 2: Query by owner_id", flush=True)
         resp_owner = (
             supabase.table("sensor_alerts")
             .select("*")
@@ -185,9 +187,10 @@ async def get_farmer_alerts(farmer_id: str):
         )
         
         owner_alerts = resp_owner.data or []
-        logger.info(f"[ALERTS] Found {len(owner_alerts)} alerts where owner_id={farmer_id}")
+        print(f"[ALERTS] Found {len(owner_alerts)} alerts where owner_id={farmer_id}", flush=True)
         
         # Combine results, avoiding duplicates by id
+        print(f"[ALERTS] Step 3: Combining results", flush=True)
         alert_ids = set()
         combined = []
         for alert in farmer_alerts + owner_alerts:
@@ -198,11 +201,11 @@ async def get_farmer_alerts(farmer_id: str):
         # Sort by created_at descending
         combined.sort(key=lambda a: a.get("created_at", ""), reverse=True)
         
-        logger.info(f"[ALERTS] Total {len(combined)} unique alerts for farmer/owner {farmer_id}")
+        print(f"[ALERTS] Total {len(combined)} unique alerts for farmer/owner {farmer_id}", flush=True)
         return combined
     except Exception as e:
-        logger.error(f"[ALERTS] Exception in get_farmer_alerts: {e}")
-        logger.error(traceback.format_exc())
+        print(f"[ALERTS] EXCEPTION in get_farmer_alerts: {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch farmer alerts: {str(e)}")
 
 
