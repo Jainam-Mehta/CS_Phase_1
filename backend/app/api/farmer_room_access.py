@@ -331,10 +331,24 @@ async def initialize_room_alerts(room_id: str, farmer_id: Optional[str] = None):
             if not access_resp.data:
                 raise HTTPException(status_code=403, detail="Access denied: Not your room")
         
-        # Get all products in this room
+        # Get the farmer_room_access record(s) for this room
+        access_records = supabase.table("farmer_room_access") \
+            .select("id") \
+            .eq("room_id", room_id) \
+            .execute()
+        
+        if not access_records.data:
+            return {
+                "message": "No farmer access to this room",
+                "room_id": room_id,
+                "alerts_initialized": 0
+            }
+        
+        # Get all products selected for this room via farmer_batch_products
+        access_ids = [r["id"] for r in access_records.data]
         batch_products = supabase.table("farmer_batch_products") \
             .select("product_id") \
-            .eq("room_id", room_id) \
+            .in_("farmer_room_access_id", access_ids) \
             .execute()
         
         if not batch_products.data:
