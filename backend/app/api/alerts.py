@@ -161,16 +161,43 @@ async def get_farmer_alerts(farmer_id: str):
     try:
         logger.info(f"[ALERTS] Querying alerts for farmer_id={farmer_id}")
         
-        # Get alerts where farmer_id or owner_id matches
-        resp = (
+        # Get alerts where farmer_id matches
+        resp_farmer = (
             supabase.table("sensor_alerts")
             .select("*")
-            .or_(f"farmer_id.eq.{farmer_id},owner_id.eq.{farmer_id}")
+            .eq("farmer_id", farmer_id)
             .order("created_at", desc=True)
             .execute()
         )
-        logger.info(f"[ALERTS] Query returned {len(resp.data or [])} alerts for farmer/owner {farmer_id}")
-        return resp.data or []
+        
+        farmer_alerts = resp_farmer.data or []
+        logger.info(f"[ALERTS] Found {len(farmer_alerts)} alerts where farmer_id={farmer_id}")
+        
+        # Get alerts where owner_id matches
+        resp_owner = (
+            supabase.table("sensor_alerts")
+            .select("*")
+            .eq("owner_id", farmer_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        
+        owner_alerts = resp_owner.data or []
+        logger.info(f"[ALERTS] Found {len(owner_alerts)} alerts where owner_id={farmer_id}")
+        
+        # Combine results, avoiding duplicates by id
+        alert_ids = set()
+        combined = []
+        for alert in farmer_alerts + owner_alerts:
+            if alert["id"] not in alert_ids:
+                alert_ids.add(alert["id"])
+                combined.append(alert)
+        
+        # Sort by created_at descending
+        combined.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+        
+        logger.info(f"[ALERTS] Total {len(combined)} unique alerts for farmer/owner {farmer_id}")
+        return combined
     except Exception as e:
         import traceback
         logger.error(f"[ALERTS] Exception in get_farmer_alerts: {e}")
