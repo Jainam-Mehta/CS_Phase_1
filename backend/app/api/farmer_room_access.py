@@ -439,3 +439,161 @@ async def add_product_to_room(room_id: str, product_id: str, quantity_kg: float,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add product: {str(e)}")
+
+
+# ============================================================================
+# INSIGHT FEATURE: Compatible Products Recommendation
+# ============================================================================
+
+@router.post("/room/{room_id}/compatible-products", response_model=dict)
+async def get_compatible_products(room_id: str, farmer_id: Optional[str] = None):
+    """
+    INSIGHT FEATURE: Get product compatibility suggestions for a room.
+    
+    Returns products that can be safely stored together based on overlapping
+    temperature and humidity requirements.
+    
+    Example: If room has Dragon Fruit (24-27°C, 50-55% RH),
+    suggest other fruits with similar ranges like Mango, Avocado.
+    
+    This helps farmers maximize room utilization without compromising product quality.
+    
+    Returns:
+    {
+        "room_id": "...",
+        "products_in_room": [...],
+        "room_constraints": {"temp_range": [24, 27], "humidity_range": [50, 55]},
+        "compatible_suggestions": [...],
+        "total_compatible": 15,
+        "note": "These products have overlapping requirements..."
+    }
+    """
+    try:
+        # Verify access if farmer_id provided
+        if farmer_id:
+            access_resp = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).eq("farmer_id", farmer_id).execute()
+            if not access_resp.data:
+                raise HTTPException(status_code=403, detail="Access denied: Not your room")
+        
+        # Get products currently in this room
+        access_records = supabase.table("farmer_room_access").select("id").eq("room_id", room_id).execute()
+        if not access_records.data:
+            raise HTTPException(status_code=404, detail="No access records for this room")
+        
+        access_ids = [r["id"] for r in access_records.data]
+        room_products = supabase.table("farmer_batch_products") \
+            .select("product_id") \
+            .in_("farmer_room_access_id", access_ids) \
+            .execute()
+        
+        if not room_products.data:
+            return {
+                "room_id": room_id,
+                "products_in_room": [],
+                "compatible_suggestions": [],
+                "note": "No products in room yet"
+            }
+        
+        room_product_ids = [p["product_id"] for p in room_products.data]
+        
+        # Get full product details (with temp/humidity ranges) for room products
+        room_prods = supabase.table("products") \
+            .select("id, name, storage_temp_min, storage_temp_max, storage_humidity_min, storage_humidity_max") \
+            .in_("id", room_product_ids) \
+            .execute()
+        
+        if not room_prods.data:
+            return {
+                "room_id": room_id,
+                "products_in_room": [],
+                "compatible_suggestions": [],
+                "note": "Product data not found"
+            }
+        
+        # Calculate the overlapping range for room products
+        # Use the MOST RESTRICTIVE range (smallest overlap)
+        # So we can find products that fit ALL current products
+        min_temp = max([p.get("storage_temp_min", 0) or 0 for p in room_prods.data])
+        max_temp = min([p.get("storage_temp_max", 50) or 50 for p in room_prods.data])
+        min_hum = max([p.get("storage_humidity_min", 0) or 0 for p in room_prods.data])
+        max_hum = min([p.get("storage_humidity_max", 100) or 100 for p in room_prods.data])
+        
+        # Get ALL active products to find compatible ones
+        all_products = supabase.table("products") \
+            .select("id, name, storage_temp_min, storage_temp_max, storage_humidity_min, storage_humidity_max") \
+            .eq("is_active", True) \
+            .execute()
+        
+        compatible = []
+        
+        if all_products.data:
+            for product in all_products.data:
+                # Skip if already in room
+                if product["id"] in room_product_ids:
+                    continue
+                
+                prod_min_temp = product.get("storage_temp_min") or 0
+                prod_max_temp = product.get("storage_temp_max") or 50
+                prod_min_hum = product.get("storage_humidity_min") or 0
+                prod_max_hum = product.get("storage_humidity_max") or 100
+                
+                # Check if this product's range overlaps with room's range
+                temp_overlap_min = max(min_temp, prod_min_temp)
+                temp_overlap_max = min(max_temp, prod_max_temp)
+                temp_has_overlap = temp_overlap_min <= temp_overlap_max
+                
+                hum_overlap_min = max(min_hum, prod_min_hum)
+                hum_overlap_max = min(max_hum, prod_max_hum)
+                hum_has_overlap = hum_overlap_min <= hum_overlap_max
+                
+                # Calculate overlap score (0-1)
+                if temp_has_overlap and hum_has_overlap:
+                    temp_range = max_temp - min_temp if max_temp > min_temp else 1
+                    hum_range = max_hum - min_hum if max_hum > min_hum else 1
+                    
+                    temp_overlap_size = temp_overlap_max - temp_overlap_min
+                    hum_overlap_size = hum_overlap_max - hum_overlap_min
+                    
+                    temp_score = temp_overlap_size / temp_range if temp_range > 0 else 0
+                    hum_score = hum_overlap_size / hum_range if hum_range > 0 else 0
+                    
+                    overlap_score = (temp_score + hum_score) / 2
+                    
+                    if overlap_score >= 0.5:  # At least 50% overlap
+                        compatible.append({
+                            "id": product["id"],
+                            "name": product["name"],
+                            "temp_range": [prod_min_temp, prod_max_temp],
+                            "humidity_range": [prod_min_hum, prod_max_hum],
+                            "overlap_score": round(overlap_score, 2),
+                            "overlap_temp_range": [round(temp_overlap_min, 1), round(temp_overlap_max, 1)],
+                            "overlap_humidity_range": [round(hum_overlap_min, 1), round(hum_overlap_max, 1)]
+                        })
+        
+        # Sort by overlap score descending
+        compatible.sort(key=lambda x: x["overlap_score"], reverse=True)
+        
+        return {
+            "room_id": room_id,
+            "products_in_room": [
+                {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "temp_range": [p.get("storage_temp_min", 0), p.get("storage_temp_max", 50)],
+                    "humidity_range": [p.get("storage_humidity_min", 0), p.get("storage_humidity_max", 100)]
+                }
+                for p in room_prods.data
+            ],
+            "room_constraints": {
+                "temp_range": [round(min_temp, 1), round(max_temp, 1)],
+                "humidity_range": [round(min_hum, 1), round(max_hum, 1)]
+            },
+            "compatible_suggestions": compatible[:10],  # Top 10
+            "total_compatible": len(compatible),
+            "note": "These products have overlapping storage requirements and can be safely stored together. Higher 'overlap_score' means better fit (0-1 scale)."
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get compatible products: {str(e)}")
