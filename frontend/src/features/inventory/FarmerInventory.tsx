@@ -639,6 +639,24 @@ const FarmerInventory: React.FC = () => {
 
          console.log('✅ DEBUG: Allocation created successfully');
          
+         // AUTO-INITIALIZE THRESHOLDS for this product (FEATURE 1: Auto Sensor Alerts)
+         try {
+             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+             const initResponse = await fetch(`${apiUrl}/farmer-rooms/room/${targetRoom}/initialize-alerts?farmer_id=${profileId}`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' }
+             });
+             
+             if (initResponse.ok) {
+                 const initResult = await initResponse.json();
+                 console.log('✅ Alert thresholds initialized:', initResult);
+             } else {
+                 console.warn('⚠️ Alert initialization returned non-ok status:', initResponse.status);
+             }
+         } catch (initErr) {
+             console.warn('⚠️ Alert initialization failed (non-critical):', initErr);
+         }
+         
          setIsModalOpen(false);
          setTargetProduct('');
          setQty('');
