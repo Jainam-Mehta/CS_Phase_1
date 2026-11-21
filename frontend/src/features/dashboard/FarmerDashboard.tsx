@@ -242,55 +242,57 @@ function FarmerDashboardCore() {
     const loadLiveConditions = async () => {
       try {
         // Fetch last sensor reading timestamp from dedicated endpoint
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-          
-          const response = await fetch(`${apiUrl}/api/sensors/last-reading-time/${activeRoomId}`, {
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            const timestampData = await response.json();
-            if (timestampData.last_reading_time) {
-              setLastSensorReadingTime(new Date(timestampData.last_reading_time));
-              console.log('[FarmerDashboard] Last reading time:', timestampData.last_reading_time);
-            }
-          }
-        } catch (error) {
-          console.debug('[FarmerDashboard] Last reading endpoint unavailable');
-        }
+        // NOTE: This endpoint doesn't exist yet, skipping
+        // const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        // try {
+        //   const controller = new AbortController();
+        //   const timeoutId = setTimeout(() => controller.abort(), 3000);
+        //   
+        //   const response = await fetch(`${apiUrl}/api/sensors/last-reading-time/${activeRoomId}`, {
+        //     signal: controller.signal
+        //   });
+        //   clearTimeout(timeoutId);
+        //   
+        //   if (response.ok) {
+        //     const timestampData = await response.json();
+        //     if (timestampData.last_reading_time) {
+        //       setLastSensorReadingTime(new Date(timestampData.last_reading_time));
+        //       console.log('[FarmerDashboard] Last reading time:', timestampData.last_reading_time);
+        //     }
+        //   }
+        // } catch (error) {
+        //   console.debug('[FarmerDashboard] Last reading endpoint unavailable');
+        // }
 
         // Fetch averaged sensor data from backend (like owner dashboard does)
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-          
-          const response = await fetch(`${apiUrl}/api/storage/averages/room/${activeRoomId}`, {
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            const averagesData = await response.json();
-            console.log('[FarmerDashboard] Averaged sensor data:', averagesData);
-            
-            // Values from backend are already formatted (divided by 100)
-            const avgTemp = averagesData.avg_temperature !== null ? parseFloat(averagesData.avg_temperature) : 0;
-            const avgHum = averagesData.avg_humidity !== null ? parseFloat(averagesData.avg_humidity) : 0;
-            
-            setLiveConditions({
-              temp: avgTemp,
-              hum: avgHum,
-              ambientTemp: 0,
-              ambientHum: 0,
-              date: new Date().toISOString()
-            });
-          }
-        } catch (error) {
-          console.debug('[FarmerDashboard] Averaging endpoint unavailable, falling back to raw data');
+        // NOTE: These endpoints don't exist yet, skipping for now
+        // try {
+        //   const controller = new AbortController();
+        //   const timeoutId = setTimeout(() => controller.abort(), 3000);
+        //   
+        //   const response = await fetch(`${apiUrl}/api/storage/averages/room/${activeRoomId}`, {
+        //     signal: controller.signal
+        //   });
+        //   clearTimeout(timeoutId);
+        //   
+        //   if (response.ok) {
+        //     const averagesData = await response.json();
+        //     console.log('[FarmerDashboard] Averaged sensor data:', averagesData);
+        //     
+        //     // Values from backend are already formatted (divided by 100)
+        //     const avgTemp = averagesData.avg_temperature !== null ? parseFloat(averagesData.avg_temperature) : 0;
+        //     const avgHum = averagesData.avg_humidity !== null ? parseFloat(averagesData.avg_humidity) : 0;
+        //     
+        //     setLiveConditions({
+        //       temp: avgTemp,
+        //       hum: avgHum,
+        //       ambientTemp: 0,
+        //       ambientHum: 0,
+        //       date: new Date().toISOString()
+        //     });
+        //   }
+        // } catch (error) {
+          console.debug('[FarmerDashboard] Using Supabase fallback for live conditions');
           
           // Fallback: Fetch latest conditions with ALL temperature and humidity sensors + door status
           const { data: condData, error: condError } = await supabase
@@ -322,7 +324,10 @@ function FarmerDashboardCore() {
             // Set last reading time from the condition data
             if (condData.recorded_at) {
               setLastSensorReadingTime(new Date(condData.recorded_at));
+              console.log('[FarmerDashboard] Set last reading time from Supabase:', condData.recorded_at);
             }
+            
+            console.log('[FarmerDashboard] Live conditions updated:', { temp, hum, doorStatus });
             
             setLiveConditions({
               temp,
@@ -332,19 +337,36 @@ function FarmerDashboardCore() {
               doorStatus,
               date: condData?.recorded_at
             });
+          } else {
+            console.warn('[FarmerDashboard] No condition data found for room:', activeRoomId);
           }
-        }
+        // }
 
         // Fetch temperature history for chart - get ALL temperature sensors
-        // Query only the last hour to ensure we get properly scaled recent data
-        const oneHourAgo = new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
+        // Fetch temperature and humidity history - get RECENT data only
+        // Query last 3 hours to ensure we capture all data with proper granularity
+        const threeHoursAgo = new Date(new Date().getTime() - 3 * 60 * 60 * 1000).toISOString();
+        
+        console.log('[FarmerDashboard] Querying chart data - Current time:', new Date().toISOString(), 'Since:', threeHoursAgo);
+        
         const { data: tempHistory, error: tempHistError } = await supabase
           .from('cold_storage_conditions')
           .select('temperature_1, temperature_2, temperature_3, temperature_4, humidity_1, humidity_2, humidity_3, humidity_4, recorded_at')
           .eq('room_id', activeRoomId)
-          .gte('recorded_at', oneHourAgo)  // Only last hour - ensures scaled data
-          .order('recorded_at', { ascending: true })
-          .limit(100);
+          .gte('recorded_at', threeHoursAgo)  // Last 3 hours (broader window)
+          .order('recorded_at', { ascending: false })  // DESC to get latest first
+          .limit(500);  // Get up to 500 recent records
+        
+        if (tempHistory && tempHistory.length > 0) {
+          console.log('[FarmerDashboard] Chart query returned:', tempHistory.length, 'records');
+          console.log('[FarmerDashboard] NEWEST record timestamp:', tempHistory[0]?.recorded_at);
+          console.log('[FarmerDashboard] OLDEST record timestamp:', tempHistory[tempHistory.length - 1]?.recorded_at);
+          
+          // Re-sort in ascending order for chart display
+          tempHistory.sort((a: any, b: any) => 
+            new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+          );
+        }
 
         console.log('[FarmerDashboard] Temp history query:', { tempHistError, count: tempHistory?.length });
 
@@ -435,8 +457,18 @@ function FarmerDashboardCore() {
 
         if (tempHistory) {
           tempHistory.forEach((record: any) => {
-            const utcDate = new Date(record.recorded_at);
-            const time = utcDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            // Database stores timestamps in timezone-aware format
+            // JavaScript automatically converts to browser's local timezone
+            const recordDate = new Date(record.recorded_at);
+            
+            // Use browser's local timezone (which matches IST if user is in India)
+            // toLocaleTimeString handles timezone conversion automatically
+            const time = recordDate.toLocaleTimeString('en-IN', { 
+              hour: '2-digit', 
+              minute: '2-digit', 
+              second: '2-digit', 
+              hour12: true 
+            });
             
             // Average all temperature sensors (same logic as gauges)
             const temps = [record.temperature_1, record.temperature_2, record.temperature_3, record.temperature_4]
@@ -450,7 +482,7 @@ function FarmerDashboardCore() {
               .map((v: any) => parseFloat((v).toFixed(2)));
             const formattedHum = hums.length > 0 ? parseFloat((hums.reduce((a: number, b: number) => a + b, 0) / hums.length).toFixed(2)) : 0;
             
-            const timestamp = utcDate.getTime();
+            const timestamp = recordDate.getTime();
             timeMap.set(time, { 
               time, 
               value: formattedTemp,
@@ -468,6 +500,57 @@ function FarmerDashboardCore() {
 
         if (finalHistory.length > 0) {
           setTemperatureHistory(finalHistory);
+          
+          // IMPORTANT: Also verify we have the ABSOLUTE latest reading by querying it separately
+          const { data: latestRecord } = await supabase
+            .from('cold_storage_conditions')
+            .select('temperature_1, temperature_2, temperature_3, temperature_4, humidity_1, humidity_2, humidity_3, humidity_4, recorded_at')
+            .eq('room_id', activeRoomId)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (latestRecord && latestRecord.recorded_at) {
+            const latestTime = new Date(latestRecord.recorded_at).getTime();
+            const chartLatestTime = finalHistory[finalHistory.length - 1]?.timestamp || 0;
+            
+            console.log('[FarmerDashboard] Chart latest timestamp:', chartLatestTime);
+            console.log('[FarmerDashboard] DB latest timestamp:', latestTime);
+            
+            // If chart is missing the very latest data point, add it
+            if (latestTime > chartLatestTime) {
+              console.warn('[FarmerDashboard] Chart missing latest data, adding it now');
+              const latestDate = new Date(latestRecord.recorded_at);
+              const latestTimeStr = latestDate.toLocaleTimeString('en-IN', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit', 
+                hour12: true 
+              });
+              
+              const latestTemps = [latestRecord.temperature_1, latestRecord.temperature_2, latestRecord.temperature_3, latestRecord.temperature_4]
+                .filter((v: any) => v != null)
+                .map((v: any) => parseFloat((v).toFixed(2)));
+              const latestTemp = latestTemps.length > 0 ? parseFloat((latestTemps.reduce((a: number, b: number) => a + b, 0) / latestTemps.length).toFixed(2)) : 0;
+              
+              const latestHums = [latestRecord.humidity_1, latestRecord.humidity_2, latestRecord.humidity_3, latestRecord.humidity_4]
+                .filter((v: any) => v != null)
+                .map((v: any) => parseFloat((v).toFixed(2)));
+              const latestHum = latestHums.length > 0 ? parseFloat((latestHums.reduce((a: number, b: number) => a + b, 0) / latestHums.length).toFixed(2)) : 0;
+              
+              const updatedHistory = [...finalHistory];
+              updatedHistory.push({
+                time: latestTimeStr,
+                value: latestTemp,
+                humidity: latestHum,
+                timestamp: latestTime
+              });
+              
+              setTemperatureHistory(updatedHistory);
+              console.log('[FarmerDashboard] Added latest data point to chart');
+            }
+          }
+          
           console.log('[FarmerDashboard] Chart data sample (first 3 points):', finalHistory.slice(0, 3));
           console.log('[FarmerDashboard] Chart data sample (last 3 points):', finalHistory.slice(-3));
           console.log('[FarmerDashboard] Temperature min/max:', {
@@ -532,10 +615,14 @@ function FarmerDashboardCore() {
           }
 
           // Update history
-          const utcDate = new Date(newCondition.recorded_at);
-          // Convert UTC to IST (UTC+5:30) using proper date arithmetic
-          const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
-          const time = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+          const recordDate = new Date(newCondition.recorded_at);
+          // Use browser's local timezone automatically (JavaScript handles this)
+          const time = recordDate.toLocaleTimeString('en-IN', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit', 
+            hour12: true 
+          });
           setTemperatureHistory((prev: any[]) => {
             const existing = prev.find(h => h.time === time);
             if (existing) {
