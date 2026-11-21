@@ -44,6 +44,10 @@ const FarmerInventory: React.FC = () => {
   // Crate code state
   const [hasExistingCode, setHasExistingCode] = useState(false);
   const [manualCrateCode, setManualCrateCode] = useState('');
+  
+  // Compatible products state
+  const [compatibleProducts, setCompatibleProducts] = useState<any>(null);
+  const [showCompatibleInsights, setShowCompatibleInsights] = useState(false);
 
   const fetchInventory = async (pId: string) => {
        try {
@@ -657,6 +661,26 @@ const FarmerInventory: React.FC = () => {
              console.warn('⚠️ Alert initialization failed (non-critical):', initErr);
          }
          
+         // FETCH COMPATIBLE PRODUCTS INSIGHTS (NEW FEATURE)
+         try {
+             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+             const compatResponse = await fetch(`${apiUrl}/farmer-rooms/room/${targetRoom}/compatible-products?farmer_id=${profileId}`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' }
+             });
+             
+             if (compatResponse.ok) {
+                 const compatResult = await compatResponse.json();
+                 console.log('✅ Compatible products fetched:', compatResult);
+                 setCompatibleProducts(compatResult);
+                 setShowCompatibleInsights(true);
+             } else {
+                 console.warn('⚠️ Compatible products fetch returned non-ok status:', compatResponse.status);
+             }
+         } catch (compatErr) {
+             console.warn('⚠️ Compatible products fetch failed (non-critical):', compatErr);
+         }
+         
          setIsModalOpen(false);
          setTargetProduct('');
          setQty('');
@@ -666,6 +690,13 @@ const FarmerInventory: React.FC = () => {
          // Refresh inventory list
          if (profileId) {
              await initialize();
+         }
+         
+         // Show compatible products insights if available (will auto-close after display)
+         if (compatibleProducts) {
+             setTimeout(() => {
+                 setShowCompatibleInsights(false);
+             }, 8000); // Auto-close after 8 seconds
          }
 
       } catch (err: any) {
@@ -699,6 +730,56 @@ const FarmerInventory: React.FC = () => {
            </button>
          </div>
       </div>
+      
+      {/* ✨ COMPATIBLE PRODUCTS INSIGHTS CARD (NEW) */}
+      {showCompatibleInsights && compatibleProducts && compatibleProducts.compatible_suggestions && compatibleProducts.compatible_suggestions.length > 0 && (
+        <Card className="mb-6 shadow-lg border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20">
+          <div className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                  💡 Product Storage Insights
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                  You can safely store <strong>{compatibleProducts.total_compatible} compatible products</strong> in this room with <strong>{compatibleProducts.products_in_room[0]?.name}</strong>. These have overlapping temperature and humidity requirements.
+                </p>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {compatibleProducts.compatible_suggestions.slice(0, 5).map((product: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-white dark:bg-slate-800/50 rounded-lg border border-amber-200 dark:border-amber-800/30 flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="font-semibold text-slate-900 dark:text-white">{product.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Temp: {product.overlap_temp_range[0]}°C - {product.overlap_temp_range[1]}°C | RH: {product.overlap_humidity_range[0]}% - {product.overlap_humidity_range[1]}%
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                          {Math.round(product.overlap_score * 100)}% compatible
+                        </div>
+                        <div className="w-12 h-2 bg-slate-200 dark:bg-slate-700 rounded-full mt-1 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-amber-400 to-yellow-500" 
+                            style={{width: `${product.overlap_score * 100}%`}}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => setShowCompatibleInsights(false)} 
+                  className="mt-4 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-semibold"
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       
       {/* LIVE INVENTORY TRACKING TABLE */}
       <Card className="shadow-sm border-slate-200 overflow-hidden">
